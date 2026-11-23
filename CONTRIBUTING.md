@@ -90,7 +90,7 @@ test "$(gh api repos/YukiIto1999/book-props/immutable-releases --jq .enabled)" =
 **Re-run failed jobs** では、現在の試行で ZIP が作られず、脆弱性検査やビルド証明の前提を満たさないことがある。
 下書きだけが残っている場合は、その下書きだけを取り除き、タグを残してから再実行する。
 
-公開後の ZIP と証明の確認は [Windows での導入・運用](docs/installation.md#成果物を用意する) を参照する。
+公開後に ZIP と証明を再確認するときは、[配布物の検証](docs/installation.md#任意配布物の検証)を参照する。
 
 ## アーキテクチャの標準
 

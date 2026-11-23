@@ -10,29 +10,11 @@ Chromeでの照合に使うObsidianとChromeは、同じWindows端末で起動�
 
 ## 成果物を用意する
 
-[GitHub Releases](https://github.com/YukiIto1999/book-props/releases) で導入する版を開く。
-Assets から `book-props-v<版>.zip` と `SHA256SUMS` を、新しく作ったフォルダへ名前を変えずにダウンロードする。
-GitHub が自動で添付する `Source code (zip)` はインストール用ではない。
-
-ダウンロード先を Windows PowerShell で開く。
-[GitHub CLI](https://cli.github.com/) を `github.com` に認証済みの状態で、例の `v0.1.0` を選んだ版に置き換えて実行する。
-公式 Release の添付ファイルとの一致、ビルドの出所、同梱の SHA-256 を確認し、すべて通った場合だけ展開する。
-
-```powershell
-& {
-  $tag = 'v0.1.0'
-  $zip = "book-props-$tag.zip"
-  Get-Command gh -CommandType Application -ErrorAction Stop | Out-Null
-  gh release verify-asset $tag $zip --repo YukiIto1999/book-props
-  if ($LASTEXITCODE -ne 0) { throw '公式 Release の添付ファイルとして検証できません。' }
-  gh attestation verify $zip --repo YukiIto1999/book-props --signer-workflow YukiIto1999/book-props/.github/workflows/release.yml --source-ref "refs/tags/$tag"
-  if ($LASTEXITCODE -ne 0) { throw 'ビルドの証明を検証できません。' }
-  $expected = (Get-Content -Raw -LiteralPath '.\SHA256SUMS').Trim()
-  $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLowerInvariant()
-  if ($expected -cne "$hash  $zip") { throw 'ダウンロードした ZIP の SHA-256 が一致しません。' }
-  Expand-Archive -LiteralPath $zip -DestinationPath (Join-Path '.' ([IO.Path]::GetFileNameWithoutExtension($zip)))
-}
-```
+[GitHub Releases](https://github.com/YukiIto1999/book-props/releases/latest) の **Assets** から `book-props-v<版>.zip` をダウンロードする。
+GitHub が自動で添付する `Source code (zip)` は導入用ではない。
+ダウンロードした ZIP をエクスプローラーで右クリックし、「すべて展開」を選ぶ。
+ZIP の取得と展開に GitHub アカウント、GitHub CLI、PowerShell は不要。
+配布物を手元で検証したい場合は、展開前に[任意の検証手順](#任意配布物の検証)を使う。
 
 ZIP の `obsidian/` からは `main.js` と `manifest.json` だけを使う。
 `chrome/` はフォルダごと Windows 側の固定した場所に置き、`manifest.json` が直下にあるそのフォルダを読み込む。
@@ -80,3 +62,33 @@ ZIP の `obsidian/` からは `main.js` と `manifest.json` だけを使う。
 問題が起きたら、先に両方を無効にする。書籍ノートは通常のMarkdownなので、プラグインなしで開ける。前の動作へ戻すなら、両方の成果物を対応する同じ版へ戻す。ノートを戻す必要がある場合は、更新後の変更を失わないよう現在のVaultも退避し、差分を確かめてからバックアップを復元する。
 
 利用をやめる場合は、Obsidianで接続設定に表示される指紋を控えてから、プラグインと拡張を無効にする。証明書を登録したChromeプロファイルごとに `chrome://certificate-manager/` の「ローカル証明書」→「自分でインストール」→「信頼できる証明書」を開き、指紋が一致するBook Propsの末端証明書だけを削除する。その後、Chromeの拡張を削除し、Obsidianを閉じてVaultの `plugins/book-props/` を取り除ける。書籍ノートを削除する必要はない。
+
+## 任意：配布物の検証
+
+ZIP の SHA-256 を確認する場合は、同じ Release から `SHA256SUMS` も取得し、ZIP と同じフォルダに置く。
+そのフォルダで Windows PowerShell を開き、ファイル名を取得した版に合わせて実行する。
+ハッシュが一致しなければ、その ZIP は展開しない。
+
+```powershell
+$zip = 'book-props-v0.1.0.zip'
+$hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip -ErrorAction Stop).Hash.ToLowerInvariant()
+$expected = (Get-Content -Raw -LiteralPath '.\SHA256SUMS' -ErrorAction Stop).Trim()
+if ($expected -cne "$hash  $zip") { throw 'ダウンロードした ZIP の SHA-256 が一致しません。' }
+'SHA-256 が一致しました。'
+```
+
+その ZIP が GitHub Release に登録された添付ファイルであり、指定したワークフローでビルドされたことまで確認する場合は、`github.com` に認証済みの [GitHub CLI](https://cli.github.com/) で次を実行する。
+`$tag` は取得した版に合わせる。
+どちらかが失敗したら、その ZIP は展開しない。
+
+```powershell
+& {
+  $tag = 'v0.1.0'
+  $zip = "book-props-$tag.zip"
+  Get-Command gh -CommandType Application -ErrorAction Stop | Out-Null
+  gh release verify-asset $tag $zip --repo YukiIto1999/book-props
+  if ($LASTEXITCODE -ne 0) { throw '公式 Release の添付ファイルとして検証できません。' }
+  gh attestation verify $zip --repo YukiIto1999/book-props --signer-workflow YukiIto1999/book-props/.github/workflows/release.yml --source-ref "refs/tags/$tag"
+  if ($LASTEXITCODE -ne 0) { throw 'ビルドの証明を検証できません。' }
+}
+```

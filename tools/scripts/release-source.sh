@@ -20,7 +20,6 @@ case "$GITHUB_EVENT_NAME" in
     test "$GITHUB_REF" = "refs/tags/$tag"
     tag_object=$(git rev-parse --verify "$GITHUB_REF^{tag}")
     test "$commit" = "$(git rev-parse "$tag_object^{commit}")"
-    test -s tools/release/cosign.pub || { printf 'Commit tools/release/cosign.pub before tagging a release.\n' >&2; exit 1; }
     printf 'tag_object=%s\n' "$tag_object" >> "$GITHUB_OUTPUT"
     ;;
   *) exit 1 ;;

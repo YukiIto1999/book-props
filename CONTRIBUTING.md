@@ -24,7 +24,7 @@ devenv shell -- pnpm verify
 
 ## 配布版の準備
 
-### 初回の署名設定
+### 初回の公開設定
 
 以下は GitHub リポジトリの所有者が初回公開前に行う。
 
@@ -36,31 +36,18 @@ devenv shell -- pnpm verify
    **Selected branches and tags** を選び、**Tag** に `v*` を追加する。
    Branch のルールは追加しない。
    版タグの push を公開の承認とするので、単独運用では Required reviewers を追加しない。
+   ビルド証明の発行を版タグに限定する設定であり、環境にシークレットは置かない。
 3. **Settings → General → Releases** で **Enable release immutability** を有効にする。
-   これは公開後の ZIP とタグの差し替えを防ぐ設定で、下書きの間はファイルを添付できる。
+   公開済みの ZIP とタグが固定され、GitHub が版タグ・コミット・添付ファイルを結び付ける Release の証明を生成する。
 
-Linux または WSL のリポジトリルートで次を実行し、Cosign の端末プロンプトで空でないパスワードを設定する。
-鍵がすでにある場合は上書きせず、既存の鍵を使う。
-
-```sh
-umask 077
-key_dir="$HOME/.local/share/book-props-signing"
-install -d -m 0700 "$key_dir"
-test ! -e "$key_dir/book-props.key" && test ! -e "$key_dir/book-props.pub" &&
-  devenv --profile release shell -- env -u COSIGN_PASSWORD cosign generate-key-pair --output-key-prefix "$key_dir/book-props"
-```
-
-生成物のうち `book-props.pub` だけを `tools/release/cosign.pub` に置き、既定ブランチに入れる。
-`release` の **Environment secrets** で、`RELEASE_SIGNING_KEY` に暗号化済みの `book-props.key` の全内容、`RELEASE_SIGNING_PASSWORD` に生成時のパスワードを登録する。
-リポジトリ全体の Secret には登録しない。
-秘密鍵とパスワードは Git・チャット・ログに残さず、復旧できるよう別々に保管する。
+署名鍵や公開用シークレットの登録は不要。
 
 ### 公開前に試す
 
-既定ブランチから [Release ワークフロー](.github/workflows/release.yml)を手動実行すると、鍵を使わずに ZIP の作成、脆弱性検査、Windows での受け入れまで確認できる。
+既定ブランチから [Release ワークフロー](.github/workflows/release.yml)を手動実行すると、ZIP の作成、脆弱性検査、Windows での受け入れまで確認できる。
 Windows では同じ ZIP を展開し、一時 Vault と別の Chrome プロファイルで、証明書の登録、ペアリング、購入希望と購入の記録を試す。
 結果は走行ログとスクリーンショットで確認できる。
-手動実行では署名・公開しない。
+手動実行ではビルドの証明を発行せず、公開もしない。
 
 手元で同じ梱包と検査を行う場合は、依存を導入した対象コミットで次を実行する。
 `v0.1.0` はルートと両方のコンポーネントに共通する版に置き換える。
@@ -83,30 +70,27 @@ Vault、接続設定、資格情報は配布物に入れない。
 
 ### 版タグと公開
 
-公開する版の公開鍵とコードが既定ブランチに入っていることを確認し、そのコミットに注釈付きタグを付ける。
+公開するコードが既定ブランチに入っていることを確認し、そのコミットに注釈付きタグを付ける。
 `v0.1.0` はルートと両方のコンポーネントに共通する版に置き換える。
+タグを push する直前に Immutable Releases が有効であることを確認する。
+Actions の標準トークンでは公開前にこの設定を照会できないため、リポジトリの管理権限がある GitHub CLI で確認する。
 
 ```bash
 read -r -p 'Source のコミット SHA: ' source
-git tag -a v0.1.0 "$source" -m 'Book Props v0.1.0' &&
+test "$(gh api repos/YukiIto1999/book-props/immutable-releases --jq .enabled)" = true &&
+  git tag -a v0.1.0 "$source" -m 'Book Props v0.1.0' &&
   git push origin refs/tags/v0.1.0
 ```
 
 タグで起動した走行が ZIP を一度だけ梱包し、SBOM と既知の脆弱性を検査する。
-同じ ZIP が Windows の受け入れに合格した場合だけ、署名と由来を生成・検証する。
-検証したファイルを下書きへ添付し、GitHub 側のハッシュが一致した場合だけ Release を公開する。
+同じ ZIP が Windows の受け入れに合格した場合だけ、GitHub Actions が ZIP と SPDX SBOM の署名付きビルド証明を発行し、成果物のハッシュ、ワークフロー、版タグ、コミットを照合する。
+検証済みの ZIP、SBOM、`SHA256SUMS` を下書きへ添付し、GitHub 側のハッシュが一致した場合だけ Release を公開する。
 公開済みのタグや成果物は上書きしない。
 一時的な障害なら、公開済みでないことを確認し、元のタグの走行で **Re-run all jobs** を選ぶ。
-**Re-run failed jobs** では、成功済みの脆弱性検査をやり直さない場合がある。
+**Re-run failed jobs** では、現在の試行で ZIP が作られず、脆弱性検査やビルド証明の前提を満たさないことがある。
 下書きだけが残っている場合は、その下書きだけを取り除き、タグを残してから再実行する。
 
-出所を確かめる場合は、配布ZIPとは別に、信頼済みのソースから取得して保管した `tools/release/cosign.pub` を使う。
-鍵ペアで署名し公開の透明性ログには送らないため、検証には `--insecure-ignore-tlog` を指定する。
-
-```sh
-cosign verify-blob --key tools/release/cosign.pub --insecure-ignore-tlog \
-  --bundle book-props-v0.1.0.zip.sigstore.json book-props-v0.1.0.zip
-```
+公開後の ZIP と証明の確認は [Windows での導入・運用](docs/installation.md#成果物を用意する) を参照する。
 
 ## アーキテクチャの標準
 

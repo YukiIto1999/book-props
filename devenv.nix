@@ -42,7 +42,6 @@
         BOOK_PROPS_RUST_LICENSE_MIT = "${rustNotices}/LICENSE-MIT";
       };
       packages = [
-        pkgs.cosign
         pkgs.osv-scanner
         pkgs.syft
       ];

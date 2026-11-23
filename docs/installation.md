@@ -14,14 +14,24 @@ Chromeでの照合に使うObsidianとChromeは、同じWindows端末で起動�
 Assets から `book-props-v<版>.zip` と `SHA256SUMS` を、新しく作ったフォルダへ名前を変えずにダウンロードする。
 GitHub が自動で添付する `Source code (zip)` はインストール用ではない。
 
-ダウンロード先を Windows PowerShell で開き、ファイル名の `v0.1.0` を選んだ版に置き換えて実行する。
+ダウンロード先を Windows PowerShell で開く。
+[GitHub CLI](https://cli.github.com/) を `github.com` に認証済みの状態で、例の `v0.1.0` を選んだ版に置き換えて実行する。
+公式 Release の添付ファイルとの一致、ビルドの出所、同梱の SHA-256 を確認し、すべて通った場合だけ展開する。
 
 ```powershell
-$zip = 'book-props-v0.1.0.zip'
-$expected = (Get-Content -Raw -LiteralPath '.\SHA256SUMS').Trim()
-$hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLowerInvariant()
-if ($expected -cne "$hash  $zip") { throw 'ダウンロードした ZIP の SHA-256 が一致しません。' }
-Expand-Archive -LiteralPath $zip -DestinationPath (Join-Path '.' ([IO.Path]::GetFileNameWithoutExtension($zip)))
+& {
+  $tag = 'v0.1.0'
+  $zip = "book-props-$tag.zip"
+  Get-Command gh -CommandType Application -ErrorAction Stop | Out-Null
+  gh release verify-asset $tag $zip --repo YukiIto1999/book-props
+  if ($LASTEXITCODE -ne 0) { throw '公式 Release の添付ファイルとして検証できません。' }
+  gh attestation verify $zip --repo YukiIto1999/book-props --signer-workflow YukiIto1999/book-props/.github/workflows/release.yml --source-ref "refs/tags/$tag"
+  if ($LASTEXITCODE -ne 0) { throw 'ビルドの証明を検証できません。' }
+  $expected = (Get-Content -Raw -LiteralPath '.\SHA256SUMS').Trim()
+  $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLowerInvariant()
+  if ($expected -cne "$hash  $zip") { throw 'ダウンロードした ZIP の SHA-256 が一致しません。' }
+  Expand-Archive -LiteralPath $zip -DestinationPath (Join-Path '.' ([IO.Path]::GetFileNameWithoutExtension($zip)))
+}
 ```
 
 ZIP の `obsidian/` からは `main.js` と `manifest.json` だけを使う。

@@ -309,9 +309,13 @@ GitHub Releases は新版を配布するが、展開済みの Chrome 拡張と O
 [CI](../.github/workflows/ci.yml)はブランチの変更と PR に対してルートの `verify` を実行する。
 [Release ワークフロー](../.github/workflows/release.yml)は両コンポーネントをビルドし、一つの ZIP を作る。
 ZIP の SPDX SBOM を OSV-Scanner で検査し、Windows で同じ SHA-256 の ZIP を使ってペアリングと Vault 保存を確認する。
-手動起動は受け入れまでで止まり、本番鍵にはアクセスしない。
-版タグからの起動では、同じ走行で受け入れた ZIP と SBOM を署名工程に渡す。
-署名・由来の検証と、添付したファイルのハッシュ照合が通った場合だけ公開する。
+手動起動は受け入れまでで止まり、証明を発行しない。
+版タグからの起動では、同じ走行で受け入れた ZIP と SBOM を対象に GitHub Actions が署名付きビルド証明を発行する。
+証明と添付ファイルのハッシュの照合が通った場合だけ公開し、Immutable Releases が公開版と添付ファイルを証明する。
+
+[標準の Cosign 規定](https://github.com/YukiIto1999/architecture-standard/blob/main/tools/build/cosign.md)に対し、GitHub 上で公開する ZIP には、長期の署名鍵を運用せず公開工程を検証できる OIDC 署名を採る。
+公開リポジトリの GitHub Actions の署名記録は [Sigstore の公開透明性ログ](https://docs.github.com/en/actions/concepts/security/artifact-attestations#how-github-generates-artifact-attestations)にも残る。
+公開ログへの記録を許容できない配布先を追加する場合、または GitHub の証明で公開工程と配布 ZIP を照合できなくなった場合は見直す。
 運用手順は [CONTRIBUTING](../CONTRIBUTING.md#配布版の準備) に置く。
 
 ChromeとObsidianの接続は、両方が同じTypeScriptの検証スキーマを読み込む。HTTPの型を別言語へ生成する工程は設けない。TypeScript以外の利用主体を追加し、同じスキーマを直接使えなくなった場合は、公開契約の供給方法を見直す。

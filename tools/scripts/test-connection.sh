@@ -9,7 +9,7 @@ export HOME="$sandbox/home" XDG_RUNTIME_DIR="$sandbox/runtime"
 export XDG_CONFIG_HOME="$sandbox/config" XDG_DATA_HOME="$sandbox/data"
 unset GNOME_KEYRING_CONTROL DBUS_SESSION_BUS_ADDRESS DISPLAY WAYLAND_DISPLAY
 
-dbus-run-session -- bash -euo pipefail -s <<'SESSION'
+dbus-run-session --config-file="${BOOK_PROPS_TEST_DBUS_CONFIG:?Run the integration test in devenv}" -- bash -euo pipefail -s <<'SESSION'
 head -c 32 /dev/urandom | base64 | gnome-keyring-daemon --foreground --unlock --components=secrets >"$XDG_RUNTIME_DIR/keyring.log" 2>&1 &
 keyring=$!
 trap 'kill "$keyring" 2>/dev/null || true; wait "$keyring" 2>/dev/null || true' EXIT

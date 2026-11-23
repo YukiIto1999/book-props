@@ -8,6 +8,7 @@
   };
 
   env = {
+    BOOK_PROPS_TEST_DBUS_CONFIG = "${pkgs.dbus}/share/dbus-1/session.conf";
     NX_DAEMON = "false";
     NX_ISOLATE_PLUGINS = "false";
   };

@@ -76,6 +76,9 @@ devenv --profile release shell -- pnpm package:release v0.1.0 work/package-v0.1.
 devenv --profile release shell -- python3 tools/scripts/audit-release.py work/package-v0.1.0/book-props-v0.1.0.zip
 ```
 
+Rust を更新する場合は、[`devenv.nix`](devenv.nix) の `rustRevision` と、同じリビジョンの Rust リポジトリ直下にある `COPYRIGHT`・`LICENSE-APACHE`・`LICENSE-MIT` の写しを一緒に更新する。
+写しは [`tools/release/rust/`](tools/release/rust/) のリビジョン名のディレクトリに置き、旧リビジョンの写しは残さない。
+
 ZIP に入っている `obsidian/` と `chrome/` を導入に使う。
 ライセンスと依存の目録は ZIP に同梱されるが、プラグインや拡張のフォルダには置かない。
 Vault、接続設定、資格情報は配布物に入れない。

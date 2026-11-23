@@ -31,18 +31,15 @@
   profiles.release.module =
     let
       rustRevision = "8bab26f4f68e0e26f0bb7960be334d5b520ea452";
-      rustNotice = name: hash: pkgs.fetchurl {
-        inherit hash;
-        url = "https://raw.githubusercontent.com/rust-lang/rust/${rustRevision}/${name}";
-      };
+      rustNotices = ./tools/release/rust + "/${rustRevision}";
     in
     {
       env = {
         BOOK_PROPS_RUST_REVISION = rustRevision;
         BOOK_PROPS_RUST_LIBRARY = "${pkgs.rustPlatform.rustLibSrc}";
-        BOOK_PROPS_RUST_COPYRIGHT = "${rustNotice "COPYRIGHT" "sha256-FyAg2/1bU6Im3953YWGQpI3P9RmwvA5t65GoRQeCxK8="}";
-        BOOK_PROPS_RUST_LICENSE_APACHE = "${rustNotice "LICENSE-APACHE" "sha256-Yseh419WQGiW16p8pS0MwNJyrAIrXSeW59aQXbijY2o="}";
-        BOOK_PROPS_RUST_LICENSE_MIT = "${rustNotice "LICENSE-MIT" "sha256-txvUOgacoGQans/lhcp7PFO1zBYI+LaDIRaGmOKLXqE="}";
+        BOOK_PROPS_RUST_COPYRIGHT = "${rustNotices}/COPYRIGHT";
+        BOOK_PROPS_RUST_LICENSE_APACHE = "${rustNotices}/LICENSE-APACHE";
+        BOOK_PROPS_RUST_LICENSE_MIT = "${rustNotices}/LICENSE-MIT";
       };
       packages = [
         pkgs.cosign

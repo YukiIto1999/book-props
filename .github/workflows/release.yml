@@ -216,8 +216,10 @@ jobs:
           gh api --paginate --slurp "repos/$GH_REPO/releases?per_page=100" |
             jq -e --arg tag "$TAG" 'flatten | all(.tag_name != $tag)' > /dev/null
           releases="repos/$GH_REPO/releases"
+          printf -v install_notes "## Installation\n\nDownload \`book-props-%s.zip\` from **Assets** and follow the [Windows installation guide (Japanese)](%s/%s/blob/HEAD/docs/installation.md). You do not need GitHub CLI to install.\n" \
+            "$TAG" "$GITHUB_SERVER_URL" "$GH_REPO"
           draft=$(gh api --method POST "$releases" \
-            -f tag_name="$TAG" -f target_commitish="$COMMIT" -f name="$TAG" \
+            -f tag_name="$TAG" -f target_commitish="$COMMIT" -f name="$TAG" -f body="$install_notes" \
             -F draft=true -F generate_release_notes=true)
           draft_id=$(jq -er '.id | numbers' <<< "$draft")
           upload_url=$(jq -er '.upload_url | strings' <<< "$draft")

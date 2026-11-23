@@ -6,13 +6,13 @@ public_key=${2:?Provide the tracked release public key}
 : "${COSIGN_PRIVATE_KEY:?The RELEASE_SIGNING_KEY secret is required}"
 : "${COSIGN_PASSWORD:?The RELEASE_SIGNING_PASSWORD secret is required}"
 : "${GITHUB_SERVER_URL:?}" "${GITHUB_REPOSITORY:?}" "${GITHUB_REF:?}" "${GITHUB_WORKFLOW_REF:?}"
-: "${APPROVED_COMMIT:?}" "${REVIEWED_HASH:?}" "${BUILD_INVOCATION:?}" "${BUILD_REF:?}"
+: "${APPROVED_COMMIT:?}" "${REVIEWED_HASH:?}" "${GITHUB_RUN_ID:?}" "${BUILD_ATTEMPT:?}"
 test -s "$public_key"
 
 repository="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
 test "$GITHUB_WORKFLOW_REF" = "$GITHUB_REPOSITORY/.github/workflows/release.yml@$GITHUB_REF"
-[[ "$BUILD_INVOCATION" =~ ^"$repository"/actions/runs/[1-9][0-9]*/attempts/[1-9][0-9]*$ ]]
-[[ "$BUILD_REF" == refs/heads/* ]]
+[[ "$GITHUB_RUN_ID" =~ ^[1-9][0-9]*$ && "$BUILD_ATTEMPT" =~ ^[1-9][0-9]*$ ]]
+build_invocation="$repository/actions/runs/$GITHUB_RUN_ID/attempts/$BUILD_ATTEMPT"
 commit=$(git rev-parse HEAD)
 test "$commit" = "$APPROVED_COMMIT"
 filename=${artifact##*/}
@@ -30,8 +30,8 @@ cmp "${artifact%/*}/SHA256SUMS" <(printf '%s  %s\n' "$zip_hash" "$filename")
 predicate=$(mktemp)
 trap 'rm -f -- "$predicate"' EXIT
 jq -n \
-  --arg repository "$repository" --arg ref "$BUILD_REF" --arg commit "$commit" \
-  --arg invocation "$BUILD_INVOCATION" --arg builder "$GITHUB_SERVER_URL/$GITHUB_WORKFLOW_REF" \
+  --arg repository "$repository" --arg ref "$GITHUB_REF" --arg commit "$commit" \
+  --arg invocation "$build_invocation" --arg builder "$GITHUB_SERVER_URL/$GITHUB_WORKFLOW_REF" \
   --arg sbom "${sbom##*/}" --arg sbom_hash "$sbom_hash" \
   '{
     buildDefinition: {

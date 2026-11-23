@@ -3,8 +3,10 @@ packages:
   - libs/book-products
   - runtimes/*
   - tests/arch/medium/typescript
+  - tests/e2e/large/windows-release
 
 allowBuilds:
+  classic-level: false
   nx: true
 
 minimumReleaseAgeExclude:

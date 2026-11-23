@@ -29,9 +29,9 @@ devenv shell -- pnpm verify
 以下は GitHub リポジトリの所有者が初回公開前に行う。
 
 1. **Settings → Rules → Rulesets → New tag ruleset** で、対象 `v*`、状態 **Active** のルールセットを二つ作る。
-   一つは **Restrict creations** だけを有効にし、Bypass list は公開担当の管理者だけに絞る。
+   一つは **Restrict creations** だけを有効にし、Bypass list はこのリポジトリの管理者だけに絞る。
    もう一つは **Restrict updates** と **Restrict deletions** を有効にし、Bypass list は空にする。
-   こうすると公開担当でも、作成済みタグの候補指定を公開前に差し替えられない。
+   こうすると公開前でも、作成済みタグの指すコミットを差し替えられない。
 2. **Settings → Environments** で `release` を作る。
    **Selected branches and tags** を選び、**Tag** に `v*` を追加する。
    Branch のルールは追加しない。
@@ -55,13 +55,11 @@ test ! -e "$key_dir/book-props.key" && test ! -e "$key_dir/book-props.pub" &&
 リポジトリ全体の Secret には登録しない。
 秘密鍵とパスワードは Git・チャット・ログに残さず、復旧できるよう別々に保管する。
 
-### 候補の確認
+### 公開前に試す
 
-既定ブランチから [Release ワークフロー](.github/workflows/release.yml)を手動実行する。
-本番の鍵や Environment がなくても候補の作成と検査はできるが、公開する候補は公開鍵を入れたコミットから作る。
-成功した走行の Summary から候補を開き、ZIP の SHA-256 が `SHA256SUMS` と一致することを確かめる。
-一時 Vault と別の Chrome プロファイルにその ZIP を入れ、照合と登録を試す。
-更新なら切り戻しも試す。
+既定ブランチから [Release ワークフロー](.github/workflows/release.yml)を手動実行すると、鍵を使わずに ZIP の作成、脆弱性検査、Windows での受け入れまで確認できる。
+Windows では同じ ZIP を展開し、一時 Vault と別の Chrome プロファイルで、証明書の登録、ペアリング、購入希望と購入の記録を試す。
+結果は走行ログとスクリーンショットで確認できる。
 手動実行では署名・公開しない。
 
 手元で同じ梱包と検査を行う場合は、依存を導入した対象コミットで次を実行する。
@@ -85,23 +83,20 @@ Vault、接続設定、資格情報は配布物に入れない。
 
 ### 版タグと公開
 
-受け入れた走行の Summary から Source のコミット SHA と `book-props-release:` で始まる注釈をそのまま写し、そのコミットに注釈付きタグを付ける。
-`v0.1.0` は候補に表示された版に合わせる。
+公開する版の公開鍵とコードが既定ブランチに入っていることを確認し、そのコミットに注釈付きタグを付ける。
+`v0.1.0` はルートと両方のコンポーネントに共通する版に置き換える。
 
 ```bash
 read -r -p 'Source のコミット SHA: ' source
-read -r -p 'book-props-release: で始まる一行: ' annotation
-git tag -a v0.1.0 "$source" -m "$annotation" &&
+git tag -a v0.1.0 "$source" -m 'Book Props v0.1.0' &&
   git push origin refs/tags/v0.1.0
 ```
 
-Actions はタグと候補のコミットが一致し、注釈で指定した成功済みの走行から同じ SHA-256 の ZIP を取得できる場合だけ進む。
-再ビルドはせず、候補の SBOM を最新の既知脆弱性情報に照合してから ZIP と由来を署名・検証する。
-タグを付ける前に候補の成果物が期限切れなら、候補を作り直して実物を再確認する。
-タグを付けた後で期限切れになった場合はタグを付け替えず、次の版で候補を作る。
-全検査が通った場合だけ、同じ下書きに添付したファイルのハッシュを GitHub の記録と照合し、Release を公開する。
+タグで起動した走行が ZIP を一度だけ梱包し、SBOM と既知の脆弱性を検査する。
+同じ ZIP が Windows の受け入れに合格した場合だけ、署名と由来を生成・検証する。
+検証したファイルを下書きへ添付し、GitHub 側のハッシュが一致した場合だけ Release を公開する。
 公開済みのタグや成果物は上書きしない。
-一時的な障害なら、公開済みでないことを確認し、候補が残っている間に元のタグの走行で **Re-run all jobs** を選ぶ。
+一時的な障害なら、公開済みでないことを確認し、元のタグの走行で **Re-run all jobs** を選ぶ。
 **Re-run failed jobs** では、成功済みの脆弱性検査をやり直さない場合がある。
 下書きだけが残っている場合は、その下書きだけを取り除き、タグを残してから再実行する。
 

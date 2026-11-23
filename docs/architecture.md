@@ -307,11 +307,11 @@ GitHub Releases は新版を配布するが、展開済みの Chrome 拡張と O
 利用者や更新頻度が増えて手動の差し替えを維持できなくなったとき、または両方を署名検証後に同じ版へ更新できる配布経路を採れるようになったときに見直す。
 
 [CI](../.github/workflows/ci.yml)はブランチの変更と PR に対してルートの `verify` を実行する。
-[Release ワークフロー](../.github/workflows/release.yml)は、手動起動で `verify:push` によるビルドと TLS 実結合を行い、生成した ZIP の SPDX SBOM を OSV-Scanner で検査する。
-ここでは本番鍵にアクセスせず、公開もしない。
-版タグは、受け入れた候補の走行と ZIP の SHA-256 を指定する。
-タグによる起動は、その実物と SBOM を取り出して再照合し、署名と公開へ進む。
-再ビルドによる差し替えは行わない。
+[Release ワークフロー](../.github/workflows/release.yml)は両コンポーネントをビルドし、一つの ZIP を作る。
+ZIP の SPDX SBOM を OSV-Scanner で検査し、Windows で同じ SHA-256 の ZIP を使ってペアリングと Vault 保存を確認する。
+手動起動は受け入れまでで止まり、本番鍵にはアクセスしない。
+版タグからの起動では、同じ走行で受け入れた ZIP と SBOM を署名工程に渡す。
+署名・由来の検証と、添付したファイルのハッシュ照合が通った場合だけ公開する。
 運用手順は [CONTRIBUTING](../CONTRIBUTING.md#配布版の準備) に置く。
 
 ChromeとObsidianの接続は、両方が同じTypeScriptの検証スキーマを読み込む。HTTPの型を別言語へ生成する工程は設けない。TypeScript以外の利用主体を追加し、同じスキーマを直接使えなくなった場合は、公開契約の供給方法を見直す。

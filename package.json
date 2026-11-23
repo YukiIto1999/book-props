@@ -8,6 +8,7 @@
     "package:release": "python3 tools/scripts/package-release.py",
     "verify": "nx run book-props:verify --parallel=1",
     "verify:push": "nx run book-props:verify-push --parallel=1",
+    "verify:release:windows": "pnpm --filter @book-props/windows-acceptance verify",
     "verify:full": "nx run book-props:verify-full",
     "mutation:full": "nx run book-props:mutation-full",
     "mutation:in-diff": "nx run book-props:mutation-in-diff"

@@ -12,24 +12,17 @@ for manifest in runtimes/obsidian/manifest.json runtimes/book-extension/manifest
 done
 
 tag="v$version"
-candidate_ref="refs/heads/$DEFAULT_BRANCH"
 case "$GITHUB_EVENT_NAME" in
   workflow_dispatch)
-    test "$GITHUB_REF" = "$candidate_ref"
+    test "$GITHUB_REF" = "refs/heads/$DEFAULT_BRANCH"
     ;;
   push)
     test "$GITHUB_REF" = "refs/tags/$tag"
     tag_object=$(git rev-parse --verify "$GITHUB_REF^{tag}")
     test "$commit" = "$(git rev-parse "$tag_object^{commit}")"
-    annotation=$(git for-each-ref --count=1 --format='%(contents:subject)' "$GITHUB_REF")
-    if ! [[ "$annotation" =~ ^book-props-release:\ ([1-9][0-9]*)/([1-9][0-9]*)\ ([0-9a-f]{64})$ ]]; then
-      printf 'Use the book-props-release annotation from the accepted candidate run.\n' >&2
-      exit 1
-    fi
-    test -s tools/release/cosign.pub || { printf 'Commit tools/release/cosign.pub before building the candidate.\n' >&2; exit 1; }
-    printf 'tag_object=%s\ncandidate_run=%s\ncandidate_attempt=%s\ncandidate_hash=%s\n' \
-      "$tag_object" "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}" >> "$GITHUB_OUTPUT"
+    test -s tools/release/cosign.pub || { printf 'Commit tools/release/cosign.pub before tagging a release.\n' >&2; exit 1; }
+    printf 'tag_object=%s\n' "$tag_object" >> "$GITHUB_OUTPUT"
     ;;
   *) exit 1 ;;
 esac
-printf 'tag=%s\ncommit=%s\ncandidate_ref=%s\n' "$tag" "$commit" "$candidate_ref" >> "$GITHUB_OUTPUT"
+printf 'tag=%s\ncommit=%s\n' "$tag" "$commit" >> "$GITHUB_OUTPUT"

@@ -1,0 +1,9 @@
+work/
+.devenv/
+.direnv/
+node_modules/
+target/
+mutants.out/
+mutants.out.old/
+dist/
+.nx/

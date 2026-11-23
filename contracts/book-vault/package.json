@@ -1,0 +1,9 @@
+{
+  "name": "@book-props/vault-contract",
+  "private": true,
+  "type": "module",
+  "exports": "./wire.ts",
+  "dependencies": {
+    "zod": "4.6.5"
+  }
+}

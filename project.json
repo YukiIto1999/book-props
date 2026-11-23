@@ -1,0 +1,112 @@
+{
+  "$schema": "./node_modules/nx/schemas/project-schema.json",
+  "name": "book-props",
+  "root": ".",
+  "projectType": "application",
+  "targets": {
+    "format": {
+      "command": "cargo fmt --all -- --check && oxfmt --check --ignore-path=.gitignore --ignore-path=.oxfmtignore .",
+      "cache": true
+    },
+    "lint": {
+      "command": "cargo clippy --locked --workspace --all-targets -- -D warnings && oxlint --type-aware --deny-warnings && knip",
+      "dependsOn": ["prepare-wasm"],
+      "cache": true
+    },
+    "types": {
+      "command": "tsc -p runtimes/obsidian && tsc -p runtimes/book-extension && tsc -p tsconfig.root.json",
+      "dependsOn": ["prepare-wasm"],
+      "cache": true
+    },
+    "architecture": {
+      "command": "node --test tests/arch/medium/typescript/*.test.mjs",
+      "dependsOn": ["prepare-wasm"],
+      "cache": true
+    },
+    "test-rust": {
+      "command": "cargo test --locked --workspace",
+      "cache": true
+    },
+    "prepare-wasm": {
+      "command": "pnpm --filter @book-props/obsidian run prepare-wasm",
+      "outputs": ["{workspaceRoot}/runtimes/obsidian/dist/wasm"],
+      "cache": true
+    },
+    "test-obsidian": {
+      "command": "pnpm --filter @book-props/obsidian test",
+      "dependsOn": ["prepare-wasm"],
+      "inputs": [
+        "default",
+        "{workspaceRoot}/core/vault/**/*",
+        "{workspaceRoot}/runtimes/obsidian/**/*",
+        "{workspaceRoot}/contracts/book-vault/**/*",
+        "{workspaceRoot}/libs/book-products/**/*"
+      ],
+      "cache": true
+    },
+    "test-chrome": {
+      "command": "pnpm --filter @book-props/vault-extension test",
+      "inputs": [
+        "default",
+        "{workspaceRoot}/runtimes/book-extension/**/*",
+        "{workspaceRoot}/contracts/book-vault/**/*"
+      ],
+      "cache": true
+    },
+    "build-obsidian": {
+      "command": "pnpm --filter @book-props/obsidian build",
+      "dependsOn": ["prepare-wasm"],
+      "outputs": [
+        "{workspaceRoot}/runtimes/obsidian/dist/main.js",
+        "{workspaceRoot}/runtimes/obsidian/dist/manifest.json"
+      ],
+      "cache": true
+    },
+    "build-chrome": {
+      "command": "pnpm --filter @book-props/vault-extension build",
+      "outputs": ["{workspaceRoot}/runtimes/book-extension/dist"],
+      "cache": true
+    },
+    "build": {
+      "executor": "nx:noop",
+      "dependsOn": ["build-obsidian", "build-chrome"]
+    },
+    "verify": {
+      "executor": "nx:noop",
+      "dependsOn": [
+        "format",
+        "lint",
+        "types",
+        "architecture",
+        "test-rust",
+        "test-obsidian",
+        "test-chrome"
+      ]
+    },
+    "verify-push": {
+      "executor": "nx:noop",
+      "dependsOn": ["verify", "build", "test-connection"]
+    },
+    "test-connection": {
+      "command": "bash tools/scripts/test-connection.sh",
+      "dependsOn": ["prepare-wasm"],
+      "cache": true
+    },
+    "verify-full": {
+      "command": "bash tools/scripts/verify-full.sh",
+      "cache": false
+    },
+    "regression-full": {
+      "command": "bash tools/scripts/regression-full.sh",
+      "cache": false
+    },
+    "mutation-full": {
+      "command": "bash tools/scripts/mutation-full.sh",
+      "cache": false
+    },
+    "mutation-in-diff": {
+      "command": "bash tools/scripts/mutation-in-diff.sh",
+      "cache": false
+    }
+  }
+}

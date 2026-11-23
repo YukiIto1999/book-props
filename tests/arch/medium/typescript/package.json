@@ -1,0 +1,9 @@
+{
+  "name": "@book-props/arch-medium-typescript",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@typescript/typescript6": "6.0.2"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "book-props",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nx run book-props:build",
+    "package:release": "python3 tools/scripts/package-release.py",
+    "verify": "nx run book-props:verify --parallel=1",
+    "verify:push": "nx run book-props:verify-push --parallel=1",
+    "verify:full": "nx run book-props:verify-full",
+    "mutation:full": "nx run book-props:mutation-full",
+    "mutation:in-diff": "nx run book-props:mutation-in-diff"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.6",
+    "eslint-plugin-sonarjs": "4.2.2",
+    "knip": "6.41.0",
+    "nx": "23.1.1",
+    "oxlint-tsgolint": "7.0.2004",
+    "typescript": "7.0.2"
+  },
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "packageManager": "pnpm@11.21.0"
+}

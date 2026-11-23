@@ -1,0 +1,9 @@
+[workspace]
+resolver = "3"
+members = ["core/vault"]
+
+[workspace.lints.clippy]
+cognitive_complexity = "deny"
+
+[workspace.lints.rust]
+unsafe_code = "deny"

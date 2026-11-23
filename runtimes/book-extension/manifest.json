@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Book Props",
+  "description": "Check book editions in your connected Obsidian Vault.",
+  "version": "0.1.0",
+  "permissions": ["storage", "contextMenus"],
+  "optional_host_permissions": ["https://*.localhost/*"],
+  "background": { "service_worker": "worker.js" },
+  "action": { "default_title": "Book Props", "default_popup": "popup.html" },
+  "options_ui": { "page": "options.html", "open_in_tab": true },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.amazon.co.jp/*",
+        "https://books.rakuten.co.jp/rb/*",
+        "https://www.valuebooks.jp/*",
+        "https://shopping.bookoff.co.jp/used/*",
+        "https://shopping.bookoff.co.jp/new/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

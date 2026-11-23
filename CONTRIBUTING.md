@@ -25,26 +25,43 @@ devenv shell -- pnpm verify
 
 ### 初回の署名設定
 
-GitHub で `v*` タグを対象とする ruleset を用意し、作成・更新・削除を信頼するリリース担当者に限る。
-GitHub の `release` Environment でも、許可する対象を版タグに絞る。
-リポジトリの設定で Release の不変性を有効にする。
+以下は GitHub リポジトリの所有者が初回公開前に行う。
 
-リポジトリのルートで次を実行する。
-`/path/to/private/book-props` はリポジトリの外にある保護された保存先に置き換える。
+1. **Settings → Rules → Rulesets → New tag ruleset** で、対象 `v*`、状態 **Active** のルールセットを二つ作る。
+   一つは **Restrict creations** だけを有効にし、Bypass list は公開担当の管理者だけに絞る。
+   もう一つは **Restrict updates** と **Restrict deletions** を有効にし、Bypass list は空にする。
+   こうすると公開担当でも、作成済みタグの候補指定を公開前に差し替えられない。
+2. **Settings → Environments** で `release` を作る。
+   **Selected branches and tags** を選び、**Tag** に `v*` を追加する。
+   Branch のルールは追加しない。
+   版タグの push を公開の承認とするので、単独運用では Required reviewers を追加しない。
+3. **Settings → General → Releases** で **Enable release immutability** を有効にする。
+   これは公開後の ZIP とタグの差し替えを防ぐ設定で、下書きの間はファイルを添付できる。
+
+Linux または WSL のリポジトリルートで次を実行し、Cosign の端末プロンプトで空でないパスワードを設定する。
+鍵がすでにある場合は上書きせず、既存の鍵を使う。
 
 ```sh
-devenv --profile release shell -- cosign generate-key-pair --output-key-prefix /path/to/private/book-props
+umask 077
+key_dir="$HOME/.local/share/book-props-signing"
+install -d -m 0700 "$key_dir"
+test ! -e "$key_dir/book-props.key" && test ! -e "$key_dir/book-props.pub" &&
+  devenv --profile release shell -- env -u COSIGN_PASSWORD cosign generate-key-pair --output-key-prefix "$key_dir/book-props"
 ```
 
-公開鍵だけを `tools/release/cosign.pub` として既定ブランチにコミットする。
-暗号化済みの秘密鍵ファイルの内容を `release` Environment の Secret `RELEASE_SIGNING_KEY`、そのパスワードを `RELEASE_SIGNING_PASSWORD` として登録する。
-秘密鍵とパスワードは Git・作業記録・ログに残さない。
+生成物のうち `book-props.pub` だけを `tools/release/cosign.pub` に置き、既定ブランチに入れる。
+`release` の **Environment secrets** で、`RELEASE_SIGNING_KEY` に暗号化済みの `book-props.key` の全内容、`RELEASE_SIGNING_PASSWORD` に生成時のパスワードを登録する。
+リポジトリ全体の Secret には登録しない。
+秘密鍵とパスワードは Git・チャット・ログに残さず、復旧できるよう別々に保管する。
 
 ### 候補の確認
 
-公開鍵を含む既定ブランチから、[Release ワークフロー](.github/workflows/release.yml)を手動実行する。
-Actions が作った候補 ZIP を一時 Vault と別の Chrome プロファイルに入れ、照合と登録を確かめる。更新のときは切り戻しも試す。
-手動実行は候補の生成と検査までで、Release は公開しない。
+既定ブランチから [Release ワークフロー](.github/workflows/release.yml)を手動実行する。
+本番の鍵や Environment がなくても候補の作成と検査はできるが、公開する候補は公開鍵を入れたコミットから作る。
+成功した走行の Summary から候補を開き、ZIP の SHA-256 が `SHA256SUMS` と一致することを確かめる。
+一時 Vault と別の Chrome プロファイルにその ZIP を入れ、照合と登録を試す。
+更新なら切り戻しも試す。
+手動実行では署名・公開しない。
 
 手元で同じ梱包と検査を行う場合は、依存を導入した対象コミットで次を実行する。
 `v0.1.0` はルートと両方のコンポーネントに共通する版に置き換える。
@@ -64,14 +81,28 @@ Vault、接続設定、資格情報は配布物に入れない。
 
 ### 版タグと公開
 
-候補 ZIP を確認したコミットに `v0.1.0` のような版タグを付け、タグだけを push する。
-Actions はタグのコミットをビルドし、その ZIP の SPDX SBOM、既知脆弱性、署名と由来を検査する。
+受け入れた走行の Summary から Source のコミット SHA と `book-props-release:` で始まる注釈をそのまま写し、そのコミットに注釈付きタグを付ける。
+`v0.1.0` は候補に表示された版に合わせる。
+
+```bash
+read -r -p 'Source のコミット SHA: ' source
+read -r -p 'book-props-release: で始まる一行: ' annotation
+git tag -a v0.1.0 "$source" -m "$annotation" &&
+  git push origin refs/tags/v0.1.0
+```
+
+Actions はタグと候補のコミットが一致し、注釈で指定した成功済みの走行から同じ SHA-256 の ZIP を取得できる場合だけ進む。
+再ビルドはせず、候補の SBOM を最新の既知脆弱性情報に照合してから ZIP と由来を署名・検証する。
+タグを付ける前に候補の成果物が期限切れなら、候補を作り直して実物を再確認する。
+タグを付けた後で期限切れになった場合はタグを付け替えず、次の版で候補を作る。
 全検査が通った場合だけ、同じ下書きに添付したファイルのハッシュを GitHub の記録と照合し、Release を公開する。
 公開済みのタグや成果物は上書きしない。
-公開前に失敗して下書きが残ったときは、状態を確認してから処理し、再実行で下書きを黙って上書きしない。
+一時的な障害なら、公開済みでないことを確認し、候補が残っている間に元のタグの走行で **Re-run all jobs** を選ぶ。
+**Re-run failed jobs** では、成功済みの脆弱性検査をやり直さない場合がある。
+下書きだけが残っている場合は、その下書きだけを取り除き、タグを残してから再実行する。
 
-伝送時のハッシュだけでなく出所も確かめる場合は、タグのソースから取得した信頼済みの公開鍵を使い、公開 ZIP とその `.sigstore.json` を照合する。
-鍵ペアで署名し公開ログには送信しないため、検証に `--insecure-ignore-tlog` を指定する。
+出所を確かめる場合は、配布ZIPとは別に、信頼済みのソースから取得して保管した `tools/release/cosign.pub` を使う。
+鍵ペアで署名し公開の透明性ログには送らないため、検証には `--insecure-ignore-tlog` を指定する。
 
 ```sh
 cosign verify-blob --key tools/release/cosign.pub --insecure-ignore-tlog \

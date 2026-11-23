@@ -2,9 +2,6 @@
   "name": "@book-props/windows-acceptance",
   "private": true,
   "type": "module",
-  "scripts": {
-    "verify": "node windows.mjs"
-  },
   "devDependencies": {
     "obsidian-launcher": "3.5.0",
     "puppeteer-core": "25.18.1"

@@ -1,0 +1,19 @@
+packages:
+  - contracts/*
+  - libs/book-products
+  - runtimes/*
+  - tests/arch/medium/typescript
+  - tests/e2e/large/windows-release
+
+allowBuilds:
+  classic-level: false
+  nx: true
+
+minimumReleaseAgeExclude:
+  - "@oxlint-tsgolint/darwin-arm64@7.0.2004"
+  - "@oxlint-tsgolint/darwin-x64@7.0.2004"
+  - "@oxlint-tsgolint/linux-arm64@7.0.2004"
+  - "@oxlint-tsgolint/linux-x64@7.0.2004"
+  - "@oxlint-tsgolint/win32-arm64@7.0.2004"
+  - "@oxlint-tsgolint/win32-x64@7.0.2004"
+  - oxlint-tsgolint@7.0.2004

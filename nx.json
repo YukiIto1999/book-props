@@ -1,0 +1,28 @@
+{
+  "$schema": "./node_modules/nx/schemas/nx-schema.json",
+  "defaultBase": "main",
+  "namedInputs": {
+    "default": ["{projectRoot}/**/*", "sharedGlobals"],
+    "sharedGlobals": [
+      "{workspaceRoot}/Cargo.toml",
+      "{workspaceRoot}/Cargo.lock",
+      "{workspaceRoot}/devenv.lock",
+      "{workspaceRoot}/devenv.nix",
+      "{workspaceRoot}/package.json",
+      "{workspaceRoot}/pnpm-lock.yaml",
+      "{workspaceRoot}/pnpm-workspace.yaml"
+    ]
+  },
+  "targetDefaults": {
+    "prepare-wasm": {
+      "inputs": [
+        "sharedGlobals",
+        "{workspaceRoot}/core/vault/**/*",
+        "{workspaceRoot}/runtimes/obsidian/build.sh",
+        "{workspaceRoot}/runtimes/obsidian/package.json",
+        { "runtime": "rustc -vV" },
+        { "runtime": "wasm-bindgen --version" }
+      ]
+    }
+  }
+}

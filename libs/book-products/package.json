@@ -1,0 +1,6 @@
+{
+  "name": "@book-props/book-products",
+  "private": true,
+  "type": "module",
+  "exports": "./sites.ts"
+}

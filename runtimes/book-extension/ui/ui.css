@@ -1,0 +1,55 @@
+:root {
+  color-scheme: light dark;
+  font:
+    14px/1.5 system-ui,
+    sans-serif;
+}
+body {
+  margin: 0;
+}
+main {
+  min-width: 236px;
+  padding: 14px;
+}
+.options main {
+  max-width: 580px;
+  margin-inline: auto;
+}
+h1 {
+  font-size: 1.15rem;
+  margin-block: 0 10px;
+}
+h2 {
+  font-size: 1rem;
+}
+.actions,
+label {
+  display: grid;
+  gap: 6px;
+}
+.controls {
+  display: flex;
+  gap: 8px;
+}
+button,
+input {
+  font: inherit;
+  padding: 7px 9px;
+}
+button:not(:disabled) {
+  cursor: pointer;
+}
+.actions + a {
+  display: block;
+  margin-top: 10px;
+}
+form {
+  display: grid;
+  gap: 10px;
+}
+#status {
+  margin-block: 8px;
+}
+[hidden] {
+  display: none;
+}

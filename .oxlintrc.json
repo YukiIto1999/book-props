@@ -1,0 +1,47 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc"],
+  "jsPlugins": ["eslint-plugin-sonarjs"],
+  "options": {
+    "reportUnusedDisableDirectives": "error"
+  },
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    "id-denylist": ["error", "data", "info", "temp", "tmp", "result", "obj", "foo"],
+    "unicorn/filename-case": ["error", { "case": "kebabCase" }],
+    "no-console": "error",
+    "max-lines": ["error", { "max": 300, "skipBlankLines": true, "skipComments": true }],
+    "max-lines-per-function": [
+      "error",
+      { "max": 80, "skipBlankLines": true, "skipComments": true }
+    ],
+    "max-depth": ["error", 4],
+    "no-restricted-properties": [
+      "error",
+      {
+        "object": "window",
+        "property": "localStorage",
+        "message": "token や資格情報を web storage に置かない"
+      },
+      {
+        "object": "window",
+        "property": "sessionStorage",
+        "message": "token や資格情報を web storage に置かない"
+      }
+    ],
+    "no-restricted-globals": ["error", "localStorage", "sessionStorage"],
+    "typescript/no-floating-promises": "error",
+    "typescript/no-unsafe-type-assertion": "error",
+    "typescript/prefer-for-of": "error",
+    "sonarjs/cognitive-complexity": ["error", 15]
+  },
+  "overrides": [
+    {
+      "files": ["**/*.test.{ts,tsx,mjs}"],
+      "rules": { "max-lines-per-function": "off" }
+    }
+  ],
+  "ignorePatterns": ["**/dist/**", "**/target/**"]
+}

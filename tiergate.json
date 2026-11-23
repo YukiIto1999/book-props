@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "verify": {
+    "seconds": 1800
+  },
+  "verify-push": {
+    "seconds": 1800,
+    "basis": "成果物生成とTLSの実結合を含むプッシュ前検証の暫定上限"
+  }
+}

@@ -37,7 +37,6 @@ async function notes(folder) {
 }
 
 let chrome;
-let target;
 let extensionId;
 let options;
 let prefix;
@@ -62,10 +61,6 @@ async function openOptions() {
   options = await chrome.newPage();
   await options.goto(`${prefix}options.html`);
   await text(options, "#extension-id", extensionId);
-  target = await chrome.waitForTarget(
-    (item) => item.type() === "service_worker" && item.url() === `${prefix}worker.js`,
-    { timeout },
-  );
 }
 
 async function productPage() {
@@ -85,20 +80,18 @@ async function productPage() {
 
 async function popup(product) {
   await product.bringToFront();
-  const worker = await (
-    await chrome.waitForTarget(
-      (item) => item.type() === "service_worker" && item.url() === `${prefix}worker.js`,
-      { timeout },
-    )
-  ).worker();
-  await worker.evaluate("chrome.action.openPopup()");
+  await options.evaluate(() => chrome.action.openPopup());
   return (
     await chrome.waitForTarget((item) => item.url() === `${prefix}popup.html`, { timeout })
   ).asPage();
 }
 
 async function dropPurchaseReply(origin) {
-  const client = await target.createCDPSession();
+  const worker = await chrome.waitForTarget(
+    (item) => item.type() === "service_worker" && item.url() === `${prefix}worker.js`,
+    { timeout },
+  );
+  const client = await worker.createCDPSession();
   await client.send("Fetch.enable", { patterns: [{ urlPattern: `${origin}/book-props/v1` }] });
   const dropped = Promise.withResolvers();
   let purchaseId;
@@ -207,6 +200,7 @@ try {
     const updated = await obsidian.settings();
     await selectFolder(updated, "Other Books");
     await pairWith(updated, options);
+    process.stdout.write("Paired the updated extension with the other book folder\n");
     page = await productPage();
     const wrongFolder = await popup(page);
     await wrongFolder.locator("#reconcile").click();
@@ -217,14 +211,16 @@ try {
     );
     assert.deepEqual(await notes(other), []);
     assert.equal(await readFile(file, "utf8"), saved);
+    await wrongFolder.screenshot({ path: join(evidence, "02-other-folder-rejected.png") });
     await wrongFolder.close();
     await updated.bringToFront();
     await selectFolder(updated, "Books");
     await pairWith(updated, options);
+    process.stdout.write("Paired the updated extension with the original book folder\n");
     const recheck = await popup(page);
     await recheck.locator("#reconcile").click();
     await text(recheck, "#status", "Vaultへの保存を確認しました。");
-    await recheck.screenshot({ path: join(evidence, "02-upgraded-purchase-confirmed.png") });
+    await recheck.screenshot({ path: join(evidence, "03-upgraded-purchase-confirmed.png") });
     await recheck.close();
     assert.equal(await readFile(file, "utf8"), saved);
     process.stdout.write(

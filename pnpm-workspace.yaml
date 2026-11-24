@@ -3,7 +3,7 @@ packages:
   - libs/book-products
   - runtimes/*
   - tests/arch/medium/typescript
-  - tests/e2e/large/windows-release
+  - tests/e2e/large/desktop-release
 
 allowBuilds:
   classic-level: false

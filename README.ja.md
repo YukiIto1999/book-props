@@ -9,11 +9,11 @@
 
 [GitHub の最新 Release](https://github.com/YukiIto1999/book-props/releases/latest) の Assets から `book-props-v<版>.zip` を取得する。
 ZIP には Chrome 拡張と Obsidian プラグインが入っている。
-[Windows での導入手順](docs/installation.md)に従って、展開し、両方を読み込んで接続する。
+[導入手順](docs/installation.md)に従って、展開し、両方を読み込んで接続する。証明書の登録、追加の実行ファイル、GitHub CLI は不要。
 配布物の手元での検証は任意。
 Chrome Web Store と Obsidian Community Plugins では配布しない。
 
-Chromeとの連携は、同じ端末のデスクトップ版ObsidianとChromeで動く。専用サーバー、データベース、同期サービスは不要。Chrome連携に使う秘密鍵の保管はWindowsとLinuxに対応する。スマートフォンでは同期済みMarkdownを読めるが、専用プラグインとChrome拡張は動かない。
+Chrome との連携は、同じ Windows または Linux 端末のデスクトップ版 Obsidian と Chrome で動く。専用サーバー、データベース、同期サービスは不要。スマートフォンでは同期済み Markdown を読めるが、専用プラグインと Chrome 拡張は動かない。
 
 ## 開発
 

@@ -122,13 +122,15 @@ export class Catalog {
     return decision.kind === "invalidIsbn" ? { invalid: decision.input } : { values };
   }
 
-  async reconcile(operation: Operation): Promise<Result> {
+  async reconcile(operation: Operation, signal?: AbortSignal): Promise<Result> {
     const { purchase } = operation;
-    if (operation.action !== "purchase" || !purchase || !validKey(purchase))
+    if (this.halted(signal) || operation.action !== "purchase" || !purchase || !validKey(purchase))
       return { kind: "unknown" };
     try {
-      const entries = await this.entries();
-      return replayOf(entries, purchase, await inputHash(operation)) ?? { kind: "unknown" };
+      const { value: entries } = await readCatalog(this.files, signal);
+      const hash = await inputHash(operation);
+      if (this.halted(signal)) return { kind: "unknown" };
+      return replayOf(entries, purchase, hash) ?? { kind: "unknown" };
     } catch {
       return { kind: "unknown" };
     }
@@ -209,6 +211,7 @@ export class Catalog {
       return await this.commitWrite(step, progress);
     } catch (error: unknown) {
       if (progress.started) return { kind: "unknown" };
+      if (this.halted(signal)) return { kind: "notSaved" };
       return readFailure(error) ?? { kind: error instanceof Refuse ? error.kind : "unavailable" };
     }
   }
@@ -237,7 +240,8 @@ export class Catalog {
     hash: string | undefined,
   ): Promise<Result | Write> {
     const { action, purchase } = operation;
-    const entries = await this.entries();
+    const { value: entries } = await readCatalog(this.files, signal);
+    if (this.halted(signal)) return { kind: "notSaved" };
     const replay = replayOf(entries, purchase, hash);
     if (replay) return replay;
     if (hasPendingMove(entries)) return { kind: "unavailable" };
@@ -260,7 +264,7 @@ export class Catalog {
     expected,
   }: Pick<Write, "operation" | "signal" | "hash" | "expected">): Promise<Result | Write> {
     if (this.halted(signal)) return { kind: "notSaved" };
-    const { value: fresh, versions } = await readCatalog(this.files);
+    const { value: fresh, versions } = await readCatalog(this.files, signal);
     if (hasPendingMove(fresh)) return { kind: "unavailable" };
     const outcome = this.report(operation, fresh);
     const freshReplay = replayOf(fresh, operation.purchase, hash);

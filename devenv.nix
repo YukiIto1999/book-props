@@ -8,19 +8,16 @@
   };
 
   env = {
-    BOOK_PROPS_TEST_DBUS_CONFIG = "${pkgs.dbus}/share/dbus-1/session.conf";
+    BOOK_PROPS_WASM_CLANG = "${pkgs.llvmPackages.clang-unwrapped}/bin/clang";
     NX_DAEMON = "false";
     NX_ISOLATE_PLUGINS = "false";
   };
 
   packages = [
     pkgs.cargo-mutants
-    pkgs.dbus
     pkgs.glib
-    pkgs.gnome-keyring
     pkgs.esbuild
     pkgs.jq
-    pkgs.libsecret
     pkgs.lld
     pkgs.oxfmt
     pkgs.oxlint

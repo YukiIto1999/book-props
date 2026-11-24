@@ -1,5 +1,5 @@
 {
-  "name": "@book-props/windows-acceptance",
+  "name": "@book-props/desktop-acceptance",
   "private": true,
   "type": "module",
   "devDependencies": {

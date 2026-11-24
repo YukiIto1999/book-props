@@ -8,11 +8,11 @@ import { LibraryTools } from "./library-tools.ts";
 import { Registration } from "./registration.ts";
 import { Settings } from "./settings.ts";
 import { Shelf } from "./shelf.ts";
-import { decodeIdentity, dropIdentity, provisionIdentity, type Identity } from "./tls-identity.ts";
+import { createHost, decodeHost } from "./tls-identity.ts";
 import { VaultFiles } from "./vault-files.ts";
 import { startCatalogCore } from "./wasm.ts";
 
-type Configuration = { folder?: string; extensionId?: string; port?: number; identity?: Identity };
+type Configuration = { folder?: string; extensionId?: string; port?: number; host?: string };
 type OpenRequest = Extract<Request, { action: "open" }>;
 
 function savedField(saved: object, key: string): unknown {
@@ -26,12 +26,15 @@ function decodeConfiguration(saved: unknown): Configuration {
   const folder = savedField(saved, "folder");
   const extensionId = savedField(saved, "extensionId");
   const port = savedField(saved, "port");
-  const identity = decodeIdentity(savedField(saved, "identity"));
+  const legacy = savedField(saved, "identity");
+  const legacyHost =
+    typeof legacy === "object" && legacy !== null ? savedField(legacy, "name") : undefined;
+  const host = decodeHost(savedField(saved, "host")) ?? decodeHost(legacyHost);
   return {
     ...(typeof folder === "string" ? { folder } : {}),
     ...(typeof extensionId === "string" ? { extensionId } : {}),
     ...(typeof port === "number" ? { port } : {}),
-    ...(identity ? { identity } : {}),
+    ...(host ? { host } : {}),
   };
 }
 
@@ -50,16 +53,8 @@ export default class BookProps extends Plugin {
   get extensionId(): string {
     return this.config.extensionId ?? "";
   }
-  get hasIdentity(): boolean {
-    return Boolean(this.config.identity);
-  }
-  get address(): { url: string; fingerprint: string; certificate: string } | undefined {
-    if (!this.connection || !this.config.identity) return undefined;
-    return {
-      url: this.connection.address,
-      fingerprint: this.connection.fingerprint,
-      certificate: this.config.identity.certificate,
-    };
+  get acceptingConnections(): boolean {
+    return this.connection !== undefined;
   }
 
   private readonly fileVersion = (file: TAbstractFile): number => {
@@ -80,7 +75,8 @@ export default class BookProps extends Plugin {
       this.folder = folder;
       this.catalog = new Catalog(new VaultFiles(this.app, folder, this.fileVersion), this.evaluate);
     }
-    this.addSettingTab(new Settings(this.app, this));
+    const settings = new Settings(this.app, this);
+    this.addSettingTab(settings);
     this.addCommand({
       id: "register-book",
       name: "書籍を登録・編集",
@@ -109,7 +105,13 @@ export default class BookProps extends Plugin {
     this.addTemplateCommands();
     this.app.workspace.onLayoutReady(() => {
       if (this.unloaded) return;
-      void this.restoreConnection();
+      if (!this.changing) {
+        this.changing = true;
+        void this.restoreConnection().finally(() => {
+          this.changing = false;
+          settings.refreshPairing();
+        });
+      }
       void this.catalog?.maintain();
       this.registerInterval(
         window.setInterval(
@@ -171,6 +173,7 @@ export default class BookProps extends Plugin {
       await this.catalog?.stop();
       const next = { ...this.config, folder };
       await this.saveData(next);
+      if (this.unloaded) return false;
       this.config = next;
       this.folder = folder;
       this.catalog = new Catalog(new VaultFiles(this.app, folder, this.fileVersion), this.evaluate);
@@ -188,29 +191,25 @@ export default class BookProps extends Plugin {
     this.connection?.revoke();
   }
 
-  async configureConnection(extensionId: string, renew: boolean): Promise<boolean> {
+  async configureConnection(extensionId: string): Promise<boolean> {
     extensionId = extensionId.trim();
     if (this.changing || !this.catalog || !extensionIdPattern.test(extensionId)) return false;
     this.changing = true;
-    const old = this.config.identity;
-    let identity: Identity | undefined;
+    const host = this.config.host ?? createHost();
     let started: Connection | undefined;
     try {
-      identity = renew || !old ? await provisionIdentity(old) : old;
       this.connection?.stop();
       this.connection = undefined;
-      started = await this.listen(identity, extensionId, this.config.port ?? 0);
+      started = await this.listen(host, extensionId, this.config.port ?? 0);
       if (this.unloaded) return false;
-      const next = { ...this.config, extensionId, identity, port: started.listeningPort };
+      const next = { ...this.config, extensionId, host, port: started.listeningPort };
       await this.saveData(next);
+      if (this.unloaded) return false;
       this.config = next;
       this.connection = started;
-      if (old && old !== identity)
-        await dropIdentity(old).catch(() => new Notice("旧鍵をOSの保管から削除できませんでした。"));
       return true;
     } catch {
       started?.stop();
-      if (identity && identity !== old) await dropIdentity(identity).catch(() => undefined);
       await this.restoreConnection();
       return false;
     } finally {
@@ -221,26 +220,27 @@ export default class BookProps extends Plugin {
 
   private async restoreConnection(): Promise<void> {
     const snapshot = this.config;
-    const { identity, extensionId, port } = snapshot;
-    if (!this.catalog || !identity || !extensionId || !port || this.connection || this.unloaded)
-      return;
+    const { host, extensionId, port } = snapshot;
+    if (!this.catalog || !host || !extensionId || !port || this.connection || this.unloaded) return;
     try {
-      const restored = await this.listen(identity, extensionId, port);
+      const restored = await this.listen(host, extensionId, port);
       if (this.unloaded || this.config !== snapshot || this.connection) restored.stop();
       else this.connection = restored;
     } catch {
-      new Notice(
-        "Book Props: 鍵保管または証明書を確認できず、Chromeからの受付を開始しませんでした。",
-      );
+      new Notice("Book Props: Chrome からの受付を開始できませんでした。");
     }
   }
 
   /** Starts accepting the extension for the current book folder, named by its scope. */
-  private async listen(identity: Identity, extensionId: string, port: number): Promise<Connection> {
+  private async listen(host: string, extensionId: string, port: number): Promise<Connection> {
     const { adapter } = this.app.vault;
-    if (!(adapter instanceof FileSystemAdapter)) throw new Error("Vaultの場所を確定できません。");
+    const catalog = this.catalog;
+    if (!catalog || !(adapter instanceof FileSystemAdapter))
+      throw new Error("Vaultの場所を確定できません。");
     const scope = scopeOf(adapter.getBasePath(), this.folder);
-    return Connection.start(identity, extensionId, port, scope, this.dispatch);
+    return Connection.start(host, extensionId, port, scope, (request, signal) =>
+      this.dispatch(catalog, request, signal),
+    );
   }
 
   /** Brings Obsidian forward on the book page the extension asked for, or on registration when no book matches. */
@@ -289,16 +289,16 @@ export default class BookProps extends Plugin {
     return { kind: "opened" };
   }
 
-  private readonly dispatch = async (
+  private async dispatch(
+    catalog: Catalog,
     request: Exclude<Request, { action: "pair" | "status" }>,
     signal: AbortSignal,
-  ): Promise<Response> => {
-    const catalog = this.catalog;
-    if (!catalog || signal.aborted) return { kind: "unavailable" };
+  ): Promise<Response> {
+    if (this.catalog !== catalog || signal.aborted) return { kind: "unavailable" };
     if (request.action === "open") return this.openFromExtension(request, catalog, signal);
     const execution =
       request.action === "reconcile"
-        ? await catalog.reconcile({ ...request, action: "purchase" })
+        ? await catalog.reconcile({ ...request, action: "purchase" }, signal)
         : await catalog.execute(request, signal);
     if (execution.kind === "observed")
       return {
@@ -307,7 +307,7 @@ export default class BookProps extends Plugin {
         wanted: execution.outcome.wanted,
       };
     return { kind: execution.kind };
-  };
+  }
 
   onunload(): void {
     this.unloaded = true;

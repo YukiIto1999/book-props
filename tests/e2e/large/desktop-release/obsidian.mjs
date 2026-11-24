@@ -145,18 +145,19 @@ export async function selectFolder(page, name) {
   const row = await input.evaluateHandle((element) => element.closest(".setting-item"));
   const button = await row.asElement()?.$("button");
   assert(button, "Missing book folder Apply button");
-  await button.click();
-  const notice = await page.waitForFunction(
-    () =>
-      [...document.querySelectorAll(".notice")].find((item) =>
-        ["書籍フォルダを設定しました。", "Vault内の既存フォルダを指定してください。"].includes(
-          item.textContent,
-        ),
+  await button.press("Enter");
+  const applied = await page.waitForFunction(
+    (previous) =>
+      !previous.isConnected ||
+      [...document.querySelectorAll(".notice")].find(
+        (item) => item.textContent === "Vault内の既存フォルダを指定してください。",
       )?.textContent,
     { timeout },
+    input,
   );
-  assert.equal(await notice.jsonValue(), "書籍フォルダを設定しました。", `Book folder: ${name}`);
-  await notice.dispose();
-  await page.waitForFunction((el) => !el.isConnected, { timeout }, input);
+  assert.equal(await applied.jsonValue(), true, `Book folder was not applied: ${name}`);
+  await applied.dispose();
+  await button.dispose();
+  await row.dispose();
   await input.dispose();
 }

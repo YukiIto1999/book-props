@@ -128,16 +128,35 @@ export async function field(page, name, value) {
   );
   const input = handle.asElement();
   assert(input, `Missing setting: ${name}`);
-  await input.click({ clickCount: 3 });
+  await input.click();
+  await page.keyboard.down("Control");
+  try {
+    await page.keyboard.press("a");
+  } finally {
+    await page.keyboard.up("Control");
+  }
   await input.type(value);
+  assert.equal(await input.evaluate((element) => element.value), value, `Setting input: ${name}`);
   return input;
 }
 
 export async function selectFolder(page, name) {
   const input = await field(page, "書籍フォルダ", name);
-  await page
-    .locator("button::-p-text(適用)")
-    .filter((el) => el.textContent === "適用")
-    .click();
+  const row = await input.evaluateHandle((element) => element.closest(".setting-item"));
+  const button = await row.asElement()?.$("button");
+  assert(button, "Missing book folder Apply button");
+  await button.click();
+  const notice = await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll(".notice")].find((item) =>
+        ["書籍フォルダを設定しました。", "Vault内の既存フォルダを指定してください。"].includes(
+          item.textContent,
+        ),
+      )?.textContent,
+    { timeout },
+  );
+  assert.equal(await notice.jsonValue(), "書籍フォルダを設定しました。", `Book folder: ${name}`);
+  await notice.dispose();
   await page.waitForFunction((el) => !el.isConnected, { timeout }, input);
+  await input.dispose();
 }

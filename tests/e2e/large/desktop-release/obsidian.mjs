@@ -128,7 +128,14 @@ export async function field(page, name, value) {
   );
   const input = handle.asElement();
   assert(input, `Missing setting: ${name}`);
-  await input.asLocator().fill(value);
+  await page.bringToFront();
+  await input.focus();
+  const selected = await input.evaluate((element) => {
+    element.select();
+    return element.selectionStart === 0 && element.selectionEnd === element.value.length;
+  });
+  assert(selected, `Could not select the existing text: ${name}`);
+  await page.keyboard.type(value);
   assert.equal(await input.evaluate((element) => element.value), value, `Setting input: ${name}`);
   return input;
 }

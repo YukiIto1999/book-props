@@ -198,6 +198,7 @@ try {
     await reloadExtension(chrome, extensionId, version);
     await openOptions();
     const updated = await obsidian.settings();
+    await updated.locator("button::-p-text(ペアリング情報を発行)").setTimeout(timeout).wait();
     await selectFolder(updated, "Other Books");
     await pairWith(updated, options);
     process.stdout.write("Paired the updated extension with the other book folder\n");

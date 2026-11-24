@@ -128,14 +128,7 @@ export async function field(page, name, value) {
   );
   const input = handle.asElement();
   assert(input, `Missing setting: ${name}`);
-  await input.click();
-  await page.keyboard.down("Control");
-  try {
-    await page.keyboard.press("a");
-  } finally {
-    await page.keyboard.up("Control");
-  }
-  await input.type(value);
+  await input.asLocator().fill(value);
   assert.equal(await input.evaluate((element) => element.value), value, `Setting input: ${name}`);
   return input;
 }

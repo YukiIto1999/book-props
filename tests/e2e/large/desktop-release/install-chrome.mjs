@@ -114,26 +114,16 @@ export async function installChrome(chrome, extensionDirectory) {
   return id;
 }
 
-/** Presses the card's Reload button, as the update procedure does, and returns the new worker. */
-export async function reloadExtension(chrome, extensionId) {
+/** Waits for the new version that Chrome displays after the card's Reload action. */
+export async function reloadExtension(chrome, extensionId, version) {
   const page = await extensionsPage(chrome);
-  const worker = await runningWorker(chrome, page, extensionId);
-  const gone = destroyed(chrome, worker.target);
-  const next = nextWorker(chrome, extensionId, worker.target);
   await page
     .locator(`${card(extensionId)} >>> #dev-reload-button`)
     .setTimeout(timeout)
     .click();
-  await until(
-    "Previous Book Props worker stopped",
-    () => worker.state().runningStatus === "stopped",
-  );
-  await gone;
-  const target = await next;
+  await text(page, `${card(extensionId)} >>> #version`, version);
   await text(page, `${card(extensionId)} >>> #extension-id`, `ID: ${extensionId}`);
-  await worker.cdp.detach();
   await page.close();
-  return target;
 }
 
 /** Stops only Book Props' worker, reloads the options page and returns the woken worker. */

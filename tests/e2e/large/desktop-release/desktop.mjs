@@ -120,13 +120,16 @@ async function dropPurchaseReply(origin) {
       .send("Fetch.continueRequest", { requestId, interceptResponse: purchase })
       .catch(dropped.reject);
   });
-  return () =>
-    Promise.race([
-      dropped.promise,
-      delay(timeout, undefined, { ref: false }).then(() => {
-        throw Error("The old purchase response was not intercepted");
-      }),
-    ]);
+  return {
+    receipt: () =>
+      Promise.race([
+        dropped.promise,
+        delay(timeout, undefined, { ref: false }).then(() => {
+          throw Error("The old purchase response was not intercepted");
+        }),
+      ]),
+    detach: () => client.detach(),
+  };
 }
 
 await mkdir(evidence, { recursive: true });
@@ -169,7 +172,7 @@ try {
   await text(purchase, "#status", "欲しいに登録済み");
   const lost = legacyOrigin ? await dropPurchaseReply(legacyOrigin) : undefined;
   await purchase.locator("#purchase").click();
-  const originalPurchaseId = lost ? await lost() : undefined;
+  const originalPurchaseId = await lost?.receipt();
   if (!migration) await text(purchase, "#status", "Vaultに保存しました。");
   const saved = await until("one purchased edition on disk", async () => {
     const markdown = await readFile(file, "utf8");
@@ -191,12 +194,15 @@ try {
     );
     await purchase.screenshot({ path: join(evidence, "01-legacy-purchase-unconfirmed.png") });
     await purchase.close();
+    await lost.detach();
+    await options.close();
+    options = undefined;
     await obsidian.stop();
     await cp(join(bundle, "chrome"), extensionDirectory, { recursive: true });
     await cp(join(bundle, "obsidian"), plugin, { recursive: true });
     await obsidian.start();
-    await reloadExtension(chrome, extensionId);
-    options = undefined;
+    const { version } = JSON.parse(await readFile(join(bundle, "chrome", "manifest.json"), "utf8"));
+    await reloadExtension(chrome, extensionId, version);
     await openOptions();
     const updated = await obsidian.settings();
     await selectFolder(updated, "Other Books");

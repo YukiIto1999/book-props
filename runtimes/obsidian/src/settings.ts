@@ -7,22 +7,20 @@ import {
   type TextComponent,
 } from "obsidian";
 import type { Credentials } from "./connection.ts";
-import { downloadText } from "./management-ui.ts";
-
-type Address = { url: string; fingerprint: string; certificate: string };
 
 type SettingsHost = Plugin & {
   readonly folder: string;
-  readonly address: Address | undefined;
+  readonly acceptingConnections: boolean;
   readonly extensionId: string;
-  readonly hasIdentity: boolean;
   selectFolder(folder: string): Promise<boolean>;
-  configureConnection(extension: string, renew: boolean): Promise<boolean>;
+  configureConnection(extension: string): Promise<boolean>;
   issueCode(): Credentials | undefined;
   revoke(): void;
 };
 
 export class Settings extends PluginSettingTab {
+  private pairingSection?: HTMLElement;
+
   constructor(
     app: App,
     private readonly books: SettingsHost,
@@ -58,12 +56,6 @@ export class Settings extends PluginSettingTab {
 
   private renderConnection(): void {
     this.containerEl.createEl("h3", { text: "Chromeとの接続" });
-    const current = this.books.address;
-    this.containerEl.createEl("p", {
-      text: current
-        ? `${current.url} · SHA-256 ${current.fingerprint}`
-        : "待ち受けていません。書籍フォルダとOSの保護された鍵保管が必要です。",
-    });
     let extension!: TextComponent;
     new Setting(this.containerEl)
       .setName("Chrome拡張ID")
@@ -74,58 +66,62 @@ export class Settings extends PluginSettingTab {
       .addButton((button) =>
         button.setButtonText("接続設定を適用").onClick(async () => {
           button.setDisabled(true);
-          const applied = await this.books.configureConnection(extension.getValue(), false);
+          const applied = await this.books.configureConnection(extension.getValue());
           new Notice(
             applied
               ? "接続設定を適用しました。"
-              : "拡張ID、書籍フォルダ、OSの鍵保管を確認してください。",
+              : "拡張 ID と書籍フォルダを確認してください。接続ポートが使用中の場合も開始できません。",
           );
           this.display();
         }),
       );
-    if (this.books.hasIdentity)
-      new Setting(this.containerEl).setName("証明書の更新").addButton((button) =>
-        button.setButtonText("証明書を更新").onClick(async () => {
-          button.setDisabled(true);
-          const renewed = await this.books.configureConnection(this.books.extensionId, true);
-          new Notice(
-            renewed
-              ? "証明書を更新しました。Chromeで旧証明書を削除し、新しい証明書を登録してください。"
-              : "証明書を更新できませんでした。",
-          );
-          this.display();
-        }),
-      );
-    if (current) this.renderPairing(current);
+    this.pairingSection = this.containerEl.createDiv();
+    this.refreshPairing();
   }
 
-  private renderPairing(current: Address): void {
-    new Setting(this.containerEl)
-      .setName("末端証明書")
-      .setDesc("指紋を確認して、Chromeでこの証明書だけを信頼登録してください。")
-      .addButton((button) =>
-        button
-          .setButtonText("証明書を保存")
-          .onClick(() =>
-            downloadText(
-              this.containerEl,
-              "book-props-localhost.crt",
-              "application/x-pem-file",
-              current.certificate,
-            ),
-          ),
+  hide(): void {
+    this.pairingSection = undefined;
+  }
+
+  refreshPairing(): void {
+    const section = this.pairingSection;
+    if (!section) return;
+    section.empty();
+    if (this.books.acceptingConnections) this.renderPairing(section);
+    else section.createEl("p", { text: "接続を受け付けていません。" });
+  }
+
+  private renderPairing(section: HTMLElement): void {
+    const area = section.createDiv();
+    const pairing = area.createEl("textarea", {
+      attr: { "aria-label": "ペアリング情報", readonly: "", rows: "3", spellcheck: "false" },
+    });
+    area.hidden = true;
+    const clear = () => {
+      pairing.value = "";
+      area.hidden = true;
+    };
+    area.createEl("button", { text: "ペアリング情報をコピー" }).addEventListener("click", () => {
+      void navigator.clipboard.writeText(pairing.value).then(
+        () => new Notice("ペアリング情報をコピーしました。"),
+        () => {
+          pairing.focus();
+          pairing.select();
+          new Notice("ペアリング情報を選択しました。そのままコピーしてください。");
+        },
       );
-    const pairing = this.containerEl.createEl("p", { attr: { role: "status" } });
-    new Setting(this.containerEl)
+    });
+    new Setting(section)
       .setName("ペアリング")
       .addButton((button) =>
-        button.setButtonText("コードを発行").onClick(() => {
+        button.setButtonText("ペアリング情報を発行").onClick(() => {
           const code = this.books.issueCode();
           if (!code) return;
-          pairing.setText(code.value);
+          pairing.value = code.value;
+          area.hidden = false;
           window.setTimeout(
             () => {
-              if (pairing.textContent === code.value) pairing.empty();
+              if (pairing.value === code.value) clear();
             },
             Math.max(0, code.expiresAt - Date.now()),
           );
@@ -134,7 +130,7 @@ export class Settings extends PluginSettingTab {
       .addButton((button) =>
         button.setButtonText("ペアリングを解除").onClick(() => {
           this.books.revoke();
-          pairing.empty();
+          clear();
         }),
       );
   }

@@ -1,6 +1,10 @@
 import { z } from "zod";
 
 export const endpoint = "/book-props/v1";
+export const maxRequestBytes = 24 * 1024;
+export const maxReplyBytes = 2048;
+const code = z.string().regex(/^[A-Za-z0-9_-]{22}$/);
+const token = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
 const text = z.string().min(1).max(512);
 const pageText = z.string().min(1).max(2048);
 const id = z.uuid();
@@ -29,7 +33,7 @@ const purchaseKey = z.strictObject({
 /** An opaque name for the paired Vault and book folder; equal values mean the same folder. */
 export const vaultScope = z.string().regex(/^[0-9a-f]{64}$/);
 export const request = z.discriminatedUnion("action", [
-  z.strictObject({ action: z.literal("pair"), code: z.string().regex(/^[A-Za-z0-9_-]{22}$/) }),
+  z.strictObject({ action: z.literal("pair"), code }),
   z.strictObject({ action: z.literal("status") }),
   z.strictObject({ action: z.literal("inspect"), product }),
   z.strictObject({ action: z.literal("purchase"), product, purchase: purchaseKey }),
@@ -42,10 +46,13 @@ export const request = z.discriminatedUnion("action", [
     intent: z.enum(["purchase", "setWish", "clearWish"]).optional(),
   }),
 ]);
+export const requestEnvelope = z
+  .strictObject({ request, token: token.optional() })
+  .refine((value) => (value.request.action === "pair") === (value.token === undefined));
 export const response = z.discriminatedUnion("kind", [
   z.strictObject({
     kind: z.literal("paired"),
-    token: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+    token,
     expiresAt: z.number().int(),
     scope: vaultScope,
   }),
@@ -73,6 +80,30 @@ export function connectionOrigin(value: string): string | undefined {
   try {
     const origin = new URL(value).origin;
     return origin === value ? origin : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const pairingFields = z.strictObject({
+  origin: z.string().refine((value) => connectionOrigin(value) !== undefined),
+  anchor: z.base64().min(4).max(1400),
+  code,
+});
+const pairing = pairingFields.extend({ version: z.literal(1) });
+export type Pairing = z.output<typeof pairingFields>;
+
+export function encodePairing(value: Pairing): string {
+  return JSON.stringify({ version: 1, ...value });
+}
+
+export function decodePairing(text: string): Pairing | undefined {
+  if (text.length > maxReplyBytes) return undefined;
+  try {
+    const decoded = pairing.safeParse(JSON.parse(text));
+    if (!decoded.success) return undefined;
+    const { origin, anchor, code } = decoded.data;
+    return { origin, anchor, code };
   } catch {
     return undefined;
   }

@@ -10,12 +10,12 @@
     },
     "lint": {
       "command": "cargo clippy --locked --workspace --all-targets -- -D warnings && oxlint --type-aware --deny-warnings && knip",
-      "dependsOn": ["prepare-wasm"],
+      "dependsOn": ["prepare-wasm", "prepare-browser-wasm"],
       "cache": true
     },
     "types": {
       "command": "tsc -p runtimes/obsidian && tsc -p runtimes/book-extension && tsc -p tsconfig.root.json",
-      "dependsOn": ["prepare-wasm"],
+      "dependsOn": ["prepare-wasm", "prepare-browser-wasm"],
       "cache": true
     },
     "architecture": {
@@ -30,6 +30,11 @@
     "prepare-wasm": {
       "command": "pnpm --filter @book-props/obsidian run prepare-wasm",
       "outputs": ["{workspaceRoot}/runtimes/obsidian/dist/wasm"],
+      "cache": true
+    },
+    "prepare-browser-wasm": {
+      "command": "bash runtimes/book-extension/build.sh wasm",
+      "outputs": ["{workspaceRoot}/runtimes/book-extension/dist/tls"],
       "cache": true
     },
     "test-obsidian": {
@@ -64,6 +69,7 @@
     },
     "build-chrome": {
       "command": "pnpm --filter @book-props/vault-extension build",
+      "dependsOn": ["prepare-browser-wasm"],
       "outputs": ["{workspaceRoot}/runtimes/book-extension/dist"],
       "cache": true
     },
@@ -88,7 +94,7 @@
       "dependsOn": ["verify", "build", "test-connection"]
     },
     "test-connection": {
-      "command": "bash tools/scripts/test-connection.sh",
+      "command": "node --experimental-transform-types --disable-warning=ExperimentalWarning --test runtimes/obsidian/tests/medium/connection.test.mjs",
       "dependsOn": ["prepare-wasm"],
       "cache": true
     },

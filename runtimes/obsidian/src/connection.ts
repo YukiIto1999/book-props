@@ -1,17 +1,20 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { createServer, type Server } from "node:https";
-import type { IncomingMessage, ServerResponse } from "node:http";
+import { createServer, type IncomingMessage, type Server } from "node:http";
+import type { Duplex } from "node:stream";
+import { TLSSocket, type SecureContext } from "node:tls";
 import {
+  encodePairing,
   endpoint,
-  request,
+  maxRequestBytes,
+  requestEnvelope,
   vaultScope,
   type Request,
   type Response,
 } from "@book-props/vault-contract";
-import { openIdentity, type Identity } from "./tls-identity.ts";
+import { WebSocketServer, createWebSocketStream, type WebSocket } from "ws";
+import { startTls } from "./tls-identity.ts";
 
 export const extensionIdPattern = /^[a-p]{32}$/;
-const maxBody = 24 * 1024;
 const sessionMs = 4 * 60 * 60 * 1000;
 const codeMs = 5 * 60 * 1000;
 export type Credentials = { value: string; expiresAt: number };
@@ -36,28 +39,10 @@ function matches(secret: Credentials | undefined, supplied: string | undefined):
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-function send(res: ServerResponse, status: number, reply: Response): void {
-  if (res.destroyed || res.writableEnded) return;
-  res.writeHead(status, {
-    "Content-Type": "application/json; charset=utf-8",
-    "X-Content-Type-Options": "nosniff",
-  });
-  res.end(JSON.stringify(reply));
-}
-
-async function decode(req: IncomingMessage): Promise<Request | undefined> {
-  const chunks: Buffer[] = [];
-  let size = 0;
-  for await (const chunk of req) {
-    if (!Buffer.isBuffer(chunk)) return undefined;
-    size += chunk.length;
-    if (size > maxBody) return undefined;
-    chunks.push(chunk);
-  }
+function decode(body: Buffer) {
   try {
-    const body = new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks, size));
-    const parsed = request.safeParse(JSON.parse(body));
-    return parsed.success ? parsed.data : undefined;
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(body);
+    return requestEnvelope.safeParse(JSON.parse(text));
   } catch {
     return undefined;
   }
@@ -66,36 +51,33 @@ async function decode(req: IncomingMessage): Promise<Request | undefined> {
 export class Connection {
   private code?: Credentials;
   private session?: Credentials;
-  private accepting = true;
+  private sessionLifetime = new AbortController();
   private readonly listener: Server;
+  private readonly sockets = new WebSocketServer({
+    noServer: true,
+    maxPayload: 64 * 1024,
+    perMessageDeflate: false,
+  });
   private port = 0;
 
   private constructor(
-    private readonly identity: Identity,
-    private readonly origin: string,
+    private readonly host: string,
+    private readonly extensionOrigin: string,
     private readonly scope: string,
-    readonly fingerprint: string,
-    tls: { key: Buffer; cert: string },
+    private readonly anchor: string,
+    private readonly context: SecureContext,
     private readonly dispatch: (input: Authorized, signal: AbortSignal) => Promise<Response>,
   ) {
-    this.listener = createServer(
-      {
-        ...tls,
-        minVersion: "TLSv1.3",
-        maxHeaderSize: 4096,
-        requestTimeout: 12_000,
-        headersTimeout: 4_000,
-        keepAliveTimeout: 1_000,
-      },
-      (req, res) => {
-        void this.receive(req, res).catch(() => send(res, 500, { kind: "unavailable" }));
-      },
-    );
+    this.listener = createServer({ maxHeaderSize: 4096 }, (_request, response) => {
+      response.writeHead(404, { Connection: "close" }).end();
+    });
     this.listener.maxConnections = 32;
+    this.listener.setTimeout(15_000, (socket) => socket.destroy());
+    this.listener.on("upgrade", this.upgrade);
   }
 
   static async start(
-    identity: Identity,
+    host: string,
     extensionId: string,
     port: number,
     scope: string,
@@ -109,20 +91,15 @@ export class Connection {
       !vaultScope.safeParse(scope).success
     )
       throw new Error("接続設定が不正です。");
-    const tls = await openIdentity(identity);
-    let connection: Connection;
-    try {
-      connection = new Connection(
-        identity,
-        `chrome-extension://${extensionId}`,
-        scope,
-        tls.fingerprint,
-        { key: tls.key, cert: tls.cert },
-        dispatch,
-      );
-    } finally {
-      tls.key.fill(0);
-    }
+    const { anchor, context } = await startTls(host);
+    const connection = new Connection(
+      host,
+      `chrome-extension://${extensionId}`,
+      scope,
+      anchor,
+      context,
+      dispatch,
+    );
     const ready = Promise.withResolvers<void>();
     connection.listener.once("error", ready.reject);
     connection.listener.listen(port, "127.0.0.1", ready.resolve);
@@ -139,95 +116,114 @@ export class Connection {
   }
 
   get address(): string {
-    return `https://${this.identity.name}:${this.port}`;
+    return `https://${this.host}:${this.port}`;
   }
   get listeningPort(): number {
     return this.port;
   }
 
   issueCode(): Credentials {
-    this.code = { value: randomBytes(16).toString("base64url"), expiresAt: Date.now() + codeMs };
-    return this.code;
+    const code = randomBytes(16).toString("base64url");
+    const expiresAt = Date.now() + codeMs;
+    this.code = { value: code, expiresAt };
+    return { value: encodePairing({ origin: this.address, anchor: this.anchor, code }), expiresAt };
   }
 
   revoke(): void {
     this.code = this.session = undefined;
+    this.resetSessionLifetime();
+    for (const socket of this.sockets.clients) socket.terminate();
   }
 
   stop(): void {
-    this.accepting = false;
     this.revoke();
     this.listener.close();
-    this.listener.closeIdleConnections();
+    this.listener.closeAllConnections();
+    this.sockets.close();
   }
 
-  private async receive(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    res.setHeader("Cache-Control", "no-store");
-    res.setHeader("Pragma", "no-cache");
-    res.setHeader("Vary", "Origin");
+  private resetSessionLifetime(): void {
+    this.sessionLifetime.abort();
+    this.sessionLifetime = new AbortController();
+  }
+
+  private readonly upgrade = (req: IncomingMessage, socket: Duplex, head: Buffer): void => {
     if (
-      !this.accepting ||
       req.socket.remoteAddress !== "127.0.0.1" ||
-      req.headers.host !== `${this.identity.name}:${this.port}` ||
-      req.headers.origin !== this.origin
+      req.headers.host !== `${this.host}:${this.port}` ||
+      req.headers.origin !== this.extensionOrigin ||
+      req.url !== endpoint ||
+      this.sockets.clients.size >= 16
     ) {
-      send(res, 403, { kind: "unauthorized" });
+      socket.destroy();
       return;
     }
-    res.setHeader("Access-Control-Allow-Origin", this.origin);
-    if (req.url !== endpoint) {
-      send(res, 404, { kind: "invalidRequest" });
-      return;
-    }
-    if (req.method === "OPTIONS" && req.headers["access-control-request-method"] === "POST") {
-      res.writeHead(204, {
-        "Access-Control-Allow-Methods": "POST",
-        "Access-Control-Allow-Headers": "content-type, authorization",
-      });
-      res.end();
-      return;
-    }
-    const length = req.headers["content-length"];
-    if (
-      req.method !== "POST" ||
-      req.headers["content-type"] !== "application/json" ||
-      !length ||
-      !/^[1-9][0-9]*$/.test(length) ||
-      Number(length) > maxBody
-    ) {
-      send(res, 400, { kind: "invalidRequest" });
-      return;
-    }
-    const input = await decode(req);
-    if (!input) {
-      send(res, 400, { kind: "invalidRequest" });
-      return;
-    }
-    if (input.action === "pair") {
-      if (!matches(this.code, input.code)) {
-        send(res, 401, { kind: "unauthorized" });
+    this.sockets.handleUpgrade(req, socket, head, (client) => this.open(client));
+  };
+
+  private open(client: WebSocket): void {
+    const transport = createWebSocketStream(client);
+    const tls = new TLSSocket(transport, { isServer: true, secureContext: this.context });
+    const disconnected = new AbortController();
+    const timer = setTimeout(() => client.terminate(), 12_000);
+    client.once("close", () => {
+      clearTimeout(timer);
+      disconnected.abort();
+      tls.destroy();
+    });
+    tls.on("error", () => client.terminate());
+    transport.on("error", () => client.terminate());
+    let length = 0;
+    const chunks: Buffer[] = [];
+    const onData = (chunk: Buffer) => {
+      length += chunk.length;
+      const end = chunk.indexOf(10);
+      if (length > maxRequestBytes || (end >= 0 && end !== chunk.length - 1)) {
+        client.terminate();
         return;
       }
+      if (end < 0) {
+        chunks.push(chunk);
+        return;
+      }
+      tls.removeListener("data", onData);
+      tls.resume();
+      let body = chunk;
+      if (chunks.length) {
+        chunks.push(chunk);
+        body = Buffer.concat(chunks, length);
+      }
+      chunks.length = 0;
+      const reply = (outcome: Response) => {
+        if (!tls.destroyed) tls.write(`${JSON.stringify(outcome)}\n`);
+      };
+      void this.receive(body, disconnected.signal).then(reply, () =>
+        reply({ kind: "unavailable" }),
+      );
+    };
+    tls.on("data", onData);
+  }
+
+  private async receive(body: Buffer, disconnected: AbortSignal): Promise<Response> {
+    const parsed = decode(body);
+    if (!parsed?.success) return { kind: "invalidRequest" };
+    const { request, token } = parsed.data;
+    if (request.action === "pair") {
+      if (!matches(this.code, request.code)) return { kind: "unauthorized" };
       this.code = undefined;
+      this.resetSessionLifetime();
       const expiresAt = Date.now() + sessionMs;
-      const token = randomBytes(32).toString("base64url");
-      this.session = { value: token, expiresAt };
-      send(res, 200, { kind: "paired", token, expiresAt, scope: this.scope });
-      return;
+      const value = randomBytes(32).toString("base64url");
+      this.session = { value, expiresAt };
+      return { kind: "paired", token: value, expiresAt, scope: this.scope };
     }
-    const token = req.headers.authorization?.match(/^Bearer ([A-Za-z0-9_-]{43})$/)?.[1];
-    if (!matches(this.session, token)) {
-      send(res, 401, { kind: "unauthorized" });
-      return;
-    }
-    // Lets the extension confirm its session without reaching the Vault.
-    if (input.action === "status") {
-      send(res, 200, { kind: "connected" });
-      return;
-    }
-    const disconnected = new AbortController();
-    res.once("close", () => disconnected.abort());
-    const deadline = AbortSignal.any([disconnected.signal, AbortSignal.timeout(10_000)]);
-    send(res, 200, await this.dispatch(input, deadline));
+    if (!matches(this.session, token)) return { kind: "unauthorized" };
+    if (request.action === "status") return { kind: "connected" };
+    const deadline = AbortSignal.any([
+      disconnected,
+      this.sessionLifetime.signal,
+      AbortSignal.timeout(10_000),
+    ]);
+    return this.dispatch(request, deadline);
   }
 }

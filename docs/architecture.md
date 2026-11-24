@@ -24,7 +24,10 @@ flowchart LR
 
 **Obsidian側**では、プラグインがChromeからの受付とObsidian内の操作を同じ業務処理へつなぎ、ObsidianのVault APIで読み書きする。`core` は本・版・所有・購入希望の判断と、業務操作として何を読み、いつ確定するかを担う。Obsidian API、Markdownの構造、通信の型を `core` に渡さない。
 
-**公開契約**は、Chromeの要求と応答を定め、`core` の内部表現から独立させる。両側が同じ検証スキーマを使い、型はそのスキーマから導く。業務操作の独立した入出力への変換は境界で行う。HTTPSの受付はプラグインの稼働に従い、独立したサーバーとして配備・運用しない。
+**公開契約**は、Chrome の要求と応答を定め、`core` の内部表現から独立させる。
+両側が同じ検証スキーマを使い、型はそのスキーマから導く。
+業務操作の独立した入出力への変換は境界で行う。
+ループバックの待ち受けはプラグインの稼働に従い、独立したサーバーとして配備・運用しない。
 
 本・版・所有・購入希望は、購入時に同時に変更するため、一つの蔵書コンテキストで扱う。本棚と読書記録は同じ本を使う。ブラウザとObsidianの数だけ業務コンテキストや正本を作らない。
 
@@ -83,7 +86,7 @@ Linux x64のObsidian 1.15.1とChromium 154で、`main.js` と `manifest.json` �
 | 保存直後に応答を切断し、購入希望を付け直して同じ要求を再送 | 拡張は最初に「結果不明」、再送では「確定済み」と表示した。再送による書き込みはなく、付け直した購入希望が残った。 |
 | 資格情報なし、書籍範囲外の指定、Obsidian停止後の照合 | それぞれ「未認証」「範囲外」「確認不能」と表示した。書籍範囲外のノートは変化しなかった。 |
 
-この実験はLinuxでのWasm組み込みの成立を示す。製品の接続・認証方式、実サイトの商品取得、他OSでの組み込み、公式掲載の審査結果を確定するものではない。Windowsを含む手動導入・更新の試験は、[接続と証明書の実測](#接続と証明書の実測)に分けて示す。
+この実験は Linux における Obsidian への Wasm 組み込みを示す。Chrome との方式を選んだ根拠は[接続方式の選定](#接続方式の選定)、製品の受け入れは [Release ワークフロー](#標準にない採用と逸脱)を参照。
 
 掲載されれば、対応する端末のObsidian内で検索・インストール・更新確認ができ、配布ファイルを手で置く必要がなくなる。[更新は自動ではない](https://help.obsidian.md/community-plugins#update-plugins)。[Obsidian Syncでのプラグイン同期](https://help.obsidian.md/sync/settings#selective-syncing)は掲載とは別の機能で、インストール済み・有効なプラグインの同期を端末ごとに設定する。
 
@@ -172,13 +175,11 @@ Obsidian 1.15.1で追加確認したところ、未保存の文字列はエデ�
 
 拡張に公開する業務操作は、商品の照合、購入の登録、購入希望の追加・解除、購入結果の再確認、記録または登録画面をObsidianで開く操作に限る。照合には所有の判定と購入希望を別に返す。所持の記録・取消、本棚、版の移動、JSON入出力、アーカイブと復元はObsidian側に置く。
 
-Obsidianのプラグインは端末のループバックだけでHTTPS（TLS 1.3）を受け付ける。ペアリングで選んだ接続先以外への送信やリダイレクトは許さない。[ホスト権限](https://developer.chrome.com/docs/extensions/develop/concepts/network-requests#extension-origin)や `Origin` は入口を狭めるために使い、相手の認証には使わない。[標準の暗号化経路](https://github.com/YukiIto1999/architecture-standard/blob/main/concerns/security/standard-cryptography.md#標準の暗号に任せる)に従い、証明書を検証できないときは業務入力も資格情報も送らず、平文HTTPに切り替えない。
+Obsidian は IPv4 ループバックにだけ待ち受けを開く。Chrome 拡張は割り当て済みの固有の `.localhost` 名とポートにだけ WebSocket を開く。外側の WebSocket は TLS のバイナリを運ぶだけで、承認コード、資格情報、業務データは TLS 1.3 の中でやり取りする。待ち受けは接続元アドレス、`Host`、拡張の `Origin`、経路を確認する。これらを相手の認証とは扱わず、[標準の暗号化経路](https://github.com/YukiIto1999/architecture-standard/blob/main/concerns/security/standard-cryptography.md#標準の暗号に任せる)に従い、暗号化前の業務入力や資格情報は送らない。平文や旧版の HTTPS に切り替えない。
 
-製品では、他のローカルサービスと共用しない固有の `.localhost` 名をインストール単位で割り当て、その名前だけを含むサーバー証明書を使う。[ループバックの名前解決](https://www.rfc-editor.org/rfc/rfc6761.html#section-6.3)と通常のTLSの名前検証を使い、初回設定では利用者がObsidianに表示された指紋を確認して末端証明書を信頼登録する。汎用のルートCAの追加、警告の無視、秘密鍵の平文保存は行わない。秘密鍵はOSの保護された保管に置き、利用できなければ受付を開始しない。
+Obsidian で対象 Vault と書籍フォルダを選び、拡張 ID を設定する。利用者は、その Vault から発行したペアリング情報だけを拡張の専用画面へ渡す。ペアリング情報には接続先、専用の公開信頼アンカー、5 分間有効で一回だけ使えるコードが入る。Chrome の拡張内の rustls は、渡されたアンカーとホスト名で証明書を検証してからコードを送る。Obsidian はコードを確認して、その Vault・書籍フォルダ・許可操作に束ねたセッションを発行する。
 
-LinuxはSecret Service（`secret-tool`）、Windowsは利用者単位のDPAPIで秘密鍵を保管する。保管を利用できないOSではChromeとの接続を開始しない。Obsidianの `app.secretStorage` は[Linuxの試験で平文保存を観測した](#接続と証明書の実測)ため、鍵保管には使わない。
-
-ObsidianでVaultと書籍フォルダを選び、専用のペアリング画面に表示した短命・一回限りのコードを、利用者が拡張側の専用画面へ渡す。TLS確立後にだけコードを交換し、プラグインはそのVault・書籍フォルダ・許可操作に束ねた短命のセッションを発行する。コードとセッション資格情報はURLに入れず、ログ、Vault、同期設定には残さない。発行応答には `Cache-Control: no-store` と `Pragma: no-cache` を付ける。
+鍵と証明書は待ち受けごとに生成する。CA の秘密鍵は署名に使った後は保持せず、サーバーの秘密鍵は Obsidian の TLS コンテキスト内だけで使用する。Chrome や OS の証明書ストア、OS の鍵保管、追加の中継実行ファイルには依存しない。URL やログ、Vault の設定にはコードや秘密鍵を残さない。貼り付け元を利用者が確認するため、利用者が選ぶクリップボードや Chrome・Obsidian 自体が改変されている場合までは保護しない。
 
 自動照合や通常の登録でObsidianを前面に切り替えず、明示的に開く操作と区別する。
 接続できない場合は確認不能とし、未所有や登録成功に置き換えない。
@@ -193,22 +194,15 @@ Chromeの設定画面を開くと、資格情報の有効性をObsidianに問い
 保留には要求を送った接続先と書籍範囲の識別子を残す。
 識別子にはVaultの絶対パスと書籍フォルダのSHA-256を使い、パス自体は拡張へ渡さない。
 接続先または識別子が異なる場合や、保留に識別子がない場合は、再確認の要求を送らない。
+v0.1.0 からの更新では、旧設定のホスト名・ポートと、Chrome の保留記録にある接続先・書籍範囲を引き継ぐ。接続先の比較に使う識別子は旧版と同じ文字列表現を保つが、通信は新方式だけを使う。旧セッションは引き継がず、新しいペアリング後にだけ同じ範囲を再照会する。
 保留を手で解除しても購入の結果は確定せず、再登録する前にObsidianの記録を確認するよう案内する。
 拡張は、購入、結果の再確認、保留記録の破棄を同時に実行しない。再確認中に別の画面から操作しても、照会中の保留記録や次の購入の記録を変更しない。
 
-### 接続と証明書の実測
+### 接続方式の選定
 
-使い捨てのブラウザプロファイルとVaultを使い、実際のManifest V3拡張から、Obsidianの試験プラグインが同じOS上のループバックで待ち受ける固有の `.localhost` 名に接続した。証明書のSHA-256指紋を照合し、末端証明書だけを信頼登録した。通常のプロファイルやOSの信頼ストアは変更していない。
+v0.1.0 の HTTPS は使用する Chrome プロファイルへの証明書登録を必要とし、鍵保管が使えない環境では接続を開始できなかった。Native Messaging は [Windows の実 Chrome・Obsidian](https://github.com/YukiIto1999/book-props/actions/runs/45303968237/job/138143972686) で二つの Vault の分離と中継の更新が成立したが、OS ごとの実行ファイルと登録手順が残る。
 
-| 観測項目 | WSL2上のLinux（Obsidian 1.15.1・Chromium 154） | Windows 11 25H2（Obsidian・Chrome 157） |
-| --- | --- | --- |
-| 初回導入と手動更新 | [ChromiumのNSS信頼ストア](https://raw.githubusercontent.com/chromium/chromium/main/docs/linux/cert_management.md#add-a-certificate)に `certutil` で登録した。初回は起動中のChromiumでペアリングできず、再起動後にTLS 1.3で接続した。更新では新証明書を登録し、旧証明書を削除してChromiumを再起動し、再ペアリングで接続を回復した。 | `chrome://certificate-manager` の「Installed by you」に登録した。初回も更新時もChromeを再起動せず、ペアリング後にTLS 1.3で接続した。 |
-| 証明書の拒否 | 未信頼の初回・更新後の証明書、および信頼済みでも接続先名が違う証明書では、HTTP要求がプラグインに届かなかった。 | 同じ条件に加え、Chromeから削除した旧証明書を再び提示した場合も、HTTP要求がプラグインに届かなかった。 |
-| 秘密鍵の保管と失敗時の挙動 | 試験用のGNOME Keyring（Secret Service）から `secret-tool` で鍵を取得した。キーストアを停止すると待ち受けを開始しなかった。通常のWSLセッションではSecret Serviceが起動しておらず、自動起動できるサービスにも登録されていなかった。 | [DPAPIのユーザー単位の暗号化](https://learn.microsoft.com/en-us/dotnet/api/system.security.cryptography.protecteddata)で鍵を保存した。Obsidianの再起動後に復元でき、Windows標準のPowerShellをプラグインから呼び出して復元した場合も接続できた。暗号化データを破損させると待ち受けを開始しなかった。 |
-
-両環境で、一度使ったペアリングコードは拒否された。Obsidianの再起動後は旧セッションを拒否し、ブラウザの再起動後は旧資格情報が送られなかった。Linuxでは、キーストアがない状態で `app.secretStorage` に保存した試験文字列が、Obsidianの `Local Storage/leveldb` に平文で残った。実際の秘密鍵はこのAPIに保存していない。
-
-この表は試験用のプラグインと拡張を使った結果である。新成果物での確認は[実装と検証の入口](#新構成の実装と検証の入口)に分けて記す。
+WebSocket の内側で TLS を使う試験では、[Windows](https://github.com/YukiIto1999/book-props/actions/runs/45303968237/job/138143972686) と [Linux](https://github.com/YukiIto1999/book-props/actions/runs/45308569337/job/138158959091) の実 Chrome と Obsidian で、証明書を登録せずに二つの Vault の異なる記録を取得し、別 Vault と未承認・使用済みのコードを拒否した。Windows では再起動後の旧アンカーと旧コードの拒否、新しい情報での再接続も観測した。Linux の試験では再起動後に試験画面を開けず、この部分は製品の受け入れで確認する。この方式に切り替え、中継や旧 HTTPS は併設しない。
 
 ## 書誌取得と対応サイト
 
@@ -228,7 +222,9 @@ ISBNと書名の検索には[国立国会図書館サーチのOpenSearch](https:
 ブラウザ側の初期対象はデスクトップChromeであり、接続先Obsidianで利用できる記録を照合する。
 スマホでの本ページや読書記録の利用には既存のVault同期を使う設計とし、書籍機能に独自の同期は持たせない。
 未同期の端末にだけある変更まで確認したとは扱わず、モバイルの実動確認もデスクトップの成功から推定しない。
-プラグインはNode.jsでHTTPSを待ち受けるため、Wasmで業務処理を同梱しても[Obsidianのプラグイン規約](https://docs.obsidian.md/community-directory/submission-requirements-for-plugins)上はデスクトップ専用になる。スマホでは同期済みのMarkdownをObsidian標準の機能で読んだり編集したりできるが、このプラグインの本棚や登録・編集画面、拡張からの要求受付は動かない。スマホで専用機能を使うことと、デスクトップ向け成果物を公式配布することは別の判断である。
+プラグインは Node.js でループバック接続を待ち受けるため、Wasm で業務処理を同梱しても[Obsidian のプラグイン規約](https://docs.obsidian.md/community-directory/submission-requirements-for-plugins)上はデスクトップ専用になる。
+スマホでは同期済みの Markdown を Obsidian 標準の機能で読んだり編集したりできるが、このプラグインの本棚や登録・編集画面、拡張からの要求受付は動かない。
+スマホで専用機能を使うことと、デスクトップ向け成果物を公式配布することは別の判断である。
 
 アーカイブは本ページを移動・削除せず、取り下げた本または版に印を付ける。復元はその印を外す。[要件](requirements.md#入出力と削除)に従い、経過日数による削除処理は持たない。
 
@@ -246,7 +242,7 @@ Rustのlintは認知的複雑さが15を超える関数を拒否する。
 
 Rustの蔵書判断は [`core/vault`](../core/vault) に置く。Obsidianは [`runtimes/obsidian`](../runtimes/obsidian) から `main.js` と `manifest.json` を、Chromeは [`runtimes/book-extension`](../runtimes/book-extension) からManifest V3拡張を組み立てる。接続の要求・応答は [`contracts/book-vault/wire.ts`](../contracts/book-vault/wire.ts) の検証付き契約に従う。
 
-Windowsでの手動導入、証明書の登録・更新、再ペアリング、切り戻しは[導入・運用手順](installation.md)を参照する。以下は実アプリで観測した結果を示す。
+現行の手動導入、再ペアリング、切り戻しは[導入と運用](installation.md)を参照する。以下は実アプリで観測した結果を示す。
 
 Linuxの一時Vaultで、Obsidianの画面から初版の所持、購入希望、本文を入力し、第2版の購入後に同じ一ファイルへ二つの版と本文が残り、購入希望が外れることを確認した。Chromium 154では、Obsidian 1.15.1から発行した未信頼の証明書でペアリングできず、末端証明書を一時プロファイルのNSSに登録してChromeを再起動するとペアリングできた。未認証の照合は `401`、認証済みでも任意の `path` を加えた要求は `400`、認証済みのISBN照合は `200` だった。旧構成の起動や、通常のVault・Chromeプロファイルへの導入はしていない。
 
@@ -269,6 +265,11 @@ Amazonの同じ改訂新版で「別版を所持／欲しいに登録済み」�
 未信頼の新証明書では照合とペアリングが失敗した。
 Chromeで旧証明書を削除して新しい末端証明書を登録すると、Chromeを再起動せず再ペアリングでき、同じ商品を「この版を所持」と確認できた。
 Windowsではこの一商品で確認し、他の書店と端末間同期は試していない。
+上記の Windows・Linux の実測は v0.1.0 の HTTPS 接続を使った記録である。版・所有・保存の業務検証として残し、現行の接続や導入の手順には使わない。
+
+v0.2.0 の公開前試験では、同じ配布 ZIP を [Windows](https://github.com/YukiIto1999/book-props/actions/runs/45330038416/job/138229690599) と [Linux](https://github.com/YukiIto1999/book-props/actions/runs/45330038416/job/138229690727) に展開した。
+Chrome 157.0.8103.79 と Obsidian 1.15.1 で、プラグインの有効化、ペアリング情報のコピーと貼り付け、再起動後の再接続、二つの Vault の分離、同じ本ページへの購入希望と所有の記録を確認した。
+Chrome のフォルダ選択には、OS のダイアログではなく Chrome の開発者向け API を使った。
 
 Obsidianの画面で、国立国会図書館サーチのISBN検索と書名検索、BOOKOFFの商品URLからの書誌選択、本棚の購入希望・ISBN・数値範囲による絞り込み、項目の表示切り替え、版のアーカイブ・復元と移動、JSON出力と空の書籍フォルダへの取り込みを確認した。独自項目の値 `0` の保存・削除と、既存の本文を残した感想テンプレートの挿入も確認した。JSONには購入結果の再確認記録を持ち込まない。
 
@@ -308,7 +309,7 @@ GitHub Releases は新版を配布するが、展開済みの Chrome 拡張と O
 
 [CI](../.github/workflows/ci.yml)はブランチの変更と PR に対してルートの `verify` を実行する。
 [Release ワークフロー](../.github/workflows/release.yml)は両コンポーネントをビルドし、一つの ZIP を作る。
-ZIP の SPDX SBOM を OSV-Scanner で検査し、Windows で同じ SHA-256 の ZIP を使ってペアリングと Vault 保存を確認する。
+ZIP の SPDX SBOM を OSV-Scanner で検査し、Windows・Linux が同じ SHA-256 の ZIP で新規導入、再接続と Vault 保存を確認する。Windows では v0.1.0 の未確定な購入を保持したまま更新し、元の書籍フォルダだけで再照会できることも確認する。
 手動起動は受け入れまでで止まり、証明を発行しない。
 版タグからの起動では、同じ走行で受け入れた ZIP と SBOM を対象に GitHub Actions が署名付きビルド証明を発行する。
 証明と添付ファイルのハッシュの照合が通った場合だけ公開し、Immutable Releases が公開版と添付ファイルを証明する。
@@ -318,4 +319,4 @@ ZIP の SPDX SBOM を OSV-Scanner で検査し、Windows で同じ SHA-256 の Z
 公開ログへの記録を許容できない配布先を追加する場合、または GitHub の証明で公開工程と配布 ZIP を照合できなくなった場合は見直す。
 運用手順は [CONTRIBUTING](../CONTRIBUTING.md#配布版の準備) に置く。
 
-ChromeとObsidianの接続は、両方が同じTypeScriptの検証スキーマを読み込む。HTTPの型を別言語へ生成する工程は設けない。TypeScript以外の利用主体を追加し、同じスキーマを直接使えなくなった場合は、公開契約の供給方法を見直す。
+Chrome と Obsidian は TLS 内の書籍操作に同じ TypeScript の検証スキーマを使う。TLS の Wasm アダプターはバイト列だけを扱い、操作や書籍の型を持たない。TypeScript 以外の利用主体を追加し、同じスキーマを直接使えなくなった場合は、公開契約の供給方法を見直す。

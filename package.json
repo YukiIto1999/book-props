@@ -1,6 +1,6 @@
 {
   "name": "book-props",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,7 +8,7 @@
     "package:release": "python3 tools/scripts/package-release.py",
     "verify": "nx run book-props:verify --parallel=1",
     "verify:push": "nx run book-props:verify-push --parallel=1",
-    "verify:release:windows": "node tests/e2e/large/windows-release/windows.mjs",
+    "verify:release:desktop": "node tests/e2e/large/desktop-release/desktop.mjs",
     "verify:full": "nx run book-props:verify-full",
     "mutation:full": "nx run book-props:mutation-full",
     "mutation:in-diff": "nx run book-props:mutation-in-diff"

@@ -1,7 +1,10 @@
 import { product, type Product } from "@book-props/vault-contract";
 import { siteOf } from "@book-props/book-products";
 import { messageField, type PageState } from "./messages.ts";
-import {
+import { VaultClient, unavailable, type BookChange } from "./vault-client.ts";
+import { exchange } from "./vault-transport.ts";
+
+const {
   changeBook,
   connectionStatus,
   disconnect,
@@ -10,9 +13,7 @@ import {
   pair,
   reconcilePending,
   send,
-  unavailable,
-  type BookChange,
-} from "./vault-client.ts";
+} = new VaultClient(exchange);
 
 type PageAnswer = { product?: Product; url?: string };
 const checkMenuId = "book-props-check";
@@ -65,7 +66,7 @@ async function popupRequest(kind: string): Promise<unknown> {
 
 async function optionsRequest(kind: string, message: unknown): Promise<unknown> {
   if (kind === "status") return connectionStatus();
-  if (kind === "pair") return pair(messageField(message, "origin"), messageField(message, "code"));
+  if (kind === "pair") return pair(messageField(message, "pairing"));
   if (kind === "disconnect") return disconnect();
   return unavailable;
 }

@@ -18,7 +18,7 @@ const dependencies = new Map([
     obsidian,
     {
       packages: [contract, extractors],
-      externals: ["yaml", "@peculiar/x509", "reflect-metadata"],
+      externals: ["yaml", "@peculiar/x509", "reflect-metadata", "ws"],
     },
   ],
   [extension, { packages: [contract, extractors], externals: [] }],
@@ -65,6 +65,18 @@ function moduleSpecifiers(file) {
   });
 }
 
+function verifyBuiltin(area, source, specifier, message) {
+  assert.equal(area, obsidian, message);
+  const restricted = [
+    ["/src/local-move-copies.ts", /^node:(?:fs\/promises|os|path)$/],
+    ["/src/connection.ts", /^node:(?:http|stream|tls)$/],
+    ["/src/tls-identity.ts", /^node:tls$/],
+  ];
+  if (restricted.some(([caller, allowed]) => source.endsWith(caller) && allowed.test(specifier)))
+    return;
+  assert.match(specifier, /^node:(?:crypto|https)$/, message);
+}
+
 function verifyImport({ area, policy, source, specifier, workspaceEntries }) {
   const message = `${source}: ${specifier}`;
   if (
@@ -73,17 +85,15 @@ function verifyImport({ area, policy, source, specifier, workspaceEntries }) {
     /^\.\.\/dist\/wasm\/book_props_vault(?:\.js|_bg\.wasm)$/.test(specifier)
   )
     return;
-  if (area === obsidian && specifier === "obsidian") return;
-  if (isBuiltin(specifier)) {
-    assert.equal(area, obsidian, message);
-    if (
-      source.endsWith("/src/local-move-copies.ts") &&
-      /^node:(?:fs\/promises|os|path)$/.test(specifier)
-    )
-      return;
-    assert.match(specifier, /^node:(?:child_process|crypto|http|https)$/, message);
+  if (
+    area === extension &&
+    source.endsWith("/src/vault-transport.ts") &&
+    specifier === "../dist/tls/vault_tls.js"
+  )
     return;
-  }
+  if (area === obsidian && specifier === "obsidian") return;
+  if (isBuiltin(specifier)) return verifyBuiltin(area, source, specifier, message);
+  if (specifier === "ws") assert.ok(source.endsWith("/src/connection.ts"), message);
   if (policy.externals.includes(specifier)) return;
   if (workspaceEntries.has(specifier)) {
     assert.ok(policy.packages.includes(workspaceEntries.get(specifier)), message);

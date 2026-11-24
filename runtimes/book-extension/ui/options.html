@@ -8,23 +8,20 @@
     <main>
       <h1>Book Props – 接続設定</h1>
       <p>
-        Obsidianの設定で書籍フォルダと拡張IDを指定し、表示された指紋を確認して末端証明書を信頼登録してください。
+        Obsidian の Book Props 設定で書籍フォルダとこの拡張の ID
+        を指定し、発行したペアリング情報をここに貼り付けてください。
       </p>
       <p>この拡張のID: <code id="extension-id"></code></p>
       <form>
-        <label
-          >接続先 <input id="origin" type="url" placeholder="https://bp-….localhost:12345" required
-        /></label>
-        <label
-          >一回限りのコード
-          <input
-            id="code"
-            type="password"
-            autocomplete="off"
-            minlength="22"
-            maxlength="22"
-            required
-        /></label>
+        <label for="pairing">ペアリング情報</label>
+        <textarea
+          id="pairing"
+          autocomplete="off"
+          spellcheck="false"
+          maxlength="2048"
+          rows="3"
+          required
+        ></textarea>
         <div class="controls">
           <button type="submit">ペアリング</button
           ><button id="disconnect" type="button">このChromeの接続を解除</button>

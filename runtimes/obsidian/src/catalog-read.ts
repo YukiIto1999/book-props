@@ -30,12 +30,15 @@ export function readFailure(error: unknown): Extract<Result, { kind: "unreadable
 export async function readEntries(
   files: Pick<BookFiles, "read">,
   paths: Iterable<string>,
+  signal?: AbortSignal,
 ): Promise<StoredBook[]> {
   const sorted = [...paths].sort();
   const ids = new Set<string>();
   const books: StoredBook[] = [];
   for (const path of sorted) {
+    signal?.throwIfAborted();
     const book = readEntry(path, await files.read(path));
+    signal?.throwIfAborted();
     if (!book) continue;
     if (ids.has(book.id)) throw new Refuse("unavailable");
     ids.add(book.id);
@@ -75,6 +78,6 @@ export async function readStable<T>(
   }
 }
 
-export function readCatalog(files: Pick<BookFiles, "versions" | "read">) {
-  return readStable(files, (versions) => readEntries(files, versions.keys()));
+export function readCatalog(files: Pick<BookFiles, "versions" | "read">, signal?: AbortSignal) {
+  return readStable(files, (versions) => readEntries(files, versions.keys(), signal));
 }

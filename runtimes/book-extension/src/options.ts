@@ -1,11 +1,9 @@
-import { connectionOrigin } from "@book-props/vault-contract";
 import { sites } from "@book-props/book-products";
 import { decodeConnectionStatus, decodeResponse } from "./messages.ts";
 import { statusLabel } from "./status.ts";
 
 const id = document.querySelector<HTMLElement>("#extension-id")!;
-const address = document.querySelector<HTMLInputElement>("#origin")!;
-const code = document.querySelector<HTMLInputElement>("#code")!;
+const pairing = document.querySelector<HTMLTextAreaElement>("#pairing")!;
 const form = document.querySelector("form")!;
 const submit = form.querySelector<HTMLButtonElement>("button[type=submit]")!;
 const status = document.querySelector<HTMLElement>("#status")!;
@@ -13,7 +11,7 @@ const list = document.querySelector<HTMLUListElement>("#sites")!;
 const pairingLabel = {
   paired: "ペアリング済みです。",
   unpaired: "ペアリングされていません。",
-  unknown: "接続を確認できません。Obsidianの起動と証明書を確認してください。",
+  unknown: "接続を確認できません。Obsidian の起動を確認し、必要ならペアリングし直してください。",
 } as const;
 // Pairing or disconnecting replaces the opening status check, whose answer would then be stale.
 let changed = false;
@@ -31,7 +29,6 @@ status.textContent = "接続を確認しています…";
 void chrome.runtime.sendMessage({ kind: "status" }).then(
   (reply: unknown) => {
     const current = decodeConnectionStatus(reply);
-    if (current.configured && !address.value) address.value = current.configured;
     if (!changed) status.textContent = pairingLabel[current.state];
   },
   () => {
@@ -42,28 +39,20 @@ void chrome.runtime.sendMessage({ kind: "status" }).then(
 form.addEventListener("submit", (event) => {
   event.preventDefault();
   changed = true;
-  const origin = connectionOrigin(address.value.trim());
-  if (!origin) {
-    status.textContent = "Obsidianに表示された接続先を入力してください。";
-    return;
-  }
-  const { hostname } = new URL(origin);
+  const text = pairing.value;
+  pairing.value = "";
   submit.disabled = true;
+  status.textContent = "ペアリングを確認しています。";
   void (async () => {
     try {
-      if (!(await chrome.permissions.request({ origins: [`https://${hostname}/*`] }))) {
-        status.textContent = "この接続先へのアクセスが許可されていません。";
-        return;
-      }
       const reply = decodeResponse(
-        await chrome.runtime.sendMessage({ kind: "pair", origin, code: code.value }),
+        await chrome.runtime.sendMessage({ kind: "pair", pairing: text }),
         { kind: "unavailable" },
       );
-      code.value = "";
       status.textContent =
         reply.kind === "saved"
           ? "ペアリングしました。"
-          : "ペアリングできません。証明書、Obsidianの起動、一度だけ使えるコードを確認してください。";
+          : "ペアリングできません。Obsidian を開き、新しいペアリング情報を発行してください。";
     } catch {
       status.textContent = "ペアリングできません。";
     } finally {

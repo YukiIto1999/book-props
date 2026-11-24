@@ -1,6 +1,6 @@
 # CONTRIBUTING
 
-この文書はBook Propsを変更・保守する開発者向け。導入する場合は[Windowsでの導入・運用](docs/installation.md)を参照する。
+この文書は Book Props を変更・保守する開発者向け。利用する場合は[導入と運用](docs/installation.md)を参照する。
 
 ## 開発環境
 
@@ -15,7 +15,6 @@ devenv shell -- pnpm verify
 
 - 利用者から見える契約は[要件](docs/requirements.md)、コードの責務と境界は[アーキテクチャ](docs/architecture.md)を確認する。生成物ではなく正本を変更し、振る舞いを変えた場合は同じ変更で要件と検査を更新する。
 - `devenv shell -- pnpm verify` はCIと同じ入口で、整形、lint、型、依存境界、業務と保存のテストを実行する。`devenv shell -- pnpm verify:push` は成果物の生成とTLS実結合を加える。対象と依存は[`project.json`](project.json)を参照する。
-  TLS 実結合では devenv が供給する D-Bus の設定を使い、実行機のセッションや `/etc/dbus-1/session.conf` には依存しない。
 - 画面や保存経路を変えた場合は、合成データの一時Vaultと別のChromeプロファイルを使い、操作後の表示とMarkdownの両方を確かめる。報告には対象のコミット、OSとアプリの版、操作、期待結果と実際の結果を添える。証明書の秘密鍵、ペアリングコード、資格情報、利用者のVaultの内容は添付しない。
 
 ## コミット
@@ -44,21 +43,21 @@ devenv shell -- pnpm verify
 
 ### 公開前に試す
 
-既定ブランチから [Release ワークフロー](.github/workflows/release.yml)を手動実行すると、ZIP の作成、脆弱性検査、Windows での受け入れまで確認できる。
-Windows では同じ ZIP を展開し、一時 Vault と別の Chrome プロファイルで、証明書の登録、ペアリング、購入希望と購入の記録を試す。
+既定ブランチから [Release ワークフロー](.github/workflows/release.yml)を手動実行すると、ZIP の作成、脆弱性検査、Windows・Linux での受け入れまで確認できる。
+両 OS では同じ ZIP を展開し、一時 Vault と新しい Chrome プロファイルで、証明書を登録せずにペアリング、再接続、購入希望と購入の記録を試す。Windows では、公開済みの v0.1.0 で結果不明の購入を作り、同じ場所に更新して、元の書籍フォルダでだけ再照会できることも確認する。
 結果は走行ログとスクリーンショットで確認できる。
 手動実行ではビルドの証明を発行せず、公開もしない。
 
 手元で同じ梱包と検査を行う場合は、依存を導入した対象コミットで次を実行する。
-`v0.1.0` はルートと両方のコンポーネントに共通する版に置き換える。
+`v0.2.0` はルートと両方のコンポーネントに共通する版に置き換える。
 どのコマンドも失敗したら、次へ進まない。
 
 ```sh
 devenv shell -- pnpm verify:push
 mkdir -p work
-devenv --profile release shell -- pnpm package:release v0.1.0 work/package-v0.1.0
-(cd work/package-v0.1.0 && sha256sum --check SHA256SUMS)
-devenv --profile release shell -- python3 tools/scripts/audit-release.py work/package-v0.1.0/book-props-v0.1.0.zip
+devenv --profile release shell -- pnpm package:release v0.2.0 work/package-v0.2.0
+(cd work/package-v0.2.0 && sha256sum --check SHA256SUMS)
+devenv --profile release shell -- python3 tools/scripts/audit-release.py work/package-v0.2.0/book-props-v0.2.0.zip
 ```
 
 Rust を更新する場合は、[`devenv.nix`](devenv.nix) の `rustRevision` と、同じリビジョンの Rust リポジトリ直下にある `COPYRIGHT`・`LICENSE-APACHE`・`LICENSE-MIT` の写しを一緒に更新する。
@@ -71,19 +70,19 @@ Vault、接続設定、資格情報は配布物に入れない。
 ### 版タグと公開
 
 公開するコードが既定ブランチに入っていることを確認し、そのコミットに注釈付きタグを付ける。
-`v0.1.0` はルートと両方のコンポーネントに共通する版に置き換える。
+`v0.2.0` はルートと両方のコンポーネントに共通する版に置き換える。
 タグを push する直前に Immutable Releases が有効であることを確認する。
 Actions の標準トークンでは公開前にこの設定を照会できないため、リポジトリの管理権限がある GitHub CLI で確認する。
 
 ```bash
 read -r -p 'Source のコミット SHA: ' source
 test "$(gh api repos/YukiIto1999/book-props/immutable-releases --jq .enabled)" = true &&
-  git tag -a v0.1.0 "$source" -m 'Book Props v0.1.0' &&
-  git push origin refs/tags/v0.1.0
+  git tag -a v0.2.0 "$source" -m 'Book Props v0.2.0' &&
+  git push origin refs/tags/v0.2.0
 ```
 
 タグで起動した走行が ZIP を一度だけ梱包し、SBOM と既知の脆弱性を検査する。
-同じ ZIP が Windows の受け入れに合格した場合だけ、GitHub Actions が ZIP と SPDX SBOM の署名付きビルド証明を発行し、成果物のハッシュ、ワークフロー、版タグ、コミットを照合する。
+同じ ZIP が Windows と Linux の受け入れに合格した場合だけ、GitHub Actions が ZIP と SPDX SBOM の署名付きビルド証明を発行し、成果物のハッシュ、ワークフロー、版タグ、コミットを照合する。
 検証済みの ZIP、SBOM、`SHA256SUMS` を下書きへ添付し、GitHub 側のハッシュが一致した場合だけ Release を公開する。
 公開済みのタグや成果物は上書きしない。
 一時的な障害なら、公開済みでないことを確認し、元のタグの走行で **Re-run all jobs** を選ぶ。

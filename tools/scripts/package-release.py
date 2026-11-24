@@ -12,10 +12,11 @@ from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 ROOT = Path(__file__).resolve().parents[2]
 BUNDLES = {
-    "obsidian": ("obsidian", ("main.js", "manifest.json")),
+    "obsidian": ("obsidian", ("main.js", "manifest.json"), "wasm"),
     "chrome": (
         "book-extension",
-        ("content.js", "manifest.json", "options.html", "options.js", "popup.html", "popup.js", "ui.css", "worker.js"),
+        ("content.js", "manifest.json", "options.html", "options.js", "popup.html", "popup.js", "ui.css", "vault_tls_bg.wasm", "worker.js"),
+        "tls",
     ),
 }
 NOTICE_NAME = re.compile(r"^(licen[cs]e|notice|copying|copyright)([-_.]|$)", re.IGNORECASE)
@@ -48,9 +49,10 @@ def wasm_packages():
     )
     packages = {pkg["id"]: pkg for pkg in report["packages"]}
     nodes = {node["id"]: node for node in report["resolve"]["nodes"]}
-    remaining = [member for member in report["workspace_members"] if packages[member]["name"] == "book-props-vault"]
-    if len(remaining) != 1:
-        raise SystemExit("Expected one workspace crate named book-props-vault")
+    crates = {"book-props-vault", "book-props-browser-tls"}
+    remaining = [member for member in report["workspace_members"] if packages[member]["name"] in crates]
+    if {packages[member]["name"] for member in remaining} != crates:
+        raise SystemExit(f"Missing release Wasm crate: expected {sorted(crates)}")
     seen = set()
     runtime = {}
     while remaining:
@@ -88,25 +90,27 @@ def sysroot_packages():
     libdir = subprocess.check_output(
         ("rustc", "--print", "target-libdir", "--target", "wasm32-unknown-unknown"), text=True,
     ).strip()
-    link_map = (ROOT / "runtimes/obsidian/dist/wasm/link.map").read_text()
-    linked = set(re.findall(re.escape(libdir) + r"/lib(\w+)-[0-9a-f]+\.rlib\(", link_map))
-    expected = {"alloc", "compiler_builtins", "core", "dlmalloc", "panic_abort", "std"}
-    if linked != expected:
-        raise SystemExit(f"Review linked Rust libraries: expected {sorted(expected)}, found {sorted(linked)}")
+    base = {"alloc", "compiler_builtins", "core", "dlmalloc", "panic_abort", "std"}
+    expected = {"obsidian": base, "chrome": base | {"hashbrown"}}
+    for name, (runtime, _, generated) in BUNDLES.items():
+        link_map = (ROOT / "runtimes" / runtime / "dist" / generated / "link.map").read_text()
+        linked = set(re.findall(re.escape(libdir) + r"/lib(\w+)-[0-9a-f]+\.rlib\(", link_map))
+        if linked != expected[name]:
+            raise SystemExit(f"Review linked Rust libraries ({name}): expected {sorted(expected[name])}, found {sorted(linked)}")
     library = Path(os.environ["BOOK_PROPS_RUST_LIBRARY"])
     packages = {}
     entries = {}
     for identity, pkg in lockfile(library / "Cargo.lock").items():
         name, version, source = identity
-        if name == "dlmalloc" and source:
+        if name in {"dlmalloc", "hashbrown"} and source:
             packages[identity] = library / "vendor" / f"{name}-{version}"
         elif name == "compiler_builtins" and not source:
             packages[identity] = library / "compiler-builtins"
         else:
             continue
         entries[identity] = pkg
-    if sorted(name for name, _, _ in packages) != ["compiler_builtins", "dlmalloc"]:
-        raise SystemExit("Expected one compiler_builtins and one dlmalloc in the linked Rust library lockfile")
+    if {name for name, _, _ in packages} != {"compiler_builtins", "dlmalloc", "hashbrown"}:
+        raise SystemExit("Missing release components in the linked Rust library lockfile")
     return packages, entries
 
 
@@ -127,8 +131,10 @@ def notices(npm, rust):
             files = sorted(path for path in directory.iterdir() if path.is_file() and NOTICE_NAME.match(path.name))
             if not files:
                 raise SystemExit(f"Missing third-party license text: {ecosystem}:{identity[0]}@{identity[1]}")
+            if ecosystem == "cargo" and identity[0] == "ring":
+                files.append(directory / "third_party" / "fiat" / "LICENSE")
             for path in files:
-                texts.append(f"{ecosystem}:{identity[0]}@{identity[1]} — {path.name}\n\n{path.read_text().strip()}\n")
+                texts.append(f"{ecosystem}:{identity[0]}@{identity[1]} — {path.relative_to(directory)}\n\n{path.read_text().strip()}\n")
     return "\n".join(texts)
 
 
@@ -146,15 +152,15 @@ def rust_notices():
 def bundle_inputs(version):
     files = {"LICENSE": ROOT / "LICENSE"}
     manifests = [ROOT / "package.json"]
-    for name, (runtime, members) in BUNDLES.items():
+    for name, (runtime, members, generated) in BUNDLES.items():
         source = ROOT / "runtimes" / runtime
         dist = source / "dist"
         if not dist.is_dir():
             raise SystemExit(f"Missing build output: {dist.relative_to(ROOT)}")
         expected = set(members)
         actual = {path.name for path in dist.iterdir()}
-        if name == "obsidian" and (dist / "wasm").is_dir():
-            actual.discard("wasm")
+        if (dist / generated).is_dir():
+            actual.discard(generated)
         if actual != expected:
             raise SystemExit(
                 f"Unexpected contents of {dist.relative_to(ROOT)}:"

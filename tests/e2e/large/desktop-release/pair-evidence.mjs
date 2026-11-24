@@ -37,7 +37,12 @@ export async function pasteNewCode(settings, options) {
   await options.bringToFront();
   await options.locator(pairingField).fill("");
   await options.focus(pairingField);
-  await options.keyboard.press("Control+v");
+  await options.keyboard.down("Control");
+  try {
+    await options.keyboard.press("v");
+  } finally {
+    await options.keyboard.up("Control");
+  }
   await options.waitForFunction(() => document.querySelector("#pairing")?.value, { timeout });
   const code = await options.$eval(pairingField, (input) => input.value);
   assert(code);

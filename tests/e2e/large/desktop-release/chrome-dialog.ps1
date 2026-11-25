@@ -49,7 +49,7 @@ public static class ProbeWindow {
         return name.ToString();
     }
 
-    public static string SubmitFile(IntPtr dialog, string path) {
+    public static string SubmitPath(IntPtr dialog, string path, bool folder) {
         var editors = new List<IntPtr>();
         var buttons = new List<IntPtr>();
         var controls = new List<string>();
@@ -60,7 +60,11 @@ public static class ProbeWindow {
             controls.Add(name + ":" + id);
             if (name == "Button" && id == 1) buttons.Add(window); // IDOK
             if (name != "Edit") return true;
-            for (IntPtr parent = window; parent != IntPtr.Zero && parent != dialog; parent = GetParent(parent)) {
+            if (folder && id == 1152) {
+                editors.Add(window);
+                return true;
+            }
+            for (IntPtr parent = window; !folder && parent != IntPtr.Zero && parent != dialog; parent = GetParent(parent)) {
                 if (GetDlgCtrlID(parent) == 1148 || ClassOf(parent) == "FileNameControlHost") {
                     editors.Add(window);
                     break;
@@ -104,7 +108,7 @@ while ($timer.Elapsed.TotalSeconds -lt 12) {
     foreach ($native in [ProbeWindow]::VisibleWindows()) {
         if ($Operation -in @('certificate', 'folder')) {
             if ($native.ClassName -ne '#32770' -or $native.Owner -ne $ChromeProcess) { continue }
-            $controls = [ProbeWindow]::SubmitFile($native.Handle, $Value)
+            $controls = [ProbeWindow]::SubmitPath($native.Handle, $Value, $Operation -eq 'folder')
             if ($null -ne $controls) {
                 $observedPickers[$native.Handle.ToInt64()] = "pickerProcess=$($native.Process), ownerProcess=$($native.Owner), controls=$controls"
                 continue

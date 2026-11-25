@@ -81,7 +81,7 @@ def chooser():
 
 if operation == "folder":
     window = until("the owned folder chooser", chooser)
-    xdo("windowraise", window, "windowfocus", "--sync", window)
+    xdo("windowactivate", "--sync", window)
     xdo("key", "ctrl+l")
     xdo("type", "--", value)
     xdo("key", "Return")

@@ -60,8 +60,14 @@ pair.addEventListener("click", () => {
           ? "ペアリングしました。初回設定の仕上げに「今後も自動で接続する」で「毎回許可」を選んでください。"
           : "ペアリングできません。Obsidian の起動と接続用フォルダを確認してください。";
       if (reply.kind === "saved") allow.hidden = false;
-    } catch {
-      status.textContent = "フォルダを選択できませんでした。";
+    } catch (error) {
+      const name = error instanceof DOMException ? error.name : undefined;
+      status.textContent =
+        name === "AbortError"
+          ? "接続用フォルダの選択が取り消されました。"
+          : name === "NotAllowedError" || name === "SecurityError"
+            ? "Chrome が接続用フォルダへのアクセスを許可しませんでした。"
+            : "接続用フォルダの読み込みに失敗しました。";
     } finally {
       pair.disabled = false;
     }

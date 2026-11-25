@@ -95,7 +95,11 @@ function stored(slot: Slot): Promise<Enrollment | undefined> {
 
 async function readCard(directory: Directory): Promise<ConnectionCard | undefined> {
   if ((await directory.queryPermission(mode)) !== "granted") return undefined;
-  const handle = await directory.getFileHandle(connectionFile);
+  const handle = await directory.getFileHandle(connectionFile).catch((error: unknown) => {
+    if (error instanceof DOMException && error.name === "NotFoundError") return undefined;
+    throw error;
+  });
+  if (!handle) return undefined;
   const file = await handle.getFile();
   if (file.size <= maxReplyBytes) return decodeConnectionCard(await file.text());
   return undefined;

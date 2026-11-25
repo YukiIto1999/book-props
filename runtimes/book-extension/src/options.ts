@@ -52,6 +52,7 @@ pair.addEventListener("click", () => {
           "Obsidian の Book Props 設定に表示される接続用フォルダを選んでください。";
         return;
       }
+      status.textContent = "Obsidian への接続を確認しています。";
       const reply = decodeResponse(await chrome.runtime.sendMessage({ kind: "pair", grantId }), {
         kind: "unavailable",
       });

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import process from "node:process";
 import { activatePlugin } from "./activate-obsidian.mjs";
 import { restartWorker } from "./install-chrome.mjs";
 import { ObsidianFixture } from "./obsidian.mjs";
@@ -13,6 +14,7 @@ import {
   text,
   unavailable,
 } from "./pair-evidence.mjs";
+import { timeout } from "./wait.mjs";
 
 export async function checkRestart({
   obsidian,

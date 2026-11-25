@@ -7,6 +7,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
+Add-Type -AssemblyName WindowsBase
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
@@ -25,6 +26,19 @@ public static class ProbeWindow {
     [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr window);
     [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr window, uint relation);
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window, out uint process);
+    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll")] private static extern void mouse_event(uint flags, uint x, uint y, uint data, UIntPtr extra);
+
+    public static bool Click(uint process, int x, int y) {
+        if (ProcessOf(GetForegroundWindow()) != process || !SetCursorPos(x, y)) return false;
+        System.Threading.Thread.Sleep(250);
+        if (ProcessOf(GetForegroundWindow()) != process) return false;
+        mouse_event(2, 0, 0, 0, UIntPtr.Zero);
+        System.Threading.Thread.Sleep(100);
+        mouse_event(4, 0, 0, 0, UIntPtr.Zero);
+        return true;
+    }
 
     public static uint ProcessOf(IntPtr window) {
         uint process = 0;
@@ -137,6 +151,13 @@ while ($timer.Elapsed.TotalSeconds -lt 12) {
                     $scope = if ($Operation -like 'folder-*') { 'Book Props ' } else { $Value }
                     if ($texts | Where-Object { $_.Current.Name -and $_.Current.Name.Contains($scope) }) {
                         try {
+                            if ($Operation -like 'folder-*') {
+                                $point = [System.Windows.Point]::new(0, 0)
+                                if (!$allow.TryGetClickablePoint([ref]$point)) { break }
+                                if (![ProbeWindow]::Click($ChromeProcess, [int]$point.X, [int]$point.Y)) { break }
+                                Write-Output 'Clicked Chrome approval control.'
+                                return
+                            }
                             $action = $null
                             if ($allow.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$action)) {
                                 $action.Invoke()

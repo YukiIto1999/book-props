@@ -280,6 +280,7 @@ try {
       popup,
       notes,
       evidence,
+      restartChrome,
     });
   process.stdout.write(
     "The actual popup saved the wish and purchase in one Vault note and reopened with the owned edition\n",

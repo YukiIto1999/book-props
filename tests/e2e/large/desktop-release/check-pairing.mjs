@@ -52,6 +52,7 @@ export async function checkVaultIsolation({
   popup,
   notes,
   evidence,
+  restartChrome,
 }) {
   const vault = join(root, "second-vault");
   const books = join(vault, "Books");
@@ -88,12 +89,22 @@ export async function checkVaultIsolation({
     const firstVault = await popup(page);
     await text(firstVault, "#status", "この版を所持");
     await firstVault.close();
-    await options.locator("#disconnect").click();
+    await options.bringToFront();
+    const disconnect = await options.waitForSelector("#disconnect", { visible: true, timeout });
+    assert(disconnect);
+    try {
+      await disconnect.press("Enter");
+    } finally {
+      await disconnect.dispose();
+    }
     await text(options, "#status", "このChromeの接続を解除しました。Obsidian側でも解除できます。");
-    await options.reload();
-    await text(options, "#status", "ペアリングされていません。");
+    const reopened = await restartChrome();
+    await text(reopened.options, "#status", "ペアリングされていません。");
+    await reopened.options.screenshot({
+      path: join(evidence, "05-disconnected-after-restart.png"),
+    });
     process.stdout.write(
-      "A second Vault showed the same edition as unowned; losing that Vault did not switch to the first\n",
+      "A second Vault showed the edition as unowned, never fell back, and disconnect survived Chrome restart\n",
     );
   } finally {
     await second.close();

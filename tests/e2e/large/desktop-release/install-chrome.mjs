@@ -71,8 +71,7 @@ async function runningWorker(chrome, page, id) {
       .targets()
       .find((item) => item.type() === "service_worker" && item.url() === script(id)) ??
     (await nextWorker(chrome, id));
-  const state = () => versions.get(versionId);
-  return { cdp, versionId, target, state };
+  return { cdp, versionId, target };
 }
 
 /** Installs the unpacked folder through Chrome's UI and verifies its persisted installation. */
@@ -147,13 +146,11 @@ export async function restartWorker(chrome, options, extensionId) {
   const worker = await runningWorker(chrome, options, extensionId);
   const gone = destroyed(chrome, worker.target);
   await worker.cdp.send("ServiceWorker.stopWorker", { versionId: worker.versionId });
-  await until("Book Props worker stopped", () => worker.state().runningStatus === "stopped");
   await gone;
   const next = nextWorker(chrome, extensionId, worker.target);
   await options.bringToFront();
   await options.reload();
   const target = await next;
-  await until("Book Props worker woke", () => worker.state().runningStatus === "running");
   const status = await options
     .locator("#status")
     .setTimeout(timeout)

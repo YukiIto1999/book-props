@@ -113,5 +113,9 @@ else:
     bounds = allow.queryComponent().getExtents(pyatspi.DESKTOP_COORDS)
     if bounds.width <= 0 or bounds.height <= 0:
         raise RuntimeError("Chrome's permission control has no on-screen bounds")
-    xdo("mousemove", str(bounds.x + bounds.width // 2), str(bounds.y + bounds.height // 2), "click", "1")
-    print(f"Clicked Chrome's {labels[operation]} control.")
+    x = str(bounds.x + bounds.width // 2)
+    y = str(bounds.y + bounds.height // 2)
+    xdo("mousemove", x, y, "sleep", "0.25", "mousedown", "1", "sleep", "0.1", "mouseup", "1")
+    print(f"Clicked Chrome's {labels[operation]} control at ({x}, {y}).")
+    until("the approval prompt to close",
+          lambda: True if button(labels[operation], "Book Props") is None else None)

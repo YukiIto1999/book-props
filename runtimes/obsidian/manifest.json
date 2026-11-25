@@ -1,7 +1,7 @@
 {
   "id": "book-props",
   "name": "Book Props",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "minAppVersion": "1.13.0",
   "description": "Track book editions, ownership, and wishes in a Vault.",
   "author": "Book Props",

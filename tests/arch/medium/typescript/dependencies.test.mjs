@@ -69,6 +69,7 @@ function verifyBuiltin(area, source, specifier, message) {
   assert.equal(area, obsidian, message);
   const restricted = [
     ["/src/local-move-copies.ts", /^node:(?:fs\/promises|os|path)$/],
+    ["/src/connection-grant.ts", /^node:(?:child_process|fs\/promises|os|path|util)$/],
     ["/src/connection.ts", /^node:(?:http|stream|tls)$/],
     ["/src/tls-identity.ts", /^node:tls$/],
   ];

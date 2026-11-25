@@ -34,7 +34,7 @@ export function statusLabel(reply: Reply, manual: boolean): string {
     case "needsInput":
       return "本か版を特定できません。Obsidianで対象を確認してください。";
     case "unauthorized":
-      return "Obsidianを起動し、設定からペアリングしてください。";
+      return "Obsidian を開き、拡張の接続設定を確認してください。";
     case "conflict":
       return "競合を検出しました。対象をObsidianで確認してください。";
     case "notSaved":

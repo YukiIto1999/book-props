@@ -85,26 +85,28 @@ export function connectionOrigin(value: string): string | undefined {
   }
 }
 
-const pairingFields = z.strictObject({
+export const connectionFile = "connection.json";
+export const pairingProofFile = "proof.sha256";
+
+export const connectionCard = z.strictObject({
+  version: z.literal(1),
   origin: z.string().refine((value) => connectionOrigin(value) !== undefined),
   anchor: z.base64().min(4).max(1400),
-  code,
+  scope: vaultScope,
+  grantId: id,
 });
-const pairing = pairingFields.extend({ version: z.literal(1) });
-export type Pairing = z.output<typeof pairingFields>;
+export type ConnectionCard = z.output<typeof connectionCard>;
 
-export function encodePairing(value: Pairing): string {
-  return JSON.stringify({ version: 1, ...value });
-}
-
-export function decodePairing(text: string): Pairing | undefined {
+export function decodeConnectionCard(text: string): ConnectionCard | undefined {
   if (text.length > maxReplyBytes) return undefined;
   try {
-    const decoded = pairing.safeParse(JSON.parse(text));
-    if (!decoded.success) return undefined;
-    const { origin, anchor, code } = decoded.data;
-    return { origin, anchor, code };
+    const decoded = connectionCard.safeParse(JSON.parse(text));
+    return decoded.success ? decoded.data : undefined;
   } catch {
     return undefined;
   }
+}
+
+export function pairingChallenge(anchor: string, code: string): string {
+  return `book-props/v1/pair\n${anchor}\n${code}`;
 }

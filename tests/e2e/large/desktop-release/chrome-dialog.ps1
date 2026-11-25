@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory)][int]$ChromeProcess,
-    [Parameter(Mandatory)][ValidateSet('certificate', 'permission')][string]$Operation,
+    [Parameter(Mandatory)][ValidateSet('certificate', 'permission', 'folder', 'folder-permission', 'folder-persist')][string]$Operation,
     [Parameter(Mandatory)][string]$Value
 )
 
@@ -102,20 +102,25 @@ $timer = [Diagnostics.Stopwatch]::StartNew()
 $observedPickers = @{}
 while ($timer.Elapsed.TotalSeconds -lt 12) {
     foreach ($native in [ProbeWindow]::VisibleWindows()) {
-        if ($Operation -eq 'certificate') {
+        if ($Operation -in @('certificate', 'folder')) {
             if ($native.ClassName -ne '#32770' -or $native.Owner -ne $ChromeProcess) { continue }
             $controls = [ProbeWindow]::SubmitFile($native.Handle, $Value)
             if ($null -ne $controls) {
                 $observedPickers[$native.Handle.ToInt64()] = "pickerProcess=$($native.Process), ownerProcess=$($native.Owner), controls=$controls"
                 continue
             }
-            Write-Output 'Submitted Chrome-owned file picker.'
+            Write-Output 'Submitted Chrome-owned picker.'
             return
         }
         if ($native.Process -eq $ChromeProcess) {
+            $accepted = switch ($Operation) {
+                'folder-permission' { 'Allow' }
+                'folder-persist' { 'Allow on every visit' }
+                default { 'Allow'; 'Allow access' }
+            }
             $window = $ui::FromHandle($native.Handle)
             foreach ($allow in $window.FindAll($tree::Descendants, $button)) {
-                if (-not $allow.Current.IsEnabled -or $allow.Current.IsOffscreen -or $allow.Current.Name -notin @('Allow', 'Allow access')) { continue }
+                if (-not $allow.Current.IsEnabled -or $allow.Current.IsOffscreen -or $allow.Current.Name -notin $accepted) { continue }
                 $bubble = $walker.GetParent($allow)
                 for ($hops = 0; $bubble -and $hops -lt 4; $hops++) {
                     $texts = $bubble.FindAll($tree::Descendants, [System.Windows.Automation.Condition]::TrueCondition)

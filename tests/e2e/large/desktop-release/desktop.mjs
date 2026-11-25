@@ -5,7 +5,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import puppeteer from "puppeteer-core";
 import { activatePlugin } from "./activate-obsidian.mjs";
 import { checkRestart, checkVaultIsolation } from "./check-pairing.mjs";
-import { installChrome, reloadExtension } from "./install-chrome.mjs";
+import { installChrome, reloadExtension, waitForInstalledChrome } from "./install-chrome.mjs";
 import { pairLegacy } from "./legacy-pairing.mjs";
 import { ObsidianFixture, selectFolder } from "./obsidian.mjs";
 import { configure, pairWith, text } from "./pair-evidence.mjs";
@@ -48,12 +48,24 @@ async function startChrome() {
     enableExtensions: true,
     userDataDir: join(root, "chrome-profile"),
     defaultViewport: null,
-    args: ["--lang=en-US", "--force-renderer-accessibility"],
+    args: [
+      "--lang=en-US",
+      `--disable-features=${windows ? "Translate" : "Translate,UsePortalFilePicker"}`,
+      "--force-renderer-accessibility",
+    ],
   });
-  extensionId ??= await installChrome(chrome, extensionDirectory);
+  if (extensionId) await waitForInstalledChrome(chrome, extensionId);
+  else extensionId = await installChrome(chrome, extensionDirectory);
   prefix = `chrome-extension://${extensionId}/`;
   await openOptions();
   process.stdout.write(`${await chrome.version()}\n`);
+}
+
+async function restartChrome() {
+  await chrome.close();
+  options = undefined;
+  await startChrome();
+  return { chrome, options };
 }
 
 async function openOptions() {
@@ -145,8 +157,7 @@ try {
   const legacyOrigin = migration
     ? await pairLegacy({ settings, options, chrome, root, timeout })
     : undefined;
-  if (!migration)
-    await checkRestart({ obsidian, settings, chrome, options, extensionId, evidence });
+  const folder = migration ? undefined : await pairWith(settings, options, chrome);
 
   let page = await productPage();
   const wish = await popup(page);
@@ -198,9 +209,9 @@ try {
     await reloadExtension(chrome, extensionId, version);
     await openOptions();
     const updated = await obsidian.settings();
-    await updated.locator("button::-p-text(ペアリング情報を発行)").setTimeout(timeout).wait();
+    await updated.locator("button::-p-text(接続設定を適用)").setTimeout(timeout).wait();
     await selectFolder(updated, "Other Books");
-    await pairWith(updated, options);
+    await pairWith(updated, options, chrome);
     process.stdout.write("Paired the updated extension with the other book folder\n");
     page = await productPage();
     const wrongFolder = await popup(page);
@@ -216,7 +227,7 @@ try {
     await wrongFolder.close();
     await updated.bringToFront();
     await selectFolder(updated, "Books");
-    await pairWith(updated, options);
+    await pairWith(updated, options, chrome);
     process.stdout.write("Paired the updated extension with the original book folder\n");
     const recheck = await popup(page);
     await recheck.locator("#reconcile").click();
@@ -227,8 +238,22 @@ try {
     process.stdout.write(
       "Updated the immutable v0.1.0 release in place; only the original book folder resolved the committed purchase\n",
     );
-  } else await purchase.close();
-  await page.reload();
+  } else {
+    await purchase.close();
+    await checkRestart({
+      obsidian,
+      folder,
+      chrome,
+      options,
+      extensionId,
+      restartChrome,
+      evidence,
+    });
+    page = await productPage();
+    assert.deepEqual(await notes(books), names);
+    assert.equal(await readFile(file, "utf8"), saved);
+  }
+  if (migration) await page.reload();
   const owned = await popup(page);
   await text(owned, "#status", "この版を所持");
   await owned.screenshot({ path: join(evidence, "03-owned-reopened.png") });
@@ -239,6 +264,7 @@ try {
       bundle: join(bundle, "obsidian"),
       obsidian,
       options,
+      chrome,
       extensionId,
       page,
       popup,

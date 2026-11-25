@@ -114,6 +114,20 @@ export async function installChrome(chrome, extensionDirectory) {
   return id;
 }
 
+export async function waitForInstalledChrome(chrome, id) {
+  const page = await extensionsPage(chrome);
+  try {
+    await text(page, `${card(id)} >>> #extension-id`, `ID: ${id}`);
+    await page
+      .locator(`${card(id)} >>> #enableToggle`)
+      .setTimeout(timeout)
+      .filter((toggle) => toggle.checked)
+      .wait();
+  } finally {
+    await page.close();
+  }
+}
+
 /** Waits for the new version that Chrome displays after the card's Reload action. */
 export async function reloadExtension(chrome, extensionId, version) {
   const page = await extensionsPage(chrome);

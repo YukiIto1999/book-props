@@ -15,14 +15,23 @@ $allowed = @($user.Value, 'S-1-5-18', 'S-1-5-32-544')
 function Rights([string]$Names) {
   [int][Security.AccessControl.FileSystemRights]$Names
 }
+$stage = 'parent-read'
+try {
 $parent = Get-Acl -LiteralPath $env:BOOK_PROPS_HOME
 $writeDirectory = Rights 'Write, DeleteSubdirectoriesAndFiles, ChangePermissions, TakeOwnership'
 foreach ($ace in $parent.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
   if ($ace.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly) { continue }
-  if ($ace.AccessControlType -eq 'Allow' -and $ace.IdentityReference.Value -notin $allowed -and ($writeDirectory -band [int]$ace.FileSystemRights)) { exit 1 }
+  if ($ace.AccessControlType -ne 'Allow' -or $ace.IdentityReference.Value -in $allowed) { continue }
+  $blocked = $writeDirectory -band [int]$ace.FileSystemRights
+  if ($blocked) {
+    Write-Output "parent-writer:$blocked"
+    exit 1
+  }
 }
+Write-Output 'parent-accepted'
 $path = $env:BOOK_PROPS_GRANT
 if ($env:BOOK_PROPS_NEW -eq 'yes') {
+  $stage = 'grant-protect'
   $acl = [Security.AccessControl.DirectorySecurity]::new()
   $acl.SetOwner($user)
   $acl.SetAccessRuleProtection($true, $false)
@@ -30,10 +39,15 @@ if ($env:BOOK_PROPS_NEW -eq 'yes') {
   $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($user, 'FullControl', $inherit, 'None', 'Allow'))
   Set-Acl -LiteralPath $path -AclObject $acl
 }
+$stage = 'grant-read'
 $acl = Get-Acl -LiteralPath $path
-if (!$acl.AreAccessRulesProtected -or $acl.GetOwner([Security.Principal.SecurityIdentifier]) -ne $user) { exit 1 }
+if (!$acl.AreAccessRulesProtected -or $acl.GetOwner([Security.Principal.SecurityIdentifier]) -ne $user) { throw 'grant owner or inheritance' }
 foreach ($ace in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
-  if ($ace.AccessControlType -eq 'Allow' -and $ace.IdentityReference.Value -notin $allowed) { exit 1 }
+  if ($ace.AccessControlType -eq 'Allow' -and $ace.IdentityReference.Value -notin $allowed) { throw 'grant writer' }
+}
+} catch {
+  Write-Output ($stage + ':' + $_.Exception.GetType().Name)
+  exit 1
 }
 `;
 
@@ -81,7 +95,20 @@ export class ConnectionGrant {
             timeout: 5_000,
             windowsHide: true,
           },
-        );
+        ).catch((error: unknown) => {
+          const output: unknown =
+            error && typeof error === "object" ? Reflect.get(error, "stdout") : undefined;
+          const observed =
+            typeof output === "string" ? output.trim().split(/\r?\n/).pop() : undefined;
+          const reason =
+            observed &&
+            /^(?:parent-writer:\d+|(?:parent-read|grant-protect|grant-read):[A-Za-z]+Exception|parent-accepted)$/.test(
+              observed,
+            )
+              ? observed
+              : "powershell";
+          throw new Error(`connection-folder:${reason}`);
+        });
       } else {
         const parent = await lstat(home);
         const child = await lstat(directory);

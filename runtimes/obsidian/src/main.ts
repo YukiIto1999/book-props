@@ -187,7 +187,15 @@ export default class BookProps extends Plugin {
       this.connection = started;
       await previous?.clear().catch(() => undefined);
       return true;
-    } catch {
+    } catch (error) {
+      const reason =
+        error instanceof Error && error.message.startsWith("connection-folder:")
+          ? error.message
+          : undefined;
+      console.warn(
+        "Book Props connection setup:",
+        reason ?? (started ? "save-settings" : grant ? "start-listener" : "open-connection-folder"),
+      );
       started?.stop();
       await grant?.clear().catch(() => undefined);
       await this.restoreConnection();

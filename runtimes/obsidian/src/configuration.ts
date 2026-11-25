@@ -31,3 +31,14 @@ export function decodeConfiguration(saved: unknown): Configuration {
     ...(typeof id === "string" && typeof scope === "string" ? { grant: { id, scope } } : {}),
   };
 }
+
+export function connectionSetupError(error: unknown, stage: "folder" | "listen" | "save"): string {
+  if (stage === "save") return "接続設定を Vault に保存できませんでした。";
+  if (stage === "listen")
+    return "Chrome からの受付を開始できませんでした。接続ポートを確認してください。";
+  const detail =
+    error instanceof Error && /^connection-folder:[\w:-]+$/.test(error.message)
+      ? `（${error.message}）`
+      : "";
+  return `接続用フォルダを準備できませんでした。${detail}`;
+}

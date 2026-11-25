@@ -29,12 +29,6 @@ export async function configure(settings, id) {
 export async function applyConnection(settings, evidence) {
   await settings.bringToFront();
   const button = await settings.waitForSelector("button::-p-text(接続設定を適用)", { timeout });
-  const diagnoses = [];
-  const observe = (message) => {
-    const line = message.text();
-    if (line.startsWith("Book Props connection setup:")) diagnoses.push(line);
-  };
-  settings.on("console", observe);
   try {
     await button.press("Enter");
     const applied = await settings.waitForFunction(
@@ -55,12 +49,10 @@ export async function applyConnection(settings, evidence) {
       items.map((item) => item.textContent),
     );
     await settings.screenshot({ path: evidence });
-    throw new Error(
-      `Obsidian did not apply connection settings: ${[...notices, ...diagnoses].join(" / ")}`,
-      { cause: error },
-    );
+    throw new Error(`Obsidian did not apply connection settings: ${notices.join(" / ")}`, {
+      cause: error,
+    });
   } finally {
-    settings.off("console", observe);
     await button.dispose();
   }
 }

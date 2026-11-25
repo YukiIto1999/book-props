@@ -2,7 +2,7 @@ import { FileSystemAdapter, Notice, Plugin, TFolder, normalizePath } from "obsid
 import type { TAbstractFile } from "obsidian";
 import type { Request, Response } from "@book-props/vault-contract";
 import { Catalog, type Result } from "./catalog.ts";
-import { decodeConfiguration, type Configuration } from "./configuration.ts";
+import { connectionSetupError, decodeConfiguration, type Configuration } from "./configuration.ts";
 import { openVaultGrant, type ConnectionGrant } from "./connection-grant.ts";
 import { Connection, extensionIdPattern, scopeOf } from "./connection.ts";
 import { LibraryTools } from "./library-tools.ts";
@@ -159,9 +159,10 @@ export default class BookProps extends Plugin {
     }
   }
 
-  async configureConnection(extensionId: string): Promise<boolean> {
+  async configureConnection(extensionId: string): Promise<true | string> {
     extensionId = extensionId.trim();
-    if (this.changing || !this.catalog || !extensionIdPattern.test(extensionId)) return false;
+    if (this.changing || !this.catalog || !extensionIdPattern.test(extensionId))
+      return "拡張 ID と書籍フォルダを確認してください。";
     if (this.connection && extensionId === this.extensionId) return true;
     this.changing = true;
     const host = this.config.host ?? createHost();
@@ -173,7 +174,7 @@ export default class BookProps extends Plugin {
       const scope = scopeOf(this.vaultPath(), this.folder);
       grant = await openVaultGrant(this.vaultPath());
       started = await this.listen(host, extensionId, this.config.port ?? 0, scope, grant);
-      if (this.unloaded) return false;
+      if (this.unloaded) return "Book Props が無効になりました。";
       const next = {
         ...this.config,
         extensionId,
@@ -182,24 +183,16 @@ export default class BookProps extends Plugin {
         grant: { id: grant.id, scope },
       };
       await this.saveData(next);
-      if (this.unloaded) return false;
+      if (this.unloaded) return "Book Props が無効になりました。";
       this.config = next;
       this.connection = started;
       await previous?.clear().catch(() => undefined);
       return true;
     } catch (error) {
-      const reason =
-        error instanceof Error && error.message.startsWith("connection-folder:")
-          ? error.message
-          : undefined;
-      console.warn(
-        "Book Props connection setup:",
-        reason ?? (started ? "save-settings" : grant ? "start-listener" : "open-connection-folder"),
-      );
       started?.stop();
       await grant?.clear().catch(() => undefined);
       await this.restoreConnection();
-      return false;
+      return connectionSetupError(error, started ? "save" : grant ? "listen" : "folder");
     } finally {
       if (this.unloaded) started?.stop();
       this.changing = false;
@@ -220,10 +213,9 @@ export default class BookProps extends Plugin {
     )
       return;
     try {
-      const scope = scopeOf(this.vaultPath(), this.folder);
-      if (grant.scope !== scope) return;
+      if (grant.scope !== scopeOf(this.vaultPath(), this.folder)) return;
       const directory = await openVaultGrant(this.vaultPath(), grant.id);
-      const restored = await this.listen(host, extensionId, port, scope, directory);
+      const restored = await this.listen(host, extensionId, port, grant.scope, directory);
       if (this.unloaded || this.config !== snapshot || this.connection) restored.stop();
       else this.connection = restored;
     } catch {

@@ -12,7 +12,7 @@ type SettingsHost = Plugin & {
   readonly connectionDirectory: string | undefined;
   readonly extensionId: string;
   selectFolder(folder: string): Promise<boolean>;
-  configureConnection(extension: string): Promise<boolean>;
+  configureConnection(extension: string): Promise<true | string>;
   revoke(): Promise<boolean>;
 };
 
@@ -65,11 +65,7 @@ export class Settings extends PluginSettingTab {
         button.setButtonText("接続設定を適用").onClick(async () => {
           button.setDisabled(true);
           const applied = await this.books.configureConnection(extension.getValue());
-          new Notice(
-            applied
-              ? "接続設定を適用しました。"
-              : "拡張 ID と書籍フォルダを確認してください。接続ポートが使用中の場合も開始できません。",
-          );
+          new Notice(applied === true ? "接続設定を適用しました。" : applied);
           this.display();
         }),
       );

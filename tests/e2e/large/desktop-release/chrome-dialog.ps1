@@ -26,18 +26,21 @@ public static class ProbeWindow {
     [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr window);
     [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr window, uint relation);
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window, out uint process);
-    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    [StructLayout(LayoutKind.Sequential)] private struct CursorPoint { public int X, Y; }
+    [DllImport("user32.dll")] private static extern IntPtr WindowFromPoint(CursorPoint point);
     [DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
     [DllImport("user32.dll")] private static extern void mouse_event(uint flags, uint x, uint y, uint data, UIntPtr extra);
 
-    public static bool Click(uint process, int x, int y) {
-        if (ProcessOf(GetForegroundWindow()) != process || !SetCursorPos(x, y)) return false;
+    public static string Click(uint process, int x, int y) {
+        var point = new CursorPoint { X = x, Y = y };
+        if (ProcessOf(WindowFromPoint(point)) != process) return "point not owned by Chrome";
+        if (!SetCursorPos(x, y)) return "cursor could not move";
         System.Threading.Thread.Sleep(250);
-        if (ProcessOf(GetForegroundWindow()) != process) return false;
+        if (ProcessOf(WindowFromPoint(point)) != process) return "point ownership changed";
         mouse_event(2, 0, 0, 0, UIntPtr.Zero);
         System.Threading.Thread.Sleep(100);
         mouse_event(4, 0, 0, 0, UIntPtr.Zero);
-        return true;
+        return null;
     }
 
     public static uint ProcessOf(IntPtr window) {
@@ -152,9 +155,18 @@ while ($timer.Elapsed.TotalSeconds -lt 12) {
                     if ($texts | Where-Object { $_.Current.Name -and $_.Current.Name.Contains($scope) }) {
                         try {
                             if ($Operation -like 'folder-*') {
-                                $point = [System.Windows.Point]::new(0, 0)
-                                if (!$allow.TryGetClickablePoint([ref]$point)) { break }
-                                if (![ProbeWindow]::Click($ChromeProcess, [int]$point.X, [int]$point.Y)) { break }
+                                $bounds = $allow.Current.BoundingRectangle
+                                if ($bounds.IsEmpty -or $bounds.Width -le 0 -or $bounds.Height -le 0) {
+                                    $visibleActions['approval control had no bounds'] = $true
+                                    break
+                                }
+                                $x = [int]($bounds.X + $bounds.Width / 2)
+                                $y = [int]($bounds.Y + $bounds.Height / 2)
+                                $blocked = [ProbeWindow]::Click($ChromeProcess, $x, $y)
+                                if ($blocked) {
+                                    $visibleActions[$blocked] = $true
+                                    break
+                                }
                                 Write-Output 'Clicked Chrome approval control.'
                                 return
                             }

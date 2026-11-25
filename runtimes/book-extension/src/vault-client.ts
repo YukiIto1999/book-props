@@ -1,6 +1,5 @@
 import {
   connectionOrigin,
-  decodePairing,
   request,
   vaultScope,
   type Product,
@@ -8,6 +7,7 @@ import {
   type Response,
 } from "@book-props/vault-contract";
 import { messageField, type ConnectionStatus, type Reply } from "./messages.ts";
+import { chromeGrants, type Grant, type Grants } from "./pairing-grant.ts";
 import type { Exchange, VaultPeer } from "./vault-transport.ts";
 
 type Connection = VaultPeer & { token: string; expiresAt: number; scope: string };
@@ -56,12 +56,14 @@ export class VaultClient {
     accessLevel: "TRUSTED_CONTEXTS",
   });
   private readonly exchange: Exchange;
+  private readonly grants: Grants;
   private changingPendingPurchase = false;
   private sessionChanges: Promise<unknown> = Promise.resolve();
   private sessionLifetime = new AbortController();
 
-  constructor(exchange: Exchange) {
+  constructor(exchange: Exchange, grants: Grants = chromeGrants) {
     this.exchange = exchange;
+    this.grants = grants;
   }
 
   private changeSession<T>(work: () => Promise<T>): Promise<T> {
@@ -70,24 +72,57 @@ export class VaultClient {
     return next;
   }
 
-  private async session(): Promise<LiveConnection | undefined> {
-    await this.sessionAccess;
-    const currentChange = this.sessionChanges;
-    await currentChange;
-    const { signal } = this.sessionLifetime;
-    const { connection: stored } = await chrome.storage.session.get("connection");
-    const connection = decodeConnection(stored);
-    return currentChange === this.sessionChanges &&
-      !signal.aborted &&
-      connection &&
-      connection.expiresAt > Date.now()
-      ? { ...connection, signal }
-      : undefined;
+  private session(): Promise<LiveConnection | undefined> {
+    return this.changeSession(async () => {
+      const grant = await this.grants.read();
+      const card = await grant?.read();
+      if (!grant || !card) return undefined;
+      await this.sessionAccess;
+      const { connection: stored } = await chrome.storage.session.get("connection");
+      const current = decodeConnection(stored);
+      if (
+        current &&
+        current.origin === card.origin &&
+        current.anchor === card.anchor &&
+        current.scope === card.scope &&
+        current.expiresAt > Date.now()
+      )
+        return { ...current, signal: this.sessionLifetime.signal };
+      const paired = await this.authenticate(grant, card);
+      if (paired.kind !== "paired") return undefined;
+      return this.saveSession(card, paired);
+    });
   }
 
   private resetSessionLifetime(): void {
     this.sessionLifetime.abort();
     this.sessionLifetime = new AbortController();
+  }
+
+  private async authenticate(grant: Grant, peer: VaultPeer): Promise<Response> {
+    const code = await grant.prove(peer.anchor).catch(() => undefined);
+    if (!code) return unavailable;
+    const reply = await this.call(peer, { action: "pair", code });
+    return reply.kind === "paired" && reply.scope !== grant.binding.scope
+      ? { kind: "unauthorized" }
+      : reply;
+  }
+
+  private async saveSession(
+    peer: VaultPeer,
+    { scope, token, expiresAt }: Extract<Response, { kind: "paired" }>,
+  ): Promise<LiveConnection> {
+    await this.sessionAccess;
+    this.resetSessionLifetime();
+    const connection: Connection = {
+      origin: peer.origin,
+      anchor: peer.anchor,
+      scope,
+      token,
+      expiresAt,
+    };
+    await chrome.storage.session.set({ connection });
+    return { ...connection, signal: this.sessionLifetime.signal };
   }
 
   private async call(
@@ -206,31 +241,24 @@ export class VaultClient {
   };
 
   connectionStatus = async (): Promise<ConnectionStatus> => {
-    await this.localAccess;
-    const { origin } = await chrome.storage.local.get("origin");
-    const configured = typeof origin === "string" ? connectionOrigin(origin) : undefined;
+    const configured = (await this.grants.read())?.binding.origin;
     const current = await this.session();
-    if (!current) return { configured, state: "unpaired" };
+    if (!current) return { configured, state: configured ? "unknown" : "unpaired" };
     const reply = await this.authorized(current, { action: "status" });
     if (reply.kind === "connected") return { configured, state: "paired" };
     return { configured, state: reply.kind === "unauthorized" ? "unpaired" : "unknown" };
   };
 
-  pair = async (text: unknown): Promise<Response> => {
-    const pairing = typeof text === "string" ? decodePairing(text) : undefined;
-    if (!pairing) return { kind: "invalidRequest" };
-    const { origin, anchor, code } = pairing;
+  pair = async (id: unknown): Promise<Response> => {
+    if (typeof id !== "string") return { kind: "invalidRequest" };
     return this.changeSession(async (): Promise<Response> => {
-      const reply = await this.call({ origin, anchor }, { action: "pair", code });
+      const grant = await this.grants.selected(id);
+      const card = await grant?.read();
+      if (!grant || !card) return { kind: "invalidRequest" };
+      const reply = await this.authenticate(grant, card);
       if (reply.kind !== "paired") return reply;
-      const { token, expiresAt, scope } = reply;
-      await this.localAccess;
-      await this.sessionAccess;
-      this.resetSessionLifetime();
-      await chrome.storage.session.set({
-        connection: { origin, anchor, token, expiresAt, scope } satisfies Connection,
-      });
-      await chrome.storage.local.set({ origin });
+      if (!(await this.grants.commit(id))) return unavailable;
+      await this.saveSession(card, reply);
       return { kind: "saved" };
     });
   };
@@ -239,6 +267,7 @@ export class VaultClient {
     await this.changeSession(async () => {
       await this.sessionAccess;
       this.resetSessionLifetime();
+      await this.grants.forget();
       await chrome.storage.session.remove("connection");
     });
     return { kind: "saved" };

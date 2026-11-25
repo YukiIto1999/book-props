@@ -1,42 +1,20 @@
 import { FileSystemAdapter, Notice, Plugin, TFolder, normalizePath } from "obsidian";
 import type { TAbstractFile } from "obsidian";
 import type { Request, Response } from "@book-props/vault-contract";
-import { readScopedNote } from "./book-note.ts";
 import { Catalog, type Result } from "./catalog.ts";
-import { Connection, extensionIdPattern, scopeOf, type Credentials } from "./connection.ts";
+import { connectionSetupError, decodeConfiguration, type Configuration } from "./configuration.ts";
+import { openVaultGrant, type ConnectionGrant } from "./connection-grant.ts";
+import { Connection, extensionIdPattern, scopeOf } from "./connection.ts";
 import { LibraryTools } from "./library-tools.ts";
+import { addNoteTemplates } from "./note-templates.ts";
 import { Registration } from "./registration.ts";
 import { Settings } from "./settings.ts";
 import { Shelf } from "./shelf.ts";
-import { createHost, decodeHost } from "./tls-identity.ts";
+import { createHost } from "./tls-identity.ts";
 import { VaultFiles } from "./vault-files.ts";
 import { startCatalogCore } from "./wasm.ts";
 
-type Configuration = { folder?: string; extensionId?: string; port?: number; host?: string };
 type OpenRequest = Extract<Request, { action: "open" }>;
-
-function savedField(saved: object, key: string): unknown {
-  const value: unknown = Reflect.get(saved, key);
-  return value;
-}
-
-/** Keeps only the plugin settings whose stored shape is still readable; anything else starts unset. */
-function decodeConfiguration(saved: unknown): Configuration {
-  if (typeof saved !== "object" || saved === null) return {};
-  const folder = savedField(saved, "folder");
-  const extensionId = savedField(saved, "extensionId");
-  const port = savedField(saved, "port");
-  const legacy = savedField(saved, "identity");
-  const legacyHost =
-    typeof legacy === "object" && legacy !== null ? savedField(legacy, "name") : undefined;
-  const host = decodeHost(savedField(saved, "host")) ?? decodeHost(legacyHost);
-  return {
-    ...(typeof folder === "string" ? { folder } : {}),
-    ...(typeof extensionId === "string" ? { extensionId } : {}),
-    ...(typeof port === "number" ? { port } : {}),
-    ...(host ? { host } : {}),
-  };
-}
 
 export default class BookProps extends Plugin {
   folder = "";
@@ -53,8 +31,8 @@ export default class BookProps extends Plugin {
   get extensionId(): string {
     return this.config.extensionId ?? "";
   }
-  get acceptingConnections(): boolean {
-    return this.connection !== undefined;
+  get connectionDirectory(): string | undefined {
+    return this.connection?.grant.directory;
   }
 
   private readonly fileVersion = (file: TAbstractFile): number => {
@@ -102,7 +80,7 @@ export default class BookProps extends Plugin {
           new LibraryTools(this.app, this.catalog, this.app.workspace.getActiveFile()?.path).open();
       },
     });
-    this.addTemplateCommands();
+    addNoteTemplates(this, () => this.folder);
     this.app.workspace.onLayoutReady(() => {
       if (this.unloaded) return;
       if (!this.changing) {
@@ -124,38 +102,6 @@ export default class BookProps extends Plugin {
     });
   }
 
-  private addTemplateCommands(): void {
-    const templates = {
-      impression: { name: "感想のひな型を挿入", body: "## 印象に残った場面\n\n## 感想\n" },
-      reference: {
-        name: "実用書メモのひな型を挿入",
-        body: "## 要点\n\n## 試してみること\n\n## 関連するメモ\n",
-      },
-    } as const;
-    for (const [id, template] of Object.entries(templates)) {
-      this.addCommand({
-        id: `insert-${id}-template`,
-        name: template.name,
-        editorCallback: (editor, view) => {
-          try {
-            if (
-              !this.folder ||
-              !view.file?.path.startsWith(`${this.folder}/`) ||
-              !readScopedNote(editor.getValue())
-            ) {
-              new Notice("書籍フォルダにある本ページを編集しているときに使えます。");
-              return;
-            }
-            const line = editor.lastLine();
-            editor.replaceRange(`\n\n${template.body}`, { line, ch: editor.getLine(line).length });
-          } catch {
-            new Notice("本ページを確認できません。");
-          }
-        },
-      });
-    }
-  }
-
   async selectFolder(proposed: string): Promise<boolean> {
     const folder = proposed.trim();
     if (
@@ -166,52 +112,87 @@ export default class BookProps extends Plugin {
     )
       return false;
     if (this.changing) return false;
+    if (folder === this.folder) return true;
     this.changing = true;
     try {
-      this.connection?.stop();
-      this.connection = undefined;
-      await this.catalog?.stop();
-      const next = { ...this.config, folder };
+      const previous = this.catalog;
+      const next = { ...this.config, folder, grant: undefined };
       await this.saveData(next);
+      const grant = this.takeConnection();
+      await previous?.stop();
       if (this.unloaded) return false;
       this.config = next;
       this.folder = folder;
       this.catalog = new Catalog(new VaultFiles(this.app, folder, this.fileVersion), this.evaluate);
-      await this.restoreConnection();
+      await grant?.clear().catch(() => undefined);
       return true;
     } finally {
       this.changing = false;
     }
   }
 
-  issueCode(): Credentials | undefined {
-    return this.connection?.issueCode();
-  }
-  revoke(): void {
-    this.connection?.revoke();
+  private takeConnection(): ConnectionGrant | undefined {
+    const connection = this.connection;
+    this.connection = undefined;
+    connection?.stop();
+    return connection?.grant;
   }
 
-  async configureConnection(extensionId: string): Promise<boolean> {
+  async revoke(): Promise<boolean> {
+    if (this.changing) return false;
+    this.changing = true;
+    try {
+      const id = this.config.grant?.id;
+      const next = { ...this.config, grant: undefined };
+      await this.saveData(next);
+      const grant = this.takeConnection();
+      this.config = next;
+      const directory =
+        grant ??
+        (id ? await openVaultGrant(this.vaultPath(), id).catch(() => undefined) : undefined);
+      await directory?.clear().catch(() => undefined);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      this.changing = false;
+    }
+  }
+
+  async configureConnection(extensionId: string): Promise<true | string> {
     extensionId = extensionId.trim();
-    if (this.changing || !this.catalog || !extensionIdPattern.test(extensionId)) return false;
+    if (this.changing || !this.catalog || !extensionIdPattern.test(extensionId))
+      return "拡張 ID と書籍フォルダを確認してください。";
+    if (this.connection && extensionId === this.extensionId) return true;
     this.changing = true;
     const host = this.config.host ?? createHost();
     let started: Connection | undefined;
+    let grant: ConnectionGrant | undefined;
+    let previous: ConnectionGrant | undefined;
     try {
-      this.connection?.stop();
-      this.connection = undefined;
-      started = await this.listen(host, extensionId, this.config.port ?? 0);
-      if (this.unloaded) return false;
-      const next = { ...this.config, extensionId, host, port: started.listeningPort };
+      previous = this.takeConnection();
+      const scope = scopeOf(this.vaultPath(), this.folder);
+      grant = await openVaultGrant(this.vaultPath());
+      started = await this.listen(host, extensionId, this.config.port ?? 0, scope, grant);
+      if (this.unloaded) return "Book Props が無効になりました。";
+      const next = {
+        ...this.config,
+        extensionId,
+        host,
+        port: started.listeningPort,
+        grant: { id: grant.id, scope },
+      };
       await this.saveData(next);
-      if (this.unloaded) return false;
+      if (this.unloaded) return "Book Props が無効になりました。";
       this.config = next;
       this.connection = started;
+      await previous?.clear().catch(() => undefined);
       return true;
-    } catch {
+    } catch (error) {
       started?.stop();
+      await grant?.clear().catch(() => undefined);
       await this.restoreConnection();
-      return false;
+      return connectionSetupError(error, started ? "save" : grant ? "listen" : "folder");
     } finally {
       if (this.unloaded) started?.stop();
       this.changing = false;
@@ -220,10 +201,21 @@ export default class BookProps extends Plugin {
 
   private async restoreConnection(): Promise<void> {
     const snapshot = this.config;
-    const { host, extensionId, port } = snapshot;
-    if (!this.catalog || !host || !extensionId || !port || this.connection || this.unloaded) return;
+    const { host, extensionId, port, grant } = snapshot;
+    if (
+      !this.catalog ||
+      !host ||
+      !extensionId ||
+      !port ||
+      !grant ||
+      this.connection ||
+      this.unloaded
+    )
+      return;
     try {
-      const restored = await this.listen(host, extensionId, port);
+      if (grant.scope !== scopeOf(this.vaultPath(), this.folder)) return;
+      const directory = await openVaultGrant(this.vaultPath(), grant.id);
+      const restored = await this.listen(host, extensionId, port, grant.scope, directory);
       if (this.unloaded || this.config !== snapshot || this.connection) restored.stop();
       else this.connection = restored;
     } catch {
@@ -231,14 +223,22 @@ export default class BookProps extends Plugin {
     }
   }
 
-  /** Starts accepting the extension for the current book folder, named by its scope. */
-  private async listen(host: string, extensionId: string, port: number): Promise<Connection> {
+  private vaultPath(): string {
     const { adapter } = this.app.vault;
+    if (!(adapter instanceof FileSystemAdapter)) throw new Error("Vaultの場所を確定できません。");
+    return adapter.getBasePath();
+  }
+
+  private listen(
+    host: string,
+    extensionId: string,
+    port: number,
+    scope: string,
+    grant: ConnectionGrant,
+  ): Promise<Connection> {
     const catalog = this.catalog;
-    if (!catalog || !(adapter instanceof FileSystemAdapter))
-      throw new Error("Vaultの場所を確定できません。");
-    const scope = scopeOf(adapter.getBasePath(), this.folder);
-    return Connection.start(host, extensionId, port, scope, (request, signal) =>
+    if (!catalog) throw new Error("書籍フォルダを確認できません。");
+    return Connection.start(host, extensionId, port, scope, grant, (request, signal) =>
       this.dispatch(catalog, request, signal),
     );
   }

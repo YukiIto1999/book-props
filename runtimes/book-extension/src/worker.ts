@@ -66,7 +66,7 @@ async function popupRequest(kind: string): Promise<unknown> {
 
 async function optionsRequest(kind: string, message: unknown): Promise<unknown> {
   if (kind === "status") return connectionStatus();
-  if (kind === "pair") return pair(messageField(message, "pairing"));
+  if (kind === "pair") return pair(messageField(message, "grantId"));
   if (kind === "disconnect") return disconnect();
   return unavailable;
 }

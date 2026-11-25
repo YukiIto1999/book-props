@@ -8,25 +8,15 @@
     <main>
       <h1>Book Props – 接続設定</h1>
       <p>
-        Obsidian の Book Props 設定で書籍フォルダとこの拡張の ID
-        を指定し、発行したペアリング情報をここに貼り付けてください。
+        Obsidian の Book Props 設定で書籍フォルダとこの拡張の ID を指定します。 Obsidian
+        が表示する接続用フォルダだけを選んでください。
       </p>
       <p>この拡張のID: <code id="extension-id"></code></p>
-      <form>
-        <label for="pairing">ペアリング情報</label>
-        <textarea
-          id="pairing"
-          autocomplete="off"
-          spellcheck="false"
-          maxlength="2048"
-          rows="3"
-          required
-        ></textarea>
-        <div class="controls">
-          <button type="submit">ペアリング</button
-          ><button id="disconnect" type="button">このChromeの接続を解除</button>
-        </div>
-      </form>
+      <div class="controls">
+        <button id="pair" type="button">接続用フォルダを選ぶ</button>
+        <button id="allow" type="button" hidden>今後も自動で接続する</button>
+        <button id="disconnect" type="button">この Chrome の接続を解除</button>
+      </div>
       <p id="status" role="status"></p>
       <h2>対応サイト</h2>
       <ul id="sites"></ul>

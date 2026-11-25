@@ -1,12 +1,21 @@
 import assert from "node:assert/strict";
+import { createHash, randomBytes } from "node:crypto";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { connect as openTls } from "node:tls";
 import { join } from "node:path";
 import test from "node:test";
-import { decodePairing, endpoint, response } from "@book-props/vault-contract";
+import {
+  connectionFile,
+  decodeConnectionCard,
+  endpoint,
+  pairingChallenge,
+  pairingProofFile,
+  response,
+} from "@book-props/vault-contract";
 import { createWebSocketStream, WebSocket } from "ws";
 import { Catalog } from "../../src/catalog.ts";
+import { ConnectionGrant } from "../../src/connection-grant.ts";
 import { Connection, scopeOf } from "../../src/connection.ts";
 import { LocalMoveCopies } from "../../src/local-move-copies.ts";
 import { createHost } from "../../src/tls-identity.ts";
@@ -90,7 +99,9 @@ await test("each Vault book folder keeps its own stable opaque scope", async () 
   assert.notEqual(scopeOf(vault, "Books/Archive"), scope);
   assert.notEqual(scopeOf(join(tmpdir(), "Other Vault"), "Books"), scope);
   await assert.rejects(
-    Connection.start(createHost(), extension, 0, "Books", async () => ({ kind: "unavailable" })),
+    Connection.start(createHost(), extension, 0, "Books", undefined, async () => ({
+      kind: "unavailable",
+    })),
     { message: "接続設定が不正です。" },
   );
 });
@@ -98,6 +109,9 @@ await test("each Vault book folder keeps its own stable opaque scope", async () 
 await test("only the paired extension can save a purchase through a trusted TLS endpoint", async (context) => {
   const folder = await mkdtemp(join(tmpdir(), "shelf-"));
   context.after(async () => await rm(folder, { recursive: true, force: true }));
+  const profile = await mkdtemp(join(tmpdir(), "book-props-profile-"));
+  context.after(async () => await rm(profile, { recursive: true, force: true }));
+  const grant = await ConnectionGrant.open(undefined, profile);
   const files = bookFiles(folder);
   const catalog = new Catalog(files, evaluate);
   // Only purchases reach the Vault; any other request arriving here fails the test.
@@ -108,10 +122,12 @@ await test("only the paired extension can save a purchase through a trusted TLS 
     return { kind: "saved" };
   };
   const scope = scopeOf(folder, "Books");
-  const connection = await Connection.start(createHost(), extension, 0, scope, dispatch);
+  const host = createHost();
+  const connection = await Connection.start(host, extension, 0, scope, grant, dispatch);
   context.after(() => connection.stop());
-  const { code, anchor } = decodePairing(connection.issueCode().value);
-  const pair = { action: "pair", code };
+  const card = await readCard(grant);
+  const { anchor } = card;
+  const pair = { action: "pair", code: randomBytes(16).toString("base64url") };
   const purchase = {
     action: "purchase",
     product,
@@ -137,6 +153,8 @@ await test("only the paired extension can save a purchase through a trusted TLS 
     (await post(connection, anchor, { action: "status" }, unauthorized)).payload.kind,
     "unauthorized",
   );
+  assert.equal((await post(connection, anchor, pair)).payload.kind, "unauthorized");
+  await prove(grant, anchor, pair.code);
   const paired = await post(connection, anchor, pair);
   assert.equal(paired.protocol, "TLSv1.3");
   assert.equal(paired.payload.kind, "paired");
@@ -167,12 +185,48 @@ await test("only the paired extension can save a purchase through a trusted TLS 
   const markdown = await readFile(join(folder, notes[0]), "utf8");
   assert.match(markdown, /owned: true/);
   assert.match(markdown, /9780306406157/);
-  connection.revoke();
-  assert.equal((await post(connection, anchor, purchase, options)).payload.kind, "unauthorized");
+  connection.stop();
+  const restoredGrant = await ConnectionGrant.open(grant.id, profile);
+  const restored = await Connection.start(
+    host,
+    extension,
+    connection.listeningPort,
+    scope,
+    restoredGrant,
+    dispatch,
+  );
+  context.after(() => restored.stop());
+  const fresh = await readCard(restoredGrant);
+  assert.equal(fresh.grantId, card.grantId);
+  assert.equal(fresh.origin, card.origin);
+  assert.notEqual(fresh.anchor, anchor);
+  await assert.rejects(post(restored, anchor, pair));
+  assert.equal((await post(restored, fresh.anchor, pair)).payload.kind, "unauthorized");
   assert.equal(
-    (await post(connection, anchor, { action: "status" }, options)).payload.kind,
+    (await post(restored, fresh.anchor, { action: "status" }, options)).payload.kind,
     "unauthorized",
+  );
+  const renew = { action: "pair", code: randomBytes(16).toString("base64url") };
+  await prove(restoredGrant, fresh.anchor, renew.code);
+  const renewed = (await post(restored, fresh.anchor, renew)).payload;
+  assert.equal(renewed.kind, "paired");
+  assert.equal(renewed.scope, scope);
+  assert.equal(
+    (await post(restored, fresh.anchor, { action: "status" }, { token: renewed.token })).payload
+      .kind,
+    "connected",
   );
   assert.deepEqual(await readdir(folder), notes);
   assert.equal(await readFile(join(folder, notes[0]), "utf8"), markdown);
 });
+
+async function readCard(grant) {
+  const card = decodeConnectionCard(await readFile(join(grant.directory, connectionFile), "utf8"));
+  assert(card);
+  return card;
+}
+
+async function prove(grant, anchor, code) {
+  const proof = createHash("sha256").update(pairingChallenge(anchor, code)).digest("hex");
+  await writeFile(join(grant.directory, pairingProofFile), proof);
+}

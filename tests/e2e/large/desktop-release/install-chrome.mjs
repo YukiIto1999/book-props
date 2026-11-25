@@ -3,6 +3,7 @@ import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { browserDialog } from "./native-chrome.mjs";
 import { timeout, until } from "./wait.mjs";
 
 const manager = "extensions-manager";
@@ -70,16 +71,10 @@ async function runningWorker(chrome, page, id) {
       .targets()
       .find((item) => item.type() === "service_worker" && item.url() === script(id)) ??
     (await nextWorker(chrome, id));
-  const state = () => versions.get(versionId);
-  return { cdp, versionId, target, state };
+  return { cdp, versionId, target };
 }
 
-/**
- * Installs the unpacked folder for a new profile and proves the result on chrome://extensions.
- * Proof boundary: Chrome's "Load unpacked" opens a browser-owned folder dialog that Puppeteer's
- * file chooser cannot intercept, so only the folder submission uses CDP Extensions.loadUnpacked.
- * Developer mode, the card and the details page are the real WebUI.
- */
+/** Installs the unpacked folder through Chrome's UI and verifies its persisted installation. */
 export async function installChrome(chrome, extensionDirectory) {
   const page = await extensionsPage(chrome);
   await page
@@ -87,8 +82,14 @@ export async function installChrome(chrome, extensionDirectory) {
     .setTimeout(timeout)
     .setVisibility("visible")
     .filter((button) => button.textContent.trim() === "Load unpacked")
+    .click();
+  await browserDialog(chrome, "install", extensionDirectory);
+  const id = await page
+    .locator(`${manager} >>> extensions-item`)
+    .setTimeout(timeout)
+    .filter((item) => item.shadowRoot?.querySelector("#name")?.textContent.trim() === "Book Props")
+    .map((item) => item.id)
     .wait();
-  const id = await chrome.installExtension(extensionDirectory);
   assert.match(id, /^[a-p]{32}$/);
   await text(page, `${card(id)} >>> #name`, "Book Props");
   await text(page, `${card(id)} >>> #extension-id`, `ID: ${id}`);
@@ -114,6 +115,20 @@ export async function installChrome(chrome, extensionDirectory) {
   return id;
 }
 
+export async function waitForInstalledChrome(chrome, id) {
+  const page = await extensionsPage(chrome);
+  try {
+    await text(page, `${card(id)} >>> #extension-id`, `ID: ${id}`);
+    await page
+      .locator(`${card(id)} >>> #enableToggle`)
+      .setTimeout(timeout)
+      .filter((toggle) => toggle.checked)
+      .wait();
+  } finally {
+    await page.close();
+  }
+}
+
 /** Waits for the new version that Chrome displays after the card's Reload action. */
 export async function reloadExtension(chrome, extensionId, version) {
   const page = await extensionsPage(chrome);
@@ -131,13 +146,11 @@ export async function restartWorker(chrome, options, extensionId) {
   const worker = await runningWorker(chrome, options, extensionId);
   const gone = destroyed(chrome, worker.target);
   await worker.cdp.send("ServiceWorker.stopWorker", { versionId: worker.versionId });
-  await until("Book Props worker stopped", () => worker.state().runningStatus === "stopped");
   await gone;
   const next = nextWorker(chrome, extensionId, worker.target);
   await options.bringToFront();
   await options.reload();
   const target = await next;
-  await until("Book Props worker woke", () => worker.state().runningStatus === "running");
   const status = await options
     .locator("#status")
     .setTimeout(timeout)

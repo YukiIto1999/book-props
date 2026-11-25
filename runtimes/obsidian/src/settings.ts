@@ -6,16 +6,14 @@ import {
   type Plugin,
   type TextComponent,
 } from "obsidian";
-import type { Credentials } from "./connection.ts";
 
 type SettingsHost = Plugin & {
   readonly folder: string;
-  readonly acceptingConnections: boolean;
+  readonly connectionDirectory: string | undefined;
   readonly extensionId: string;
   selectFolder(folder: string): Promise<boolean>;
-  configureConnection(extension: string): Promise<boolean>;
-  issueCode(): Credentials | undefined;
-  revoke(): void;
+  configureConnection(extension: string): Promise<true | string>;
+  revoke(): Promise<boolean>;
 };
 
 export class Settings extends PluginSettingTab {
@@ -67,11 +65,7 @@ export class Settings extends PluginSettingTab {
         button.setButtonText("接続設定を適用").onClick(async () => {
           button.setDisabled(true);
           const applied = await this.books.configureConnection(extension.getValue());
-          new Notice(
-            applied
-              ? "接続設定を適用しました。"
-              : "拡張 ID と書籍フォルダを確認してください。接続ポートが使用中の場合も開始できません。",
-          );
+          new Notice(applied === true ? "接続設定を適用しました。" : applied);
           this.display();
         }),
       );
@@ -87,50 +81,30 @@ export class Settings extends PluginSettingTab {
     const section = this.pairingSection;
     if (!section) return;
     section.empty();
-    if (this.books.acceptingConnections) this.renderPairing(section);
+    const directory = this.books.connectionDirectory;
+    if (directory) this.renderPairing(section, directory);
     else section.createEl("p", { text: "接続を受け付けていません。" });
   }
 
-  private renderPairing(section: HTMLElement): void {
-    const area = section.createDiv();
-    const pairing = area.createEl("textarea", {
-      attr: { "aria-label": "ペアリング情報", readonly: "", rows: "3", spellcheck: "false" },
-    });
-    area.hidden = true;
-    const clear = () => {
-      pairing.value = "";
-      area.hidden = true;
-    };
-    area.createEl("button", { text: "ペアリング情報をコピー" }).addEventListener("click", () => {
-      void navigator.clipboard.writeText(pairing.value).then(
-        () => new Notice("ペアリング情報をコピーしました。"),
-        () => {
-          pairing.focus();
-          pairing.select();
-          new Notice("ペアリング情報を選択しました。そのままコピーしてください。");
-        },
-      );
-    });
+  private renderPairing(section: HTMLElement, directory: string): void {
+    section.createEl("p", { text: "Chrome で選ぶ接続用フォルダ:" });
+    section
+      .createEl("p")
+      .createEl("code", { text: directory, cls: "book-props-connection-directory" });
     new Setting(section)
       .setName("ペアリング")
       .addButton((button) =>
-        button.setButtonText("ペアリング情報を発行").onClick(() => {
-          const code = this.books.issueCode();
-          if (!code) return;
-          pairing.value = code.value;
-          area.hidden = false;
-          window.setTimeout(
-            () => {
-              if (pairing.value === code.value) clear();
-            },
-            Math.max(0, code.expiresAt - Date.now()),
-          );
+        button.setButtonText("フォルダのパスをコピー").onClick(async () => {
+          await navigator.clipboard.writeText(directory);
+          new Notice("接続用フォルダのパスをコピーしました。");
         }),
       )
       .addButton((button) =>
-        button.setButtonText("ペアリングを解除").onClick(() => {
-          this.books.revoke();
-          clear();
+        button.setButtonText("ペアリングを解除").onClick(async () => {
+          button.setDisabled(true);
+          const revoked = await this.books.revoke();
+          new Notice(revoked ? "ペアリングを解除しました。" : "ペアリングを解除できませんでした。");
+          this.refreshPairing();
         }),
       );
   }

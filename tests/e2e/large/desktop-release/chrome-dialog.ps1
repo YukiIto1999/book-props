@@ -1,12 +1,13 @@
 param(
     [Parameter(Mandatory)][int]$ChromeProcess,
-    [Parameter(Mandatory)][ValidateSet('certificate', 'permission')][string]$Operation,
+    [Parameter(Mandatory)][ValidateSet('certificate', 'permission', 'install', 'folder', 'folder-permission', 'folder-persist')][string]$Operation,
     [Parameter(Mandatory)][string]$Value
 )
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
+Add-Type -AssemblyName WindowsBase
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
@@ -25,6 +26,22 @@ public static class ProbeWindow {
     [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr window);
     [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr window, uint relation);
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window, out uint process);
+    [StructLayout(LayoutKind.Sequential)] private struct CursorPoint { public int X, Y; }
+    [DllImport("user32.dll")] private static extern IntPtr WindowFromPoint(CursorPoint point);
+    [DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll")] private static extern void mouse_event(uint flags, uint x, uint y, uint data, UIntPtr extra);
+
+    public static string Click(uint process, int x, int y) {
+        var point = new CursorPoint { X = x, Y = y };
+        if (ProcessOf(WindowFromPoint(point)) != process) return "point not owned by Chrome";
+        if (!SetCursorPos(x, y)) return "cursor could not move";
+        System.Threading.Thread.Sleep(250);
+        if (ProcessOf(WindowFromPoint(point)) != process) return "point ownership changed";
+        mouse_event(2, 0, 0, 0, UIntPtr.Zero);
+        System.Threading.Thread.Sleep(100);
+        mouse_event(4, 0, 0, 0, UIntPtr.Zero);
+        return null;
+    }
 
     public static uint ProcessOf(IntPtr window) {
         uint process = 0;
@@ -49,7 +66,7 @@ public static class ProbeWindow {
         return name.ToString();
     }
 
-    public static string SubmitFile(IntPtr dialog, string path) {
+    public static string SubmitPath(IntPtr dialog, string path, bool folder) {
         var editors = new List<IntPtr>();
         var buttons = new List<IntPtr>();
         var controls = new List<string>();
@@ -60,7 +77,11 @@ public static class ProbeWindow {
             controls.Add(name + ":" + id);
             if (name == "Button" && id == 1) buttons.Add(window); // IDOK
             if (name != "Edit") return true;
-            for (IntPtr parent = window; parent != IntPtr.Zero && parent != dialog; parent = GetParent(parent)) {
+            if (folder && id == 1152) {
+                editors.Add(window);
+                return true;
+            }
+            for (IntPtr parent = window; !folder && parent != IntPtr.Zero && parent != dialog; parent = GetParent(parent)) {
                 if (GetDlgCtrlID(parent) == 1148 || ClassOf(parent) == "FileNameControlHost") {
                     editors.Add(window);
                     break;
@@ -97,31 +118,65 @@ $ui = [System.Windows.Automation.AutomationElement]
 $tree = [System.Windows.Automation.TreeScope]
 $type = [System.Windows.Automation.ControlType]
 $button = [System.Windows.Automation.PropertyCondition]::new($ui::ControlTypeProperty, $type::Button)
+$radio = [System.Windows.Automation.PropertyCondition]::new($ui::ControlTypeProperty, $type::RadioButton)
+$actions = [System.Windows.Automation.OrCondition]::new($button, $radio)
 $walker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
 $timer = [Diagnostics.Stopwatch]::StartNew()
 $observedPickers = @{}
+$visibleActions = @{}
 while ($timer.Elapsed.TotalSeconds -lt 12) {
     foreach ($native in [ProbeWindow]::VisibleWindows()) {
-        if ($Operation -eq 'certificate') {
+        if ($Operation -in @('certificate', 'folder', 'install')) {
             if ($native.ClassName -ne '#32770' -or $native.Owner -ne $ChromeProcess) { continue }
-            $controls = [ProbeWindow]::SubmitFile($native.Handle, $Value)
+            $controls = [ProbeWindow]::SubmitPath($native.Handle, $Value, $Operation -ne 'certificate')
             if ($null -ne $controls) {
                 $observedPickers[$native.Handle.ToInt64()] = "pickerProcess=$($native.Process), ownerProcess=$($native.Owner), controls=$controls"
                 continue
             }
-            Write-Output 'Submitted Chrome-owned file picker.'
+            Write-Output 'Submitted Chrome-owned picker.'
             return
         }
         if ($native.Process -eq $ChromeProcess) {
+            $accepted = switch ($Operation) {
+                'folder-permission' { 'Allow' }
+                'folder-persist' { 'Allow on every visit' }
+                default { 'Allow'; 'Allow access' }
+            }
             $window = $ui::FromHandle($native.Handle)
-            foreach ($allow in $window.FindAll($tree::Descendants, $button)) {
-                if (-not $allow.Current.IsEnabled -or $allow.Current.IsOffscreen -or $allow.Current.Name -notin @('Allow', 'Allow access')) { continue }
+            foreach ($allow in $window.FindAll($tree::Descendants, $actions)) {
+                if (-not $allow.Current.IsEnabled -or $allow.Current.IsOffscreen) { continue }
+                if ($allow.Current.Name) { $visibleActions[$allow.Current.Name] = $true }
+                if ($allow.Current.Name -notin $accepted) { continue }
                 $bubble = $walker.GetParent($allow)
-                for ($hops = 0; $bubble -and $hops -lt 4; $hops++) {
+                for ($hops = 0; $bubble -and $hops -lt 6; $hops++) {
+                    if ($hops -gt 0 -and $bubble.Equals($window)) { break }
                     $texts = $bubble.FindAll($tree::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
-                    if ($texts | Where-Object { $_.Current.Name -and $_.Current.Name.Contains($Value) }) {
+                    $scope = if ($Operation -like 'folder-*') { 'Book Props ' } else { $Value }
+                    if ($texts | Where-Object { $_.Current.Name -and $_.Current.Name.Contains($scope) }) {
                         try {
-                            $allow.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+                            if ($Operation -like 'folder-*') {
+                                $bounds = $allow.Current.BoundingRectangle
+                                if ($bounds.IsEmpty -or $bounds.Width -le 0 -or $bounds.Height -le 0) {
+                                    $visibleActions['approval control had no bounds'] = $true
+                                    break
+                                }
+                                $x = [int]($bounds.X + $bounds.Width / 2)
+                                $y = [int]($bounds.Y + $bounds.Height / 2)
+                                $blocked = [ProbeWindow]::Click($ChromeProcess, $x, $y)
+                                if ($blocked) {
+                                    $visibleActions[$blocked] = $true
+                                    break
+                                }
+                                Write-Output 'Clicked Chrome approval control.'
+                                return
+                            }
+                            $action = $null
+                            if ($allow.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$action)) {
+                                $action.Invoke()
+                            } elseif ($allow.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$action)) {
+                                $action.Select()
+                            } else { throw 'Chrome approval control did not support invocation or selection.' }
+                            Write-Output 'Activated Chrome approval control.'
                             return
                         } catch {
                             if ($_.Exception.InnerException -isnot [System.Windows.Automation.ElementNotEnabledException]) { throw }
@@ -136,6 +191,22 @@ while ($timer.Elapsed.TotalSeconds -lt 12) {
     Start-Sleep -Milliseconds 200
 }
 foreach ($observation in $observedPickers.Values) { Write-Output $observation }
+Write-Output "Visible Chrome actions: $($visibleActions.Keys -join ', ')"
+if ($Operation -like 'folder-*' -or $Operation -eq 'install') {
+    Add-Type -AssemblyName System.Drawing
+    Add-Type -AssemblyName System.Windows.Forms
+    $bounds = [Windows.Forms.Screen]::PrimaryScreen.Bounds
+    $bitmap = [Drawing.Bitmap]::new($bounds.Width, $bounds.Height)
+    $graphics = [Drawing.Graphics]::FromImage($bitmap)
+    try {
+        $graphics.CopyFromScreen($bounds.Location, [Drawing.Point]::Empty, $bounds.Size)
+        $fixture = if ($env:BOOK_PROPS_MIGRATION -eq '1') { 'book-props-migration' } else { 'book-props-desktop' }
+        $bitmap.Save([IO.Path]::Combine($env:RUNNER_TEMP, $fixture, 'evidence', "native-$Operation.png"))
+    } finally {
+        $graphics.Dispose()
+        $bitmap.Dispose()
+    }
+}
 $windows = [ProbeWindow]::VisibleWindows()
 $session = (Get-Process -Id $PID).SessionId
 $browserSession = (Get-Process -Id $ChromeProcess).SessionId

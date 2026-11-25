@@ -26,4 +26,15 @@ printf 'abi <abi/4.0>,\n#include <tunables/global>\nprofile book-props-cft "%s" 
 trap 'rm -f "$profile"' EXIT
 sudo apparmor_parser --add "$profile"
 trap 'sudo apparmor_parser --remove "$profile"; rm -f "$profile"' EXIT
-xvfb-run -a corepack pnpm verify:release:desktop
+sudo apt-get install -y at-spi2-core openbox python3-pyatspi scrot x11-utils xclip xdotool
+env -u NO_AT_BRIDGE ACCESSIBILITY_ENABLED=1 GTK_THEME=Adwaita GDK_SCALE=1 dbus-run-session -- xvfb-run -a bash -eu -c '
+  openbox --sm-disable &
+  wm=$!
+  trap "kill $wm 2>/dev/null || true; wait $wm 2>/dev/null || true" EXIT
+  for ((i = 0; i < 50; ++i)); do
+    if xprop -root _NET_SUPPORTING_WM_CHECK | grep -q "window id"; then break; fi
+    sleep 0.1
+  done
+  xprop -root _NET_SUPPORTING_WM_CHECK | grep -q "window id"
+  corepack pnpm verify:release:desktop
+'

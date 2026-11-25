@@ -1,36 +1,46 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import process from "node:process";
 import { activatePlugin } from "./activate-obsidian.mjs";
 import { restartWorker } from "./install-chrome.mjs";
 import { ObsidianFixture } from "./obsidian.mjs";
-import { configure, pairWith, pasteNewCode, retryCode, text } from "./pair-evidence.mjs";
+import {
+  applyConnection,
+  configure,
+  paired,
+  pairWith,
+  remember,
+  text,
+  unavailable,
+} from "./pair-evidence.mjs";
+import { timeout } from "./wait.mjs";
 
-const paired = "ペアリング済みです。";
-const unavailable =
-  "接続を確認できません。Obsidian の起動を確認し、必要ならペアリングし直してください。";
-
-export async function checkRestart({ obsidian, settings, chrome, options, extensionId, evidence }) {
-  const used = await pairWith(settings, options);
+export async function checkRestart({
+  obsidian,
+  folder,
+  chrome,
+  options,
+  extensionId,
+  restartChrome,
+  evidence,
+}) {
   await options.screenshot({ path: join(evidence, "01-paired.png") });
-  await retryCode(options, used);
-  await restartWorker(chrome, options, extensionId);
+  const worker = await restartWorker(chrome, options, extensionId);
+  assert.equal(worker.status, paired);
+  ({ chrome, options } = await restartChrome());
+  await remember(options, chrome, folder);
+  ({ options } = await restartChrome());
   await text(options, "#status", paired);
-
-  const unused = await pasteNewCode(settings, options);
-  assert.notEqual(unused, used);
   await obsidian.stop();
-  await obsidian.start();
-  const restarted = await obsidian.settings();
-  await restarted.waitForSelector("button::-p-text(ペアリング情報を発行)");
   await options.reload();
   await text(options, "#status", unavailable);
-  await retryCode(options, unused);
-  await pairWith(restarted, options);
-  await options.screenshot({ path: join(evidence, "02-repaired-after-restart.png") });
-  process.stdout.write(
-    "Worker restart preserved pairing; Obsidian restart rejected the old session and unused code\n",
-  );
+  await obsidian.start();
+  await obsidian.settings();
+  await options.reload();
+  await text(options, "#status", paired);
+  await options.screenshot({ path: join(evidence, "02-reconnected-after-restart.png") });
+  process.stdout.write("Full Chrome and Obsidian restarts reconnected without re-pairing\n");
 }
 
 export async function checkVaultIsolation({
@@ -39,10 +49,12 @@ export async function checkVaultIsolation({
   obsidian,
   options,
   extensionId,
+  chrome,
   page,
   popup,
   notes,
   evidence,
+  restartChrome,
 }) {
   const vault = join(root, "second-vault");
   const books = join(vault, "Books");
@@ -54,7 +66,8 @@ export async function checkVaultIsolation({
     await activatePlugin(await second.vaultPage());
     const settings = await second.settings();
     await configure(settings, extensionId);
-    await pairWith(settings, options);
+    await applyConnection(settings, join(evidence, "setup-second-vault.png"));
+    await pairWith(settings, options, chrome, evidence);
 
     await page.reload();
     const otherVault = await popup(page);
@@ -64,16 +77,36 @@ export async function checkVaultIsolation({
     assert.deepEqual(await notes(books), []);
 
     await second.stop();
+    await options.bringToFront();
     await options.reload();
-    await text(options, "#status", unavailable);
+    try {
+      await text(options, "#status", unavailable);
+    } catch (error) {
+      await options.screenshot({ path: join(evidence, "isolated-vault-stop.png") });
+      throw error;
+    }
     assert.deepEqual(await notes(books), []);
-    await pairWith(await obsidian.settings(), options);
+    await pairWith(await obsidian.settings(), options, chrome, evidence);
     await page.reload();
     const firstVault = await popup(page);
     await text(firstVault, "#status", "この版を所持");
     await firstVault.close();
+    await options.bringToFront();
+    const disconnect = await options.waitForSelector("#disconnect", { visible: true, timeout });
+    assert(disconnect);
+    try {
+      await disconnect.press("Enter");
+    } finally {
+      await disconnect.dispose();
+    }
+    await text(options, "#status", "このChromeの接続を解除しました。Obsidian側でも解除できます。");
+    const reopened = await restartChrome();
+    await text(reopened.options, "#status", "ペアリングされていません。");
+    await reopened.options.screenshot({
+      path: join(evidence, "05-disconnected-after-restart.png"),
+    });
     process.stdout.write(
-      "A second Vault showed the same edition as unowned; losing that Vault did not switch to the first\n",
+      "A second Vault showed the edition as unowned, never fell back, and disconnect survived Chrome restart\n",
     );
   } finally {
     await second.close();

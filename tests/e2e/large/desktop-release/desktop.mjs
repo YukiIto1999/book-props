@@ -8,7 +8,7 @@ import { checkRestart, checkVaultIsolation } from "./check-pairing.mjs";
 import { installChrome, reloadExtension, waitForInstalledChrome } from "./install-chrome.mjs";
 import { pairLegacy } from "./legacy-pairing.mjs";
 import { ObsidianFixture, selectFolder } from "./obsidian.mjs";
-import { configure, pairWith, text } from "./pair-evidence.mjs";
+import { applyConnection, configure, pairWith, text } from "./pair-evidence.mjs";
 import { timeout, until } from "./wait.mjs";
 
 const migration = process.argv.includes("--migrate");
@@ -154,6 +154,7 @@ try {
   await startChrome();
   const settings = await obsidian.settings();
   await configure(settings, extensionId);
+  await applyConnection(settings, join(evidence, "setup-original.png"));
   const legacyOrigin = migration
     ? await pairLegacy({ settings, options, chrome, root, timeout })
     : undefined;
@@ -211,6 +212,7 @@ try {
     const updated = await obsidian.settings();
     await updated.locator("button::-p-text(接続設定を適用)").setTimeout(timeout).wait();
     await selectFolder(updated, "Other Books");
+    await applyConnection(updated, join(evidence, "setup-other-folder.png"));
     await pairWith(updated, options, chrome);
     process.stdout.write("Paired the updated extension with the other book folder\n");
     page = await productPage();
@@ -227,6 +229,7 @@ try {
     await wrongFolder.close();
     await updated.bringToFront();
     await selectFolder(updated, "Books");
+    await applyConnection(updated, join(evidence, "setup-original-folder.png"));
     await pairWith(updated, options, chrome);
     process.stdout.write("Paired the updated extension with the original book folder\n");
     const recheck = await popup(page);

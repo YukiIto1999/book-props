@@ -24,7 +24,37 @@ export async function text(page, selector, expected) {
 export async function configure(settings, id) {
   await selectFolder(settings, "Books");
   await field(settings, "Chrome拡張ID", id);
-  await settings.locator("button::-p-text(接続設定を適用)").click();
+}
+
+export async function applyConnection(settings, evidence) {
+  await settings.bringToFront();
+  const button = await settings.waitForSelector("button::-p-text(接続設定を適用)", { timeout });
+  try {
+    await button.press("Enter");
+    const applied = await settings.waitForFunction(
+      (previous) => {
+        if (previous.isConnected) return false;
+        return Array.from(document.querySelectorAll(".notice")).at(-1)?.textContent;
+      },
+      { timeout },
+      button,
+    );
+    try {
+      assert.equal(await applied.jsonValue(), "接続設定を適用しました。");
+    } finally {
+      await applied.dispose();
+    }
+  } catch (error) {
+    const notices = await settings.$$eval(".notice", (items) =>
+      items.map((item) => item.textContent),
+    );
+    await settings.screenshot({ path: evidence });
+    throw new Error(`Obsidian did not apply connection settings: ${notices.join(" / ")}`, {
+      cause: error,
+    });
+  } finally {
+    await button.dispose();
+  }
 }
 
 async function browserDialog(chrome, operation, value, signal) {
@@ -57,13 +87,12 @@ async function browserDialog(chrome, operation, value, signal) {
 }
 
 export async function pairWith(settings, options, chrome) {
-  await settings.bringToFront();
-  await settings.locator("button::-p-text(接続設定を適用)").click();
-  const path = await settings
-    .locator(directory)
-    .setTimeout(timeout)
-    .map((element) => element.textContent.trim())
-    .wait();
+  const path = await settings.$eval(
+    ".vertical-tab-content",
+    (section, selector) => section.querySelector(selector)?.textContent.trim(),
+    directory,
+  );
+  assert(path, "Obsidian did not open the configured endpoint (no connection directory)");
   assert(isAbsolute(path));
   await options.bringToFront();
   await options.locator("#pair").click();

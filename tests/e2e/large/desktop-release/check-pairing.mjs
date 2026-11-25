@@ -4,7 +4,15 @@ import { join } from "node:path";
 import { activatePlugin } from "./activate-obsidian.mjs";
 import { restartWorker } from "./install-chrome.mjs";
 import { ObsidianFixture } from "./obsidian.mjs";
-import { configure, paired, pairWith, remember, text, unavailable } from "./pair-evidence.mjs";
+import {
+  applyConnection,
+  configure,
+  paired,
+  pairWith,
+  remember,
+  text,
+  unavailable,
+} from "./pair-evidence.mjs";
 
 export async function checkRestart({
   obsidian,
@@ -55,6 +63,7 @@ export async function checkVaultIsolation({
     await activatePlugin(await second.vaultPage());
     const settings = await second.settings();
     await configure(settings, extensionId);
+    await applyConnection(settings, join(evidence, "setup-second-vault.png"));
     await pairWith(settings, options, chrome);
 
     await page.reload();

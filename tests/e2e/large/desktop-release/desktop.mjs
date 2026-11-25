@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { cp, mkdir, readFile, readdir } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import puppeteer from "puppeteer-core";
@@ -30,6 +30,7 @@ const extensionDirectory = join(active, "chrome");
 const title = "Book Props acceptance fixture";
 const isbn = "9784873115658";
 const productUrl = "https://books.rakuten.co.jp/rb/11753651/";
+const profile = join(root, "chrome-profile");
 const obsidian = new ObsidianFixture({ root, vault, bundle: join(active, "obsidian") });
 
 async function notes(folder) {
@@ -46,11 +47,11 @@ async function startChrome() {
     executablePath: join(process.env.RUNNER_TEMP, "book-props-desktop", browser),
     headless: false,
     enableExtensions: true,
-    userDataDir: join(root, "chrome-profile"),
+    userDataDir: profile,
     defaultViewport: null,
     args: [
       "--lang=en-US",
-      `--disable-features=${windows ? "Translate" : "Translate,UsePortalFilePicker"}`,
+      ...(windows ? [] : ["--disable-features=UsePortalFilePicker"]),
       "--force-renderer-accessibility",
     ],
   });
@@ -140,6 +141,12 @@ async function dropPurchaseReply(origin) {
 await mkdir(evidence, { recursive: true });
 await mkdir(books, { recursive: true });
 await mkdir(other);
+await mkdir(join(profile, "Default"), { recursive: true });
+await writeFile(
+  join(profile, "Default", "Preferences"),
+  JSON.stringify({ translate: { enabled: false } }),
+  { flag: "wx" },
+);
 await cp(migration ? join(root, "legacy") : bundle, active, { recursive: true });
 try {
   await obsidian.stage();

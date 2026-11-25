@@ -109,4 +109,9 @@ if operation in chooser_titles:
 else:
     labels = {"folder-permission": "Allow", "folder-persist": "Allow on every visit"}
     allow = until(labels[operation], lambda: button(labels[operation], "Book Props"))
-    allow.queryAction().doAction(0)
+    capture(operation)
+    bounds = allow.queryComponent().getExtents(pyatspi.DESKTOP_COORDS)
+    if bounds.width <= 0 or bounds.height <= 0:
+        raise RuntimeError("Chrome's permission control has no on-screen bounds")
+    xdo("mousemove", str(bounds.x + bounds.width // 2), str(bounds.y + bounds.height // 2), "click", "1")
+    print(f"Clicked Chrome's {labels[operation]} control.")

@@ -10,12 +10,19 @@ export const unavailable =
   "接続を確認できません。Obsidian を開いてください。接続用フォルダの許可が切れている場合は「今後も自動で接続する」を押してください。";
 
 export async function text(page, selector, expected) {
-  await page.waitForFunction(
-    (s, label) => document.querySelector(s)?.textContent === label,
-    { timeout },
-    selector,
-    expected,
-  );
+  try {
+    await page.waitForFunction(
+      (s, label) => document.querySelector(s)?.textContent === label,
+      { timeout, polling: "mutation" },
+      selector,
+      expected,
+    );
+  } catch (error) {
+    const shown = await page.$eval(selector, (item) => item.textContent).catch(() => undefined);
+    throw new Error(`Expected ${selector} to show "${expected}"; found "${shown}"`, {
+      cause: error,
+    });
+  }
 }
 
 export async function configure(settings, id) {

@@ -74,8 +74,14 @@ export async function checkVaultIsolation({
     assert.deepEqual(await notes(books), []);
 
     await second.stop();
+    await options.bringToFront();
     await options.reload();
-    await text(options, "#status", unavailable);
+    try {
+      await text(options, "#status", unavailable);
+    } catch (error) {
+      await options.screenshot({ path: join(evidence, "isolated-vault-stop.png") });
+      throw error;
+    }
     assert.deepEqual(await notes(books), []);
     await pairWith(await obsidian.settings(), options, chrome, evidence);
     await page.reload();

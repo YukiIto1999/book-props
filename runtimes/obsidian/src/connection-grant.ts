@@ -17,19 +17,19 @@ function Rights([string]$Names) {
 }
 $stage = 'parent-read'
 try {
-$parent = Get-Acl -LiteralPath $env:BOOK_PROPS_HOME
+$parent = [IO.DirectoryInfo]::new($env:BOOK_PROPS_HOME).GetAccessControl()
 $writeDirectory = Rights 'Write, DeleteSubdirectoriesAndFiles, ChangePermissions, TakeOwnership'
 foreach ($ace in $parent.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
   if ($ace.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly) { continue }
   if ($ace.AccessControlType -ne 'Allow' -or $ace.IdentityReference.Value -in $allowed) { continue }
   $blocked = $writeDirectory -band [int]$ace.FileSystemRights
   if ($blocked) {
-    Write-Output "parent-writer:$blocked"
+    "parent-writer:$blocked"
     exit 1
   }
 }
-Write-Output 'parent-accepted'
-$path = $env:BOOK_PROPS_GRANT
+'parent-accepted'
+$directory = [IO.DirectoryInfo]::new($env:BOOK_PROPS_GRANT)
 if ($env:BOOK_PROPS_NEW -eq 'yes') {
   $stage = 'grant-protect'
   $acl = [Security.AccessControl.DirectorySecurity]::new()
@@ -37,16 +37,16 @@ if ($env:BOOK_PROPS_NEW -eq 'yes') {
   $acl.SetAccessRuleProtection($true, $false)
   $inherit = [Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [Security.AccessControl.InheritanceFlags]::ObjectInherit
   $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($user, 'FullControl', $inherit, 'None', 'Allow'))
-  Set-Acl -LiteralPath $path -AclObject $acl
+  $directory.SetAccessControl($acl)
 }
 $stage = 'grant-read'
-$acl = Get-Acl -LiteralPath $path
+$acl = $directory.GetAccessControl()
 if (!$acl.AreAccessRulesProtected -or $acl.GetOwner([Security.Principal.SecurityIdentifier]) -ne $user) { throw 'grant owner or inheritance' }
 foreach ($ace in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
   if ($ace.AccessControlType -eq 'Allow' -and $ace.IdentityReference.Value -notin $allowed) { throw 'grant writer' }
 }
 } catch {
-  Write-Output ($stage + ':' + $_.Exception.GetType().Name)
+  $stage + ':' + $_.Exception.GetType().Name
   exit 1
 }
 `;

@@ -27,4 +27,4 @@ trap 'rm -f "$profile"' EXIT
 sudo apparmor_parser --add "$profile"
 trap 'sudo apparmor_parser --remove "$profile"; rm -f "$profile"' EXIT
 sudo apt-get install -y at-spi2-core python3-pyatspi scrot xdotool
-env -u NO_AT_BRIDGE dbus-run-session -- xvfb-run -a corepack pnpm verify:release:desktop
+env -u NO_AT_BRIDGE ACCESSIBILITY_ENABLED=1 dbus-run-session -- xvfb-run -a corepack pnpm verify:release:desktop

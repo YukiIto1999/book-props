@@ -1,3 +1,5 @@
+import os
+from pathlib import Path
 import subprocess
 import sys
 import time
@@ -19,6 +21,16 @@ def until(description, action):
         except RuntimeError:
             pass
         time.sleep(0.15)
+    root = Path(os.environ["RUNNER_TEMP"]) / "book-props-desktop" / "evidence"
+    subprocess.run(["scrot", "--overwrite", str(root / f"native-{operation}.png")], check=False)
+    for app in desktop:
+        if app is not None:
+            print(f"AT-SPI app: {app.get_process_id()} {app.name!r}", file=sys.stderr)
+    for app in apps():
+        for node in descendants(app):
+            name = node.name or ""
+            if any(label in name for label in ("Book Props", "Allow", "Open", "Select where")):
+                print(f"AT-SPI control: {node.getRoleName()} {name!r}", file=sys.stderr)
     raise RuntimeError(f"Chrome UI did not show {description}")
 
 

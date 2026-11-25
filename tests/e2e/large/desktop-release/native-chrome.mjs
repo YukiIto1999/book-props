@@ -17,7 +17,14 @@ export async function browserDialog(chrome, operation, value, signal) {
       win32
         ? ["-NoLogo", "-NoProfile", "-NonInteractive", "-MTA", "-File", driver, ...args]
         : [driver, ...args],
-      { timeout, signal },
+      {
+        timeout,
+        signal,
+        env: {
+          ...process.env,
+          BOOK_PROPS_MIGRATION: process.argv.includes("--migrate") ? "1" : "0",
+        },
+      },
     );
     if (stdout) process.stdout.write(`${operation}: ${stdout}`);
   } catch (error) {

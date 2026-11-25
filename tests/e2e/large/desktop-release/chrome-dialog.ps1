@@ -101,9 +101,12 @@ $ui = [System.Windows.Automation.AutomationElement]
 $tree = [System.Windows.Automation.TreeScope]
 $type = [System.Windows.Automation.ControlType]
 $button = [System.Windows.Automation.PropertyCondition]::new($ui::ControlTypeProperty, $type::Button)
+$radio = [System.Windows.Automation.PropertyCondition]::new($ui::ControlTypeProperty, $type::RadioButton)
+$actions = [System.Windows.Automation.OrCondition]::new($button, $radio)
 $walker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
 $timer = [Diagnostics.Stopwatch]::StartNew()
 $observedPickers = @{}
+$visibleActions = @{}
 while ($timer.Elapsed.TotalSeconds -lt 12) {
     foreach ($native in [ProbeWindow]::VisibleWindows()) {
         if ($Operation -in @('certificate', 'folder', 'install')) {
@@ -123,14 +126,24 @@ while ($timer.Elapsed.TotalSeconds -lt 12) {
                 default { 'Allow'; 'Allow access' }
             }
             $window = $ui::FromHandle($native.Handle)
-            foreach ($allow in $window.FindAll($tree::Descendants, $button)) {
-                if (-not $allow.Current.IsEnabled -or $allow.Current.IsOffscreen -or $allow.Current.Name -notin $accepted) { continue }
+            foreach ($allow in $window.FindAll($tree::Descendants, $actions)) {
+                if (-not $allow.Current.IsEnabled -or $allow.Current.IsOffscreen) { continue }
+                if ($allow.Current.Name) { $visibleActions[$allow.Current.Name] = $true }
+                if ($allow.Current.Name -notin $accepted) { continue }
                 $bubble = $walker.GetParent($allow)
-                for ($hops = 0; $bubble -and $hops -lt 4; $hops++) {
+                for ($hops = 0; $bubble -and $hops -lt 6; $hops++) {
+                    if ($hops -gt 0 -and $bubble.Equals($window)) { break }
                     $texts = $bubble.FindAll($tree::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
-                    if ($texts | Where-Object { $_.Current.Name -and $_.Current.Name.Contains($Value) }) {
+                    $scope = if ($Operation -like 'folder-*') { 'Book Props ' } else { $Value }
+                    if ($texts | Where-Object { $_.Current.Name -and $_.Current.Name.Contains($scope) }) {
                         try {
-                            $allow.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+                            $action = $null
+                            if ($allow.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$action)) {
+                                $action.Invoke()
+                            } elseif ($allow.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$action)) {
+                                $action.Select()
+                            } else { throw 'Chrome approval control did not support invocation or selection.' }
+                            Write-Output 'Activated Chrome approval control.'
                             return
                         } catch {
                             if ($_.Exception.InnerException -isnot [System.Windows.Automation.ElementNotEnabledException]) { throw }
@@ -145,6 +158,22 @@ while ($timer.Elapsed.TotalSeconds -lt 12) {
     Start-Sleep -Milliseconds 200
 }
 foreach ($observation in $observedPickers.Values) { Write-Output $observation }
+Write-Output "Visible Chrome actions: $($visibleActions.Keys -join ', ')"
+if ($Operation -like 'folder-*' -or $Operation -eq 'install') {
+    Add-Type -AssemblyName System.Drawing
+    Add-Type -AssemblyName System.Windows.Forms
+    $bounds = [Windows.Forms.Screen]::PrimaryScreen.Bounds
+    $bitmap = [Drawing.Bitmap]::new($bounds.Width, $bounds.Height)
+    $graphics = [Drawing.Graphics]::FromImage($bitmap)
+    try {
+        $graphics.CopyFromScreen($bounds.Location, [Drawing.Point]::Empty, $bounds.Size)
+        $fixture = if ($env:BOOK_PROPS_MIGRATION -eq '1') { 'book-props-migration' } else { 'book-props-desktop' }
+        $bitmap.Save([IO.Path]::Combine($env:RUNNER_TEMP, $fixture, 'evidence', "native-$Operation.png"))
+    } finally {
+        $graphics.Dispose()
+        $bitmap.Dispose()
+    }
+}
 $windows = [ProbeWindow]::VisibleWindows()
 $session = (Get-Process -Id $PID).SessionId
 $browserSession = (Get-Process -Id $ChromeProcess).SessionId

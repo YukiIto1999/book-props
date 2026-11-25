@@ -26,8 +26,8 @@ printf 'abi <abi/4.0>,\n#include <tunables/global>\nprofile book-props-cft "%s" 
 trap 'rm -f "$profile"' EXIT
 sudo apparmor_parser --add "$profile"
 trap 'sudo apparmor_parser --remove "$profile"; rm -f "$profile"' EXIT
-sudo apt-get install -y at-spi2-core openbox python3-pyatspi scrot x11-utils xdotool
-env -u NO_AT_BRIDGE ACCESSIBILITY_ENABLED=1 dbus-run-session -- xvfb-run -a bash -eu -c '
+sudo apt-get install -y at-spi2-core openbox python3-pyatspi scrot x11-utils xclip xdotool
+env -u NO_AT_BRIDGE ACCESSIBILITY_ENABLED=1 GTK_THEME=Adwaita GDK_SCALE=1 dbus-run-session -- xvfb-run -a bash -eu -c '
   openbox --sm-disable &
   wm=$!
   trap "kill $wm 2>/dev/null || true; wait $wm 2>/dev/null || true" EXIT

@@ -91,22 +91,20 @@ if operation in chooser_titles:
     title = chooser_titles[operation]
     window = until("the owned folder chooser", lambda: chooser(title))
     xdo("windowactivate", "--sync", window)
-    xdo("key", "ctrl+l")
-    xdo("type", "--", value)
+    subprocess.run(
+        ["xclip", "-selection", "clipboard", "-in"], input=value, text=True, check=True,
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    xdo("key", "--clearmodifiers", "--delay", "100", "ctrl+l", "ctrl+a", "ctrl+v")
     capture(f"{operation}-path")
 
-    def open_button():
-        if xdo("getactivewindow") != window:
-            return None
-        item = button("Open", title)
-        if item is not None and item.getState().contains(pyatspi.STATE_ENABLED):
-            bounds = item.queryComponent().getExtents(pyatspi.DESKTOP_COORDS)
-            if bounds.width > 0 and bounds.height > 0:
-                return str(bounds.x + bounds.width // 2), str(bounds.y + bounds.height // 2)
-        return None
-
-    x, y = until("the owned folder chooser's Open button", open_button)
-    xdo("mousemove", x, y, "click", "1")
+    geometry = subprocess.check_output(["xwininfo", "-id", window], text=True)
+    width = int(re.search(r"\bWidth:\s+(\d+)", geometry)[1])
+    height = int(re.search(r"\bHeight:\s+(\d+)", geometry)[1])
+    if xdo("getactivewindow") != window or width < 300 or height < 200:
+        raise RuntimeError("Chrome's folder chooser is not the active GTK window")
+    # Both GTK choosers use Adwaita at scale 1; Open is the rightmost action.
+    xdo("mousemove", "--window", window, str(width - 50), str(height - 23), "click", "1")
     until("confirmation of the owned folder chooser", lambda: True if chooser(title) is None else None)
 else:
     labels = {"folder-permission": "Allow", "folder-persist": "Allow on every visit"}

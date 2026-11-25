@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { basename, isAbsolute } from "node:path";
+import { basename, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { field, selectFolder } from "./obsidian.mjs";
@@ -61,7 +61,7 @@ async function browserDialog(chrome, operation, value, signal) {
   const arguments_ = [String(chrome.process().pid), operation, value];
   try {
     if (process.platform === "win32") {
-      await run(
+      const { stdout } = await run(
         "powershell.exe",
         [
           "-NoLogo",
@@ -74,6 +74,7 @@ async function browserDialog(chrome, operation, value, signal) {
         ],
         { timeout, signal },
       );
+      if (stdout) process.stdout.write(`${operation}: ${stdout}`);
     } else {
       await run(
         "/usr/bin/python3",
@@ -86,7 +87,7 @@ async function browserDialog(chrome, operation, value, signal) {
   }
 }
 
-export async function pairWith(settings, options, chrome) {
+export async function pairWith(settings, options, chrome, evidence) {
   const path = await settings.$eval(
     ".vertical-tab-content",
     (section, selector) => section.querySelector(selector)?.textContent.trim(),
@@ -94,22 +95,37 @@ export async function pairWith(settings, options, chrome) {
   );
   assert(path, "Obsidian did not open the configured endpoint (no connection directory)");
   assert(isAbsolute(path));
-  await options.bringToFront();
-  await options.locator("#pair").click();
-  await browserDialog(chrome, "folder", path);
+  const success =
+    "ペアリングしました。初回設定の仕上げに「今後も自動で接続する」で「毎回許可」を選んでください。";
   const approval = new AbortController();
-  const completed = text(
-    options,
-    "#status",
-    "ペアリングしました。初回設定の仕上げに「今後も自動で接続する」で「毎回許可」を選んでください。",
-  );
   try {
+    await options.bringToFront();
+    await options.locator("#pair").click();
+    await browserDialog(chrome, "folder", path);
+    const completed = options
+      .waitForFunction(
+        () =>
+          !document.querySelector("#pair").disabled &&
+          document.querySelector("#status").textContent,
+        { timeout },
+      )
+      .then(async (notice) => {
+        try {
+          assert.equal(await notice.jsonValue(), success);
+        } finally {
+          await notice.dispose();
+        }
+      });
     await Promise.race([
       completed,
       browserDialog(chrome, "folder-permission", basename(path), approval.signal).then(
         () => completed,
       ),
     ]);
+  } catch (error) {
+    const status = await options.$eval("#status", (item) => item.textContent);
+    await options.screenshot({ path: join(evidence, "pairing-failure.png") });
+    throw new Error(`Chrome pairing did not complete: ${status}`, { cause: error });
   } finally {
     approval.abort();
   }

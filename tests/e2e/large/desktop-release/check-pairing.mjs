@@ -64,7 +64,7 @@ export async function checkVaultIsolation({
     const settings = await second.settings();
     await configure(settings, extensionId);
     await applyConnection(settings, join(evidence, "setup-second-vault.png"));
-    await pairWith(settings, options, chrome);
+    await pairWith(settings, options, chrome, evidence);
 
     await page.reload();
     const otherVault = await popup(page);
@@ -77,7 +77,7 @@ export async function checkVaultIsolation({
     await options.reload();
     await text(options, "#status", unavailable);
     assert.deepEqual(await notes(books), []);
-    await pairWith(await obsidian.settings(), options, chrome);
+    await pairWith(await obsidian.settings(), options, chrome, evidence);
     await page.reload();
     const firstVault = await popup(page);
     await text(firstVault, "#status", "この版を所持");

@@ -10,6 +10,11 @@ pid, operation, value = sys.argv[1:]
 desktop = pyatspi.Registry.getDesktop(0)
 chooser_title = "Select where this site can save changes"
 deadline = time.monotonic() + 15
+evidence = Path(os.environ["RUNNER_TEMP"]) / "book-props-desktop" / "evidence"
+
+
+def capture(name):
+    subprocess.run(["scrot", "--overwrite", str(evidence / f"native-{name}.png")], check=False)
 
 
 def until(description, action):
@@ -21,8 +26,7 @@ def until(description, action):
         except RuntimeError:
             pass
         time.sleep(0.15)
-    root = Path(os.environ["RUNNER_TEMP"]) / "book-props-desktop" / "evidence"
-    subprocess.run(["scrot", "--overwrite", str(root / f"native-{operation}.png")], check=False)
+    capture(operation)
     for app in desktop:
         if app is not None:
             print(f"AT-SPI app: {app.get_process_id()} {app.name!r}", file=sys.stderr)
@@ -84,6 +88,7 @@ if operation == "folder":
     xdo("windowactivate", "--sync", window)
     xdo("key", "ctrl+l")
     xdo("type", "--", value)
+    capture("folder-path")
     xdo("key", "Return")
 
     def finish():

@@ -165,7 +165,7 @@ try {
   const legacyOrigin = migration
     ? await pairLegacy({ settings, options, chrome, root, timeout })
     : undefined;
-  const folder = migration ? undefined : await pairWith(settings, options, chrome);
+  const folder = migration ? undefined : await pairWith(settings, options, chrome, evidence);
 
   let page = await productPage();
   const wish = await popup(page);
@@ -220,7 +220,7 @@ try {
     await updated.locator("button::-p-text(接続設定を適用)").setTimeout(timeout).wait();
     await selectFolder(updated, "Other Books");
     await applyConnection(updated, join(evidence, "setup-other-folder.png"));
-    await pairWith(updated, options, chrome);
+    await pairWith(updated, options, chrome, evidence);
     process.stdout.write("Paired the updated extension with the other book folder\n");
     page = await productPage();
     const wrongFolder = await popup(page);
@@ -237,7 +237,7 @@ try {
     await updated.bringToFront();
     await selectFolder(updated, "Books");
     await applyConnection(updated, join(evidence, "setup-original-folder.png"));
-    await pairWith(updated, options, chrome);
+    await pairWith(updated, options, chrome, evidence);
     process.stdout.write("Paired the updated extension with the original book folder\n");
     const recheck = await popup(page);
     await recheck.locator("#reconcile").click();

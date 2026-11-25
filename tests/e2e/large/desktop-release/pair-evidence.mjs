@@ -1,12 +1,9 @@
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
 import { basename, isAbsolute, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
+import { browserDialog } from "./native-chrome.mjs";
 import { field, selectFolder } from "./obsidian.mjs";
 import { timeout } from "./wait.mjs";
 
-const run = promisify(execFile);
 const directory = ".book-props-connection-directory";
 export const paired = "ペアリング済みです。";
 export const unavailable =
@@ -54,36 +51,6 @@ export async function applyConnection(settings, evidence) {
     });
   } finally {
     await button.dispose();
-  }
-}
-
-async function browserDialog(chrome, operation, value, signal) {
-  const arguments_ = [String(chrome.process().pid), operation, value];
-  try {
-    if (process.platform === "win32") {
-      const { stdout } = await run(
-        "powershell.exe",
-        [
-          "-NoLogo",
-          "-NoProfile",
-          "-NonInteractive",
-          "-MTA",
-          "-File",
-          fileURLToPath(new URL("./chrome-dialog.ps1", import.meta.url)),
-          ...arguments_,
-        ],
-        { timeout, signal },
-      );
-      if (stdout) process.stdout.write(`${operation}: ${stdout}`);
-    } else {
-      await run(
-        "/usr/bin/python3",
-        [fileURLToPath(new URL("./chrome-dialog.py", import.meta.url)), ...arguments_],
-        { timeout, signal },
-      );
-    }
-  } catch (error) {
-    throw new Error(`${operation}: ${error.stdout}\n${error.stderr}`, { cause: error });
   }
 }
 

@@ -3,6 +3,7 @@ import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { browserDialog } from "./native-chrome.mjs";
 import { timeout, until } from "./wait.mjs";
 
 const manager = "extensions-manager";
@@ -74,12 +75,7 @@ async function runningWorker(chrome, page, id) {
   return { cdp, versionId, target, state };
 }
 
-/**
- * Installs the unpacked folder for a new profile and proves the result on chrome://extensions.
- * Proof boundary: Chrome's "Load unpacked" opens a browser-owned folder dialog that Puppeteer's
- * file chooser cannot intercept, so only the folder submission uses CDP Extensions.loadUnpacked.
- * Developer mode, the card and the details page are the real WebUI.
- */
+/** Installs the unpacked folder through Chrome's UI and verifies its persisted installation. */
 export async function installChrome(chrome, extensionDirectory) {
   const page = await extensionsPage(chrome);
   await page
@@ -87,8 +83,14 @@ export async function installChrome(chrome, extensionDirectory) {
     .setTimeout(timeout)
     .setVisibility("visible")
     .filter((button) => button.textContent.trim() === "Load unpacked")
+    .click();
+  await browserDialog(chrome, "install", extensionDirectory);
+  const id = await page
+    .locator(`${manager} >>> extensions-item`)
+    .setTimeout(timeout)
+    .filter((item) => item.shadowRoot?.querySelector("#name")?.textContent.trim() === "Book Props")
+    .map((item) => item.id)
     .wait();
-  const id = await chrome.installExtension(extensionDirectory);
   assert.match(id, /^[a-p]{32}$/);
   await text(page, `${card(id)} >>> #name`, "Book Props");
   await text(page, `${card(id)} >>> #extension-id`, `ID: ${id}`);

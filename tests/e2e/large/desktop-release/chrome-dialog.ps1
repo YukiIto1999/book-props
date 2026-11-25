@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory)][int]$ChromeProcess,
-    [Parameter(Mandatory)][ValidateSet('certificate', 'permission', 'folder', 'folder-permission', 'folder-persist')][string]$Operation,
+    [Parameter(Mandatory)][ValidateSet('certificate', 'permission', 'install', 'folder', 'folder-permission', 'folder-persist')][string]$Operation,
     [Parameter(Mandatory)][string]$Value
 )
 
@@ -106,9 +106,9 @@ $timer = [Diagnostics.Stopwatch]::StartNew()
 $observedPickers = @{}
 while ($timer.Elapsed.TotalSeconds -lt 12) {
     foreach ($native in [ProbeWindow]::VisibleWindows()) {
-        if ($Operation -in @('certificate', 'folder')) {
+        if ($Operation -in @('certificate', 'folder', 'install')) {
             if ($native.ClassName -ne '#32770' -or $native.Owner -ne $ChromeProcess) { continue }
-            $controls = [ProbeWindow]::SubmitPath($native.Handle, $Value, $Operation -eq 'folder')
+            $controls = [ProbeWindow]::SubmitPath($native.Handle, $Value, $Operation -ne 'certificate')
             if ($null -ne $controls) {
                 $observedPickers[$native.Handle.ToInt64()] = "pickerProcess=$($native.Process), ownerProcess=$($native.Owner), controls=$controls"
                 continue

@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import time
@@ -8,7 +9,10 @@ import pyatspi
 
 pid, operation, value = sys.argv[1:]
 desktop = pyatspi.Registry.getDesktop(0)
-chooser_title = "Select where this site can save changes"
+chooser_titles = {
+    "install": "Select the extension directory.",
+    "folder": "Select where this site can save changes",
+}
 deadline = time.monotonic() + 15
 evidence = Path(os.environ["RUNNER_TEMP"]) / "book-props-desktop" / "evidence"
 
@@ -72,10 +76,10 @@ def xdo(*args):
     return subprocess.check_output(["xdotool", *args], text=True).strip()
 
 
-def chooser():
+def chooser(title):
     found = subprocess.run(
         ["xdotool", "search", "--all", "--onlyvisible", "--pid", pid, "--name",
-         f"^{chooser_title}$"],
+         f"^{re.escape(title)}$"],
         capture_output=True,
         text=True,
         check=False,
@@ -83,23 +87,27 @@ def chooser():
     return found[0] if len(found) == 1 else None
 
 
-if operation == "folder":
-    window = until("the owned folder chooser", chooser)
+if operation in chooser_titles:
+    title = chooser_titles[operation]
+    window = until("the owned folder chooser", lambda: chooser(title))
     xdo("windowactivate", "--sync", window)
     xdo("key", "ctrl+l")
     xdo("type", "--", value)
-    capture("folder-path")
-    xdo("key", "Return")
+    capture(f"{operation}-path")
 
-    def finish():
-        if chooser() is None:
-            return True
-        select = button("Open", chooser_title)
-        if select is not None and select.getState().contains(pyatspi.STATE_ENABLED):
-            select.queryAction().doAction(0)
+    def open_button():
+        if xdo("getactivewindow") != window:
+            return None
+        item = button("Open", title)
+        if item is not None and item.getState().contains(pyatspi.STATE_ENABLED):
+            bounds = item.queryComponent().getExtents(pyatspi.DESKTOP_COORDS)
+            if bounds.width > 0 and bounds.height > 0:
+                return str(bounds.x + bounds.width // 2), str(bounds.y + bounds.height // 2)
         return None
 
-    until("confirmation of the owned folder chooser", finish)
+    x, y = until("the owned folder chooser's Open button", open_button)
+    xdo("mousemove", x, y, "click", "1")
+    until("confirmation of the owned folder chooser", lambda: True if chooser(title) is None else None)
 else:
     labels = {"folder-permission": "Allow", "folder-persist": "Allow on every visit"}
     allow = until(labels[operation], lambda: button(labels[operation], "Book Props"))

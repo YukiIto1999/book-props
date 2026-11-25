@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Book Props",
   "description": "Check book editions in your connected Obsidian Vault.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "permissions": ["storage", "contextMenus"],
   "background": { "service_worker": "worker.js", "type": "module" },
   "content_security_policy": {

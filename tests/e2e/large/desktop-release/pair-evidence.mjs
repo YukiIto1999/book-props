@@ -25,14 +25,21 @@ export async function text(page, selector, expected) {
   }
 }
 
-export async function configure(settings, id) {
+/** v0.4.0 までの設定画面での接続設定 */
+export const legacyConnection = {
+  button: "接続設定を適用",
+  notice: "接続設定を適用しました。",
+};
+const connection = { button: "接続を始める", notice: "Chrome からの接続を受け付けています。" };
+
+export async function configureLegacy(settings, id) {
   await selectFolder(settings, "Books");
   await field(settings, "Chrome拡張ID", id);
 }
 
-export async function applyConnection(settings, evidence) {
+export async function applyConnection(settings, evidence, labels = connection) {
   await settings.bringToFront();
-  const button = await settings.waitForSelector("button::-p-text(接続設定を適用)", { timeout });
+  const button = await settings.waitForSelector(`button::-p-text(${labels.button})`, { timeout });
   try {
     await button.press("Enter");
     const applied = await settings.waitForFunction(
@@ -44,7 +51,7 @@ export async function applyConnection(settings, evidence) {
       button,
     );
     try {
-      assert.equal(await applied.jsonValue(), "接続設定を適用しました。");
+      assert.equal(await applied.jsonValue(), labels.notice);
     } finally {
       await applied.dispose();
     }

@@ -23,8 +23,8 @@ ZIP の `obsidian/` からは `main.js` と `manifest.json` だけを使う。
 
 1. Obsidianを閉じ、使うVaultの `.obsidian/plugins/book-props/` に `main.js` と `manifest.json` を置く。Vaultの設定フォルダを変更している場合は、その中の `plugins/book-props/` を使う。Vaultを開き直し、「設定」→「コミュニティプラグイン」で、自分が置いた Book Props を有効にする。
 2. Vaultに `Books` などの書籍フォルダを作る。Obsidianの「設定」→「Book Props」で、Vaultからの相対パス（例：`Books`）を「書籍フォルダ」に入れて「適用」を押す。
-3. Chromeで `chrome://extensions/` を開く。「デベロッパー モード」を有効にし、「パッケージ化されていない拡張機能を読み込む」でChrome成果物のフォルダを選ぶ。表示された Book Props の拡張IDを控える。
-4. Obsidian の Book Props 設定に「Chrome拡張ID」を入れ、「接続設定を適用」を押す。
+3. Chromeで `chrome://extensions/` を開く。「デベロッパー モード」を有効にし、「パッケージ化されていない拡張機能を読み込む」でChrome成果物のフォルダを選ぶ。
+4. Obsidian の Book Props 設定の「Chromeとの接続」で「接続を始める」を押す。
 
 ## ペアリングして確認する
 
@@ -35,11 +35,11 @@ ZIP の `obsidian/` からは `main.js` と `manifest.json` だけを使う。
 
 ## 日常の運用と復旧
 
-- **再接続：** ふだんは Chrome と対象の Vault を開くだけでよい。次の照合・登録時に自動で再接続する。接続を解除した、書籍フォルダや拡張 ID を変更した、または Chrome でフォルダの許可を取り消した場合は、接続設定を開き直す。
-- **Chrome 拡張フォルダの移動：** [拡張 ID は読み込みパスで決まる](https://chromium.googlesource.com/chromium/src/+/157.0.8103.79/extensions/common/extension.cc)。移動前に結果不明の購入を確認する。新しい場所から読み込み直したら、Obsidian に新しい ID を設定し、ペアリングし直す。
+- **再接続：** ふだんは Chrome と対象の Vault を開くだけでよい。次の照合・登録時に自動で再接続する。接続を解除した、書籍フォルダを変更した、または Chrome でフォルダの許可を取り消した場合は、接続を始め直してペアリングする。
+- **Chrome 拡張フォルダの移動：** 移動前に結果不明の購入を確認する。新しい場所から読み込み直した拡張は別の拡張として扱われ、保留記録や選んだフォルダを引き継がない。拡張の接続設定で接続用フォルダを選び直す。
 - **購入結果が不明：** 別の購入として登録し直さず、購入時と同じVault・書籍フォルダに接続し、「同じ購入の結果を再確認」を選ぶ。再確認できない場合はObsidianで本ページの記録を確認する。「保留を解除」は未保存を意味しない。
 - **取り下げと復元：** 誤登録は Obsidian の「本・版を管理」からアーカイブ・復元する。版の移動で移動元・移動先の両方から版が消えた場合は、移動した端末の同じ Vault・書籍フォルダで「本・版を管理」を開き、控えを確認する。控えは Windows では `%LOCALAPPDATA%\BookProps\edition-moves\`、Linux では `$XDG_DATA_HOME/BookProps/edition-moves/`（未設定時は `~/.local/share` 配下）にある。Vault や書籍 JSON には含まれない。
-- **同期：** 書籍ノートは既存の方法で同期できるが、Book Props の設定ファイル `plugins/book-props/data.json` は端末間で上書きしない。接続先や拡張 ID は端末ごとに設定する。[同期で検出できない競合](requirements.md#端末と同期)にも注意する。
+- **同期：** 書籍ノートは既存の方法で同期できるが、Book Props の設定ファイル `plugins/book-props/data.json` は端末間で上書きしない。接続先は端末ごとに設定する。[同期で検出できない競合](requirements.md#端末と同期)にも注意する。
 
 ## 更新と切り戻し
 

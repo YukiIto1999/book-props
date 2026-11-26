@@ -3,7 +3,6 @@ import { decodeConnectionStatus, decodeResponse } from "./messages.ts";
 import { restoreDirectoryPermission, selectConnectionDirectory } from "./pairing-grant.ts";
 import { statusLabel } from "./status.ts";
 
-const id = document.querySelector<HTMLElement>("#extension-id")!;
 const pair = document.querySelector<HTMLButtonElement>("#pair")!;
 const allow = document.querySelector<HTMLButtonElement>("#allow")!;
 const status = document.querySelector<HTMLElement>("#status")!;
@@ -16,7 +15,6 @@ const pairingLabel = {
 } as const;
 // Pairing or disconnecting replaces the opening status check, whose answer would then be stale.
 let changed = false;
-id.textContent = chrome.runtime.id;
 for (const entry of sites) {
   const row = list.appendChild(document.createElement("li"));
   const link = row.appendChild(document.createElement("a"));

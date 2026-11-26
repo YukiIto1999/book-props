@@ -15,9 +15,10 @@ import { WebSocketServer, createWebSocketStream, type WebSocket } from "ws";
 import type { ConnectionGrant } from "./connection-grant.ts";
 import { startTls } from "./tls-identity.ts";
 
-export const extensionIdPattern = /^[a-p]{32}$/;
+// ペアリングまでどの拡張かは決めず、接続用フォルダで証明した拡張のOriginにセッションを結び付ける
+const extensionOrigin = /^chrome-extension:\/\/[a-p]{32}$/;
 const sessionMs = 4 * 60 * 60 * 1000;
-type Credentials = { value: string; expiresAt: number };
+type Credentials = { value: string; expiresAt: number; origin: string };
 type Authorized = Exclude<Request, { action: "pair" | "status" }>;
 
 /**
@@ -32,8 +33,13 @@ export function scopeOf(vaultPath: string, folder: string): string {
     .digest("hex");
 }
 
-function matches(secret: Credentials | undefined, supplied: string | undefined): boolean {
-  if (!secret || Date.now() >= secret.expiresAt || !supplied) return false;
+function matches(
+  secret: Credentials | undefined,
+  supplied: string | undefined,
+  origin: string,
+): boolean {
+  if (!secret || Date.now() >= secret.expiresAt || !supplied || secret.origin !== origin)
+    return false;
   const a = Buffer.from(secret.value);
   const b = Buffer.from(supplied);
   return a.length === b.length && timingSafeEqual(a, b);
@@ -63,7 +69,6 @@ export class Connection {
 
   private constructor(
     private readonly host: string,
-    private readonly extensionOrigin: string,
     private readonly scope: string,
     private readonly anchor: string,
     private readonly context: SecureContext,
@@ -80,14 +85,12 @@ export class Connection {
 
   static async start(
     host: string,
-    extensionId: string,
     port: number,
     scope: string,
     grant: ConnectionGrant,
     dispatch: (input: Authorized, signal: AbortSignal) => Promise<Response>,
   ): Promise<Connection> {
     if (
-      !extensionIdPattern.test(extensionId) ||
       !Number.isSafeInteger(port) ||
       port < 0 ||
       port > 65535 ||
@@ -95,15 +98,7 @@ export class Connection {
     )
       throw new Error("接続設定が不正です。");
     const { anchor, context } = await startTls(host);
-    const connection = new Connection(
-      host,
-      `chrome-extension://${extensionId}`,
-      scope,
-      anchor,
-      context,
-      grant,
-      dispatch,
-    );
+    const connection = new Connection(host, scope, anchor, context, grant, dispatch);
     const ready = Promise.withResolvers<void>();
     connection.listener.once("error", ready.reject);
     connection.listener.listen(port, "127.0.0.1", ready.resolve);
@@ -132,24 +127,24 @@ export class Connection {
     return this.port;
   }
 
-  private async pair(code: string, disconnected: AbortSignal): Promise<Response> {
+  private async pair(code: string, disconnected: AbortSignal, origin: string): Promise<Response> {
     if (this.stopped || this.pairing) return { kind: "unauthorized" };
     this.pairing = true;
     try {
       const proof = createHash("sha256").update(pairingChallenge(this.anchor, code)).digest("hex");
       if (!(await this.grant.consume(proof)) || this.stopped || disconnected.aborted)
         return { kind: "unauthorized" };
-      return this.issueSession();
+      return this.issueSession(origin);
     } finally {
       this.pairing = false;
     }
   }
 
-  private issueSession(): Response {
+  private issueSession(origin: string): Response {
     this.resetSessionLifetime();
     const expiresAt = Date.now() + sessionMs;
     const value = randomBytes(32).toString("base64url");
-    this.session = { value, expiresAt };
+    this.session = { value, expiresAt, origin };
     return { kind: "paired", token: value, expiresAt, scope: this.scope };
   }
 
@@ -169,20 +164,22 @@ export class Connection {
   }
 
   private readonly upgrade = (req: IncomingMessage, socket: Duplex, head: Buffer): void => {
+    const { origin } = req.headers;
     if (
       req.socket.remoteAddress !== "127.0.0.1" ||
       req.headers.host !== `${this.host}:${this.port}` ||
-      req.headers.origin !== this.extensionOrigin ||
+      !origin ||
+      !extensionOrigin.test(origin) ||
       req.url !== endpoint ||
       this.sockets.clients.size >= 16
     ) {
       socket.destroy();
       return;
     }
-    this.sockets.handleUpgrade(req, socket, head, (client) => this.open(client));
+    this.sockets.handleUpgrade(req, socket, head, (client) => this.open(client, origin));
   };
 
-  private open(client: WebSocket): void {
+  private open(client: WebSocket, origin: string): void {
     const transport = createWebSocketStream(client);
     const tls = new TLSSocket(transport, { isServer: true, secureContext: this.context });
     const disconnected = new AbortController();
@@ -218,19 +215,23 @@ export class Connection {
       const reply = (outcome: Response) => {
         if (!tls.destroyed) tls.write(`${JSON.stringify(outcome)}\n`);
       };
-      void this.receive(body, disconnected.signal).then(reply, () =>
+      void this.receive(body, disconnected.signal, origin).then(reply, () =>
         reply({ kind: "unavailable" }),
       );
     };
     tls.on("data", onData);
   }
 
-  private async receive(body: Buffer, disconnected: AbortSignal): Promise<Response> {
+  private async receive(
+    body: Buffer,
+    disconnected: AbortSignal,
+    origin: string,
+  ): Promise<Response> {
     const parsed = decode(body);
     if (!parsed?.success) return { kind: "invalidRequest" };
     const { request, token } = parsed.data;
-    if (request.action === "pair") return this.pair(request.code, disconnected);
-    if (!matches(this.session, token)) return { kind: "unauthorized" };
+    if (request.action === "pair") return this.pair(request.code, disconnected, origin);
+    if (!matches(this.session, token, origin)) return { kind: "unauthorized" };
     if (request.action === "status") return { kind: "connected" };
     const deadline = AbortSignal.any([
       disconnected,

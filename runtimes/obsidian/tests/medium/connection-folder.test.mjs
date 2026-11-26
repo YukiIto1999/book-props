@@ -9,7 +9,7 @@ import { ConnectionGrant, vaultGrant } from "../../src/connection-grant.ts";
 import { establish, SetupFailure } from "../../src/connection-setup.ts";
 import { Connection, scopeOf } from "../../src/connection.ts";
 import { createHost } from "../../src/tls-identity.ts";
-import { extension, post, prove, readCard } from "./connection-support.mjs";
+import { post, prove, readCard } from "./connection-support.mjs";
 
 async function temporary(context, prefix) {
   const path = await mkdtemp(join(tmpdir(), prefix));
@@ -28,7 +28,7 @@ function setup(context, vault, profile) {
   const scope = scopeOf(vault, "Books");
   const records = [];
   const start = async (grant) => {
-    const connection = await Connection.start(host, extension, 0, scope, grant, async () => ({
+    const connection = await Connection.start(host, 0, scope, grant, async () => ({
       kind: "unavailable",
     }));
     context.after(() => connection.stop());

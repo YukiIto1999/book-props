@@ -15,13 +15,7 @@ type Owner = Readonly<{
   /** 接続設定の保存 */
   save(next: Configuration): Promise<void>;
   /** 拡張の要求を書籍フォルダへ渡す受付の開始 */
-  listen(
-    host: string,
-    extensionId: string,
-    port: number,
-    scope: string,
-    grant: ConnectionGrant,
-  ): Promise<Connection>;
+  listen(host: string, port: number, scope: string, grant: ConnectionGrant): Promise<Connection>;
   /** プラグインの無効化の有無 */
   unloaded(): boolean;
 }>;
@@ -76,10 +70,9 @@ export class VaultConnection {
 
   /**
    * 拡張からの受付の開始と接続設定の保存
-   * @param extensionId - 受け付ける拡張の ID
    * @returns 保存まで済めば `true`、失敗すれば利用者に伝える文
    */
-  async connect(extensionId: string): Promise<true | string> {
+  async connect(): Promise<true | string> {
     const { owner } = this;
     const previous = owner.config();
     const host = previous.host ?? createHost();
@@ -91,12 +84,11 @@ export class VaultConnection {
         scope,
         saved: previous.grant,
         running: this.take(),
-        start: (grant) => owner.listen(host, extensionId, previous.port ?? 0, scope, grant),
+        start: (grant) => owner.listen(host, previous.port ?? 0, scope, grant),
         save: async (grant, connection) => {
           if (owner.unloaded()) throw new Error("Book Props が無効になりました。");
           await owner.save({
             ...previous,
-            extensionId,
             host,
             port: connection.listeningPort,
             grant,
@@ -117,10 +109,9 @@ export class VaultConnection {
 
   /** 起動時の受付の再開と、v0.3.0 までの接続用フォルダからの移行 */
   async restore(): Promise<void> {
-    const { extensionId, grant } = this.owner.config();
-    if (!this.owner.folder() || !extensionId || !grant || grant.name || this.connection)
-      return this.resume();
-    const migrated = await this.connect(extensionId);
+    const { grant } = this.owner.config();
+    if (!this.owner.folder() || !grant || grant.name || this.connection) return this.resume();
+    const migrated = await this.connect();
     new Notice(
       migrated === true
         ? "Book Props: 接続用フォルダを移しました。Chrome の接続設定で新しい接続用フォルダを選び直してください。"
@@ -136,9 +127,9 @@ export class VaultConnection {
   private async resume(reopened?: ConnectionGrant): Promise<void> {
     const { owner } = this;
     const snapshot = owner.config();
-    const { host, extensionId, port, grant } = snapshot;
+    const { host, port, grant } = snapshot;
     const folder = owner.folder();
-    if (!folder || !host || !extensionId || !port || !grant?.name || this.connection) return;
+    if (!folder || !host || !port || !grant?.name || this.connection) return;
     if (owner.unloaded()) return;
     let directory = reopened;
     if (!directory) {
@@ -148,13 +139,13 @@ export class VaultConnection {
         directory = await vaultGrant(vault, { id: grant.id, name: grant.name, scope: grant.scope });
       } catch {
         new Notice(
-          "Book Props: 接続用フォルダを使えません。Book Props の設定で接続設定を適用し直してください。",
+          "Book Props: 接続用フォルダを使えません。Book Props の設定で Chrome との接続を始め直してください。",
         );
         return;
       }
     }
     try {
-      const restored = await owner.listen(host, extensionId, port, grant.scope, directory);
+      const restored = await owner.listen(host, port, grant.scope, directory);
       if (owner.unloaded() || owner.config() !== snapshot || this.connection) restored.stop();
       else this.connection = restored;
     } catch {

@@ -4,7 +4,6 @@ import { decodeHost } from "./tls-identity.ts";
 export type GrantRecord = Readonly<{ id: string; scope: string; name?: string }>;
 export type Configuration = {
   folder?: string;
-  extensionId?: string;
   port?: number;
   host?: string;
   grant?: GrantRecord;
@@ -17,7 +16,6 @@ function field(record: unknown, key: string): unknown {
 
 export function decodeConfiguration(saved: unknown): Configuration {
   const folder = field(saved, "folder");
-  const extensionId = field(saved, "extensionId");
   const port = field(saved, "port");
   const host =
     decodeHost(field(saved, "host")) ?? decodeHost(field(field(saved, "identity"), "name"));
@@ -27,7 +25,6 @@ export function decodeConfiguration(saved: unknown): Configuration {
   const name = field(grant, "name");
   return {
     ...(typeof folder === "string" ? { folder } : {}),
-    ...(typeof extensionId === "string" ? { extensionId } : {}),
     ...(typeof port === "number" ? { port } : {}),
     ...(host ? { host } : {}),
     ...(typeof id === "string" && typeof scope === "string"

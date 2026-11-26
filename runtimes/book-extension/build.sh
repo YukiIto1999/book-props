@@ -16,3 +16,7 @@ fi
 esbuild src/worker.ts --bundle --format=esm --platform=browser --target=chrome130 --minify --outdir=dist
 esbuild src/{content,options,popup}.ts --bundle --format=iife --platform=browser --target=chrome130 --minify --outdir=dist
 cp manifest.json ui/{popup.html,options.html,ui.css} "$wasm/vault_tls_bg.wasm" dist/
+resvg --width 16 --height 16 icons/icon-16.svg dist/icon-16.png
+for size in 32 48 128; do
+  resvg --width "$size" --height "$size" icons/icon.svg "dist/icon-$size.png"
+done

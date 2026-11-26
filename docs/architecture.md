@@ -178,7 +178,7 @@ Obsidian は IPv4 ループバックにだけ待ち受けを開く。Chrome 拡�
 
 Obsidian 側は Vault・書籍フォルダ・拡張 ID に対応する接続用フォルダを、書籍や Vault の外に作る。利用者が Chrome のフォルダ選択でこのフォルダだけを承認すると、拡張は Chrome の File System Access API が管理するハンドルを記憶する。商品ページにはハンドルを渡さない。
 
-接続用フォルダはホームの `Book Props` の下に Vault 名で作り、同じ名前のフォルダがあれば `書庫 (2)` のように番号を付ける。[Chromium のフォルダ選択](https://chromium.googlesource.com/chromium/src/+/157.0.8103.79/chrome/browser/file_system_access/chrome_file_system_access_permission_context.cc)は `%APPDATA%` と `%LOCALAPPDATA%` の下を選べず、ドキュメントは同期先へリダイレクトされうるため、ホームの下に置く。設定には識別子とフォルダ名を保存する。再利用するのは、フォルダ名が `Book Props` 直下の一階層を指し、フォルダの接続情報が保存済みの識別子を持つときだけである。一致しなければ別の接続のフォルダとして扱い、上書きせずに番号付きの新しいフォルダを作る。
+接続用フォルダはホームの `Book Props` の下に Vault 名で作り、同じ名前のフォルダがあれば `書庫 (2)` のように番号を付ける。[Chromium のフォルダ選択](https://chromium.googlesource.com/chromium/src/+/157.0.8103.79/chrome/browser/file_system_access/chrome_file_system_access_permission_context.cc)は `%APPDATA%` と `%LOCALAPPDATA%` の下を選べず、ドキュメントは同期先へリダイレクトされうるため、ホームの下に置く。設定には識別子とフォルダ名を保存する。再利用するのは、フォルダ名が `Book Props` 直下の一階層を指し、フォルダの接続情報が保存済みの識別子か同じ書籍範囲の識別子を持つときだけである。書籍範囲の一致は、新しい識別子を公開した後に設定を保存できずに終わった場合を自分のフォルダとして扱うためにある。どちらも一致しなければ別の接続のフォルダとして扱い、上書きせずに番号付きの新しいフォルダを作る。
 
 フォルダで共有するのは、ループバック接続先・書籍範囲の識別子・起動中の公開信頼アンカーと、一時コードの SHA-256 検証値だけである。コードは拡張が都度生成し、フォルダから取得したアンカーを使って TLS で接続先を認証してから提示する。Obsidian は現在のアンカーとコードに対応する検証値がフォルダにあり、未使用のときにだけセッションを発行する。検証値を通信資格情報として送ることはできない。
 

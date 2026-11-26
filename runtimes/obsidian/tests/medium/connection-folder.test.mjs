@@ -133,6 +133,20 @@ await test("reconfiguring renews the folder's connection ID and a failed save ke
   assert.equal(kept.directory, second.grant.directory);
 });
 
+await test("a renewed ID published without being saved leaves the folder to the same Vault", async (context) => {
+  const home = await temporary(context, "book-props-profile-");
+  const { records, start, options } = setup(context, await vaultNamed(context, "書庫"), home);
+  const first = await establish(options);
+  first.stop();
+  const unsaved = first.grant.renew();
+  (await start(unsaved)).stop();
+  assert.equal((await readCard(first.grant)).grantId, unsaved.id);
+  const restored = await establish({ ...options, saved: records[0] });
+  assert.equal(restored.grant.directory, first.grant.directory);
+  assert.deepEqual(await readdir(join(home, "Book Props")), ["書庫"]);
+  assert.equal((await readCard(restored.grant)).grantId, records[1].id);
+});
+
 await test("moving a v0.3.0 connection removes its folder from the home directory", async (context) => {
   const home = await temporary(context, "book-props-profile-");
   const vault = await vaultNamed(context, "書庫");

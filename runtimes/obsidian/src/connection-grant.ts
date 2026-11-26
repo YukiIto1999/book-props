@@ -76,8 +76,8 @@ foreach ($ace in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityI
 }
 `;
 
-/** 保存済みの接続の識別子と接続用フォルダ名の組 */
-export type GrantLocation = Readonly<{ id: string; name: string }>;
+/** 保存済みの接続の識別子と接続用フォルダ名、書籍範囲の組 */
+export type GrantLocation = Readonly<{ id: string; name: string; scope: string }>;
 
 function folderName(name: string): boolean {
   return name.length > 0 && name.length <= maxNameLength && !unsafeName.test(name);
@@ -104,7 +104,7 @@ export async function vaultGrant(
 ): Promise<ConnectionGrant> {
   const vault = await realpath(vaultPath);
   const grant = saved
-    ? await ConnectionGrant.open(saved.id, saved.name, profile)
+    ? await ConnectionGrant.open(saved.id, saved.name, profile, saved.scope)
     : await ConnectionGrant.create(basename(vault), profile);
   const path = relative(vault, grant.directory);
   if (path === "" || (!isAbsolute(path) && path !== ".." && !path.startsWith(`..${sep}`))) {
@@ -169,10 +169,16 @@ export class ConnectionGrant {
    * @param id - 保存済みの接続の識別子
    * @param name - 保存済みの接続用フォルダ名
    * @param profile - 接続用フォルダの親の `Book Props` を置くホーム
-   * @returns 同じ識別子の接続情報を持つフォルダ
-   * @throws 名前が `Book Props` 直下の一階層でない場合、または接続情報が別の接続のものか読めない場合
+   * @param scope - 自分の書籍範囲の識別子、識別子の照合だけにするならなし
+   * @returns 同じ識別子か同じ書籍範囲の接続情報を持つフォルダ
+   * @throws 名前が `Book Props` 直下の一階層でない場合、または接続情報が別の書籍範囲のものか読めない場合
    */
-  static async open(id: string, name: string, profile = homedir()): Promise<ConnectionGrant> {
+  static async open(
+    id: string,
+    name: string,
+    profile = homedir(),
+    scope?: string,
+  ): Promise<ConnectionGrant> {
     if (!grantIdPattern.test(id) || !folderName(name))
       throw new Error("接続用フォルダの記録が不正です。");
     const grant = await ConnectionGrant.check(await homeOf(profile), id, name, false);
@@ -180,7 +186,9 @@ export class ConnectionGrant {
       decodeConnectionCard,
       () => undefined,
     );
-    if (card?.grantId !== id) throw new Error("接続用フォルダは別の接続に使われています。");
+    // 新しい識別子の公開後に保存できずに終わった同じ書籍範囲のフォルダは保存済みの識別子で再公開
+    if (card?.grantId !== id && (scope === undefined || card?.scope !== scope))
+      throw new Error("接続用フォルダは別の接続に使われています。");
     return grant;
   }
 

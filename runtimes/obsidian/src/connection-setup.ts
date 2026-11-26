@@ -44,7 +44,9 @@ export async function establish(setup: Setup): Promise<Connection> {
   const previous =
     running ??
     (saved?.name && saved.scope === scope
-      ? await vaultGrant(vault, { id: saved.id, name: saved.name }, profile).catch(() => undefined)
+      ? await vaultGrant(vault, { id: saved.id, name: saved.name, scope }, profile).catch(
+          () => undefined,
+        )
       : undefined);
   let grant: ConnectionGrant;
   try {

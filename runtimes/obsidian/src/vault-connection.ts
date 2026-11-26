@@ -69,6 +69,7 @@ export class VaultConnection {
     const grant = await vaultGrant(this.owner.vaultPath(), {
       id: saved.id,
       name: saved.name,
+      scope: saved.scope,
     }).catch(() => undefined);
     await grant?.clear().catch(() => undefined);
   }
@@ -144,7 +145,7 @@ export class VaultConnection {
       try {
         const vault = owner.vaultPath();
         if (grant.scope !== scopeOf(vault, folder)) return;
-        directory = await vaultGrant(vault, { id: grant.id, name: grant.name });
+        directory = await vaultGrant(vault, { id: grant.id, name: grant.name, scope: grant.scope });
       } catch {
         new Notice(
           "Book Props: 接続用フォルダを使えません。Book Props の設定で接続設定を適用し直してください。",

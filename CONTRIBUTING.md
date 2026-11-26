@@ -49,15 +49,15 @@ devenv shell -- pnpm verify
 手動実行ではビルドの証明を発行せず、公開もしない。
 
 手元で同じ梱包と検査を行う場合は、依存を導入した対象コミットで次を実行する。
-`v0.3.0` はルートと両方のコンポーネントに共通する版に置き換える。
+`v0.4.0` はルートと両方のコンポーネントに共通する版に置き換える。
 どのコマンドも失敗したら、次へ進まない。
 
 ```sh
 devenv shell -- pnpm verify:push
 mkdir -p work
-devenv --profile release shell -- pnpm package:release v0.3.0 work/package-v0.3.0
-(cd work/package-v0.3.0 && sha256sum --check SHA256SUMS)
-devenv --profile release shell -- python3 tools/scripts/audit-release.py work/package-v0.3.0/book-props-v0.3.0.zip
+devenv --profile release shell -- pnpm package:release v0.4.0 work/package-v0.4.0
+(cd work/package-v0.4.0 && sha256sum --check SHA256SUMS)
+devenv --profile release shell -- python3 tools/scripts/audit-release.py work/package-v0.4.0/book-props-v0.4.0.zip
 ```
 
 Rust を更新する場合は、[`devenv.nix`](devenv.nix) の `rustRevision` と、同じリビジョンの Rust リポジトリ直下にある `COPYRIGHT`・`LICENSE-APACHE`・`LICENSE-MIT` の写しを一緒に更新する。
@@ -70,15 +70,15 @@ Vault、接続設定、資格情報は配布物に入れない。
 ### 版タグと公開
 
 公開するコードが既定ブランチに入っていることを確認し、そのコミットに注釈付きタグを付ける。
-`v0.3.0` はルートと両方のコンポーネントに共通する版に置き換える。
+`v0.4.0` はルートと両方のコンポーネントに共通する版に置き換える。
 タグを push する直前に Immutable Releases が有効であることを確認する。
 Actions の標準トークンでは公開前にこの設定を照会できないため、リポジトリの管理権限がある GitHub CLI で確認する。
 
 ```bash
 read -r -p 'Source のコミット SHA: ' source
 test "$(gh api repos/YukiIto1999/book-props/immutable-releases --jq .enabled)" = true &&
-  git tag -a v0.3.0 "$source" -m 'Book Props v0.3.0' &&
-  git push origin refs/tags/v0.3.0
+  git tag -a v0.4.0 "$source" -m 'Book Props v0.4.0' &&
+  git push origin refs/tags/v0.4.0
 ```
 
 タグで起動した走行が ZIP を一度だけ梱包し、SBOM と既知の脆弱性を検査する。

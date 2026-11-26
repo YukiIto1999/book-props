@@ -23,10 +23,10 @@ async function loadPageState(): Promise<PageState | undefined> {
 
 async function stateText(state: PageState): Promise<string> {
   if (state.pending) return statusLabel({ kind: "unknown" }, true);
-  // After a browser restart the folder permission waits for the user, so the extension cannot pair again.
+  // A one-time folder grant ends with the browser, an extension reload, or the last extension page, and the extension cannot pair again until the user allows it.
   const blocked = state.reply.kind === "unavailable" || state.reply.kind === "unauthorized";
   if (blocked && (await directoryPermission().catch(() => undefined)) === "prompt")
-    return "ブラウザを開き直したため、接続用フォルダの許可が必要です。「接続設定・対応サイト」を開いて許可してください。";
+    return "接続用フォルダの許可が切れています。「接続設定・対応サイト」を開いて許可してください。";
   if (state.hasBook) return statusLabel(state.reply, true);
   return state.supported
     ? "書誌を確認できません。Obsidianで本を指定してください。"

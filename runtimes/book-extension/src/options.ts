@@ -16,7 +16,7 @@ const pairingLabel = {
   unpaired: "ペアリングされていません。",
   unknown: "接続を確認できません。Obsidian を開いてください。",
   dormant:
-    "ブラウザを開き直したため、接続用フォルダの許可の確認が必要です。「今後も自動で接続する」を押し、確認では毎回許可する選択肢を選んでください。",
+    "接続用フォルダの許可が切れています。「今後も自動で接続する」を押して許可してください。毎回許可する選択肢が出たらそれを選ぶと、以後は自動で接続します。",
 } as const;
 // Pairing or disconnecting replaces the opening status check, whose answer would then be stale.
 let changed = false;
@@ -29,7 +29,7 @@ for (const entry of sites) {
   link.rel = "noopener noreferrer";
 }
 
-/** The browser keeps the folder handle across restarts but asks again before the extension may use it. */
+/** The browser keeps the folder handle, but a one-time grant ends when the browser restarts, the extension reloads, or its last page closes. */
 async function describe(current: ConnectionStatus): Promise<void> {
   const permission =
     current.state === "unknown" ? await directoryPermission().catch(() => undefined) : undefined;
@@ -78,8 +78,7 @@ async function allowAutomatically(): Promise<void> {
   try {
     const permission = await restoreDirectoryPermission();
     if (permission !== "granted") {
-      status.textContent =
-        "許可されませんでした。毎回許可する選択肢を選ぶと、ブラウザを開き直しても自動で接続します。";
+      status.textContent = "許可されませんでした。接続するには、もう一度押して許可してください。";
       return;
     }
     allow.hidden = true;

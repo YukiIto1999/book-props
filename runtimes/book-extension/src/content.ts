@@ -6,20 +6,23 @@ import { statusLabel } from "./status.ts";
 let last = "";
 let toast: HTMLElement | undefined;
 let auto: number | undefined;
+// Important :host rules outrank the page's own CSS, and page selectors cannot reach into the shadow tree.
+const toastStyle = new CSSStyleSheet();
+toastStyle.replaceSync(
+  ":host{all:initial!important;position:fixed!important;top:16px!important;right:16px!important;z-index:2147483647!important;max-width:calc(100vw - 32px)!important;pointer-events:none!important}" +
+    "[role=status]{font:600 14px/1.45 system-ui,sans-serif;color:white;background:#23262d;padding:10px 14px;border-radius:8px;box-shadow:0 2px 12px #0005}",
+);
 
 function show(reply: unknown, manual: boolean): void {
   const text = statusLabel(decodeResponse(reply, { kind: "unavailable" }), manual);
   if (!text) return;
   toast?.remove();
   const host = document.createElement("div");
-  host.style.cssText =
-    "all:initial;position:fixed;top:16px;right:16px;z-index:2147483647;max-width:calc(100vw - 32px);pointer-events:none";
-  const body = document.createElement("div");
+  const root = host.attachShadow({ mode: "open" });
+  root.adoptedStyleSheets = [toastStyle];
+  const body = root.appendChild(document.createElement("div"));
   body.setAttribute("role", "status");
-  body.style.cssText =
-    "font:600 14px/1.45 system-ui,sans-serif;color:white;background:#23262d;padding:10px 14px;border-radius:8px;box-shadow:0 2px 12px #0005";
   body.textContent = text;
-  host.attachShadow({ mode: "open" }).append(body);
   document.body.append(host);
   toast = host;
   window.setTimeout(() => host.remove(), manual ? 6500 : 4500);

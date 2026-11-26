@@ -4,6 +4,14 @@ packages:
   - runtimes/*
   - tests/arch/medium/typescript
   - tests/e2e/large/desktop-release
+  - tools/obsidian-review
+
+# eslint-plugin-obsidianmd supports ESLint 10, but three plugins it bundles have not declared it yet.
+peerDependencyRules:
+  allowedVersions:
+    "@microsoft/eslint-plugin-sdl>eslint": "10"
+    eslint-plugin-import>eslint: "10"
+    eslint-plugin-react>eslint: "10"
 
 allowBuilds:
   classic-level: false

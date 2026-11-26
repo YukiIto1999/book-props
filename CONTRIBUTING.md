@@ -14,7 +14,7 @@ devenv shell -- pnpm verify
 ## 変更と検証
 
 - 利用者から見える契約は[要件](docs/requirements.md)、コードの責務と境界は[アーキテクチャ](docs/architecture.md)を確認する。生成物ではなく正本を変更し、振る舞いを変えた場合は同じ変更で要件と検査を更新する。
-- `devenv shell -- pnpm verify` はCIと同じ入口で、整形、lint、型、依存境界、業務と保存のテストを実行する。`devenv shell -- pnpm verify:push` は成果物の生成とTLS実結合を加える。対象と依存は[`project.json`](project.json)を参照する。
+- `devenv shell -- pnpm verify` はCIと同じ入口で、整形、lint、型、依存境界、業務と保存のテストを実行する。Obsidian コミュニティの自動審査と同じ規則でリポジトリの TypeScript を調べる [`tools/obsidian-review`](tools/obsidian-review/eslint.config.mjs) も含み、審査で誤りになる指摘があれば失敗する。`devenv shell -- pnpm verify:push` は成果物の生成とTLS実結合を加える。対象と依存は[`project.json`](project.json)を参照する。
 - 画面や保存経路を変えた場合は、合成データの一時Vaultと別のChromeプロファイルを使い、操作後の表示とMarkdownの両方を確かめる。報告には対象のコミット、OSとアプリの版、操作、期待結果と実際の結果を添える。証明書の秘密鍵、ペアリングコード、資格情報、利用者のVaultの内容は添付しない。
 
 ## コミット

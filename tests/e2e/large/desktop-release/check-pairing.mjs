@@ -97,7 +97,11 @@ export async function checkVaultIsolation({
     } finally {
       await disconnect.dispose();
     }
-    await text(options, "#status", "このChromeの接続を解除しました。Obsidian側でも解除できます。");
+    await text(
+      options,
+      "#status",
+      "このブラウザの接続を解除しました。Obsidian 側でも解除できます。",
+    );
     const reopened = await restartChrome();
     await text(reopened.options, "#status", "ペアリングされていません。");
     await reopened.options.screenshot({

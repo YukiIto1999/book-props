@@ -1,5 +1,6 @@
 import type { Response } from "@book-props/vault-contract";
 import { decodePageState, decodeResponse, type PageState } from "./messages.ts";
+import { directoryPermission } from "./pairing-grant.ts";
 import { statusLabel } from "./status.ts";
 
 const status = document.querySelector<HTMLElement>("#status")!;
@@ -20,8 +21,12 @@ async function loadPageState(): Promise<PageState | undefined> {
   }
 }
 
-function stateText(state: PageState): string {
+async function stateText(state: PageState): Promise<string> {
   if (state.pending) return statusLabel({ kind: "unknown" }, true);
+  // After a browser restart the folder permission waits for the user, so the extension cannot pair again.
+  const blocked = state.reply.kind === "unavailable" || state.reply.kind === "unauthorized";
+  if (blocked && (await directoryPermission().catch(() => undefined)) === "prompt")
+    return "ブラウザを開き直したため、接続用フォルダの許可が必要です。「接続設定・対応サイト」を開いて許可してください。";
   if (state.hasBook) return statusLabel(state.reply, true);
   return state.supported
     ? "書誌を確認できません。Obsidianで本を指定してください。"
@@ -45,7 +50,7 @@ async function refresh(message?: string): Promise<void> {
   forget.hidden = !state.pending;
   reconcile.disabled = forget.disabled = !state.pending;
   wish.textContent = wanted ? "購入希望を解除" : "欲しい本に追加";
-  status.textContent = message ?? stateText(state);
+  status.textContent = message ?? (await stateText(state));
 }
 
 async function act(kind: string): Promise<void> {

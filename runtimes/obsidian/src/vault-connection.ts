@@ -114,7 +114,7 @@ export class VaultConnection {
     const migrated = await this.connect();
     new Notice(
       migrated === true
-        ? "Book Props: 接続用フォルダを移しました。Chrome の接続設定で新しい接続用フォルダを選び直してください。"
+        ? "Book Props: 接続用フォルダを移しました。ブラウザ拡張の接続設定で新しい接続用フォルダを選び直してください。"
         : `Book Props: ${migrated}`,
       12_000,
     );

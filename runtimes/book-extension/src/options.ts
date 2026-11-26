@@ -1,6 +1,10 @@
 import { sites } from "@book-props/book-products";
-import { decodeConnectionStatus, decodeResponse } from "./messages.ts";
-import { restoreDirectoryPermission, selectConnectionDirectory } from "./pairing-grant.ts";
+import { decodeConnectionStatus, decodeResponse, type ConnectionStatus } from "./messages.ts";
+import {
+  directoryPermission,
+  restoreDirectoryPermission,
+  selectConnectionDirectory,
+} from "./pairing-grant.ts";
 import { statusLabel } from "./status.ts";
 
 const pair = document.querySelector<HTMLButtonElement>("#pair")!;
@@ -10,8 +14,9 @@ const list = document.querySelector<HTMLUListElement>("#sites")!;
 const pairingLabel = {
   paired: "ペアリング済みです。",
   unpaired: "ペアリングされていません。",
-  unknown:
-    "接続を確認できません。Obsidian を開いてください。接続用フォルダの許可が切れている場合は「今後も自動で接続する」を押してください。",
+  unknown: "接続を確認できません。Obsidian を開いてください。",
+  dormant:
+    "ブラウザを開き直したため、接続用フォルダの許可の確認が必要です。「今後も自動で接続する」を押し、確認では毎回許可する選択肢を選んでください。",
 } as const;
 // Pairing or disconnecting replaces the opening status check, whose answer would then be stale.
 let changed = false;
@@ -24,64 +29,60 @@ for (const entry of sites) {
   link.rel = "noopener noreferrer";
 }
 
-status.textContent = "接続を確認しています…";
-void chrome.runtime.sendMessage({ kind: "status" }).then(
-  (reply: unknown) => {
-    const current = decodeConnectionStatus(reply);
-    if (!changed) {
-      status.textContent = pairingLabel[current.state];
-      allow.hidden = current.configured === undefined;
-    }
-  },
-  () => {
-    if (!changed) status.textContent = pairingLabel.unknown;
-  },
-);
+/** The browser keeps the folder handle across restarts but asks again before the extension may use it. */
+async function describe(current: ConnectionStatus): Promise<void> {
+  const permission =
+    current.state === "unknown" ? await directoryPermission().catch(() => undefined) : undefined;
+  if (changed) return;
+  const dormant = permission === "prompt";
+  status.textContent = pairingLabel[dormant ? "dormant" : current.state];
+  allow.hidden = !dormant;
+}
 
-pair.addEventListener("click", () => {
+async function pairWithFolder(): Promise<void> {
   changed = true;
   pair.disabled = true;
   status.textContent = "ペアリングを確認しています。";
-  void (async () => {
-    try {
-      const grantId = await selectConnectionDirectory();
-      if (!grantId) {
-        status.textContent =
-          "Obsidian の Book Props 設定に表示される接続用フォルダを選んでください。";
-        return;
-      }
-      status.textContent = "Obsidian への接続を確認しています。";
-      const reply = decodeResponse(await chrome.runtime.sendMessage({ kind: "pair", grantId }), {
-        kind: "unavailable",
-      });
+  try {
+    const grantId = await selectConnectionDirectory();
+    if (!grantId) {
       status.textContent =
-        reply.kind === "saved"
-          ? "ペアリングしました。初回設定の仕上げに「今後も自動で接続する」で「毎回許可」を選んでください。"
-          : "ペアリングできません。Obsidian の起動と接続用フォルダを確認してください。";
-      if (reply.kind === "saved") allow.hidden = false;
-    } catch (error) {
-      const name = error instanceof DOMException ? error.name : undefined;
-      status.textContent =
-        name === "AbortError"
-          ? "接続用フォルダの選択が取り消されました。"
-          : name === "NotAllowedError" || name === "SecurityError"
-            ? "Chrome が接続用フォルダへのアクセスを許可しませんでした。"
-            : "接続用フォルダの読み込みに失敗しました。";
-    } finally {
-      pair.disabled = false;
+        "Obsidian の Book Props 設定に表示される接続用フォルダを選んでください。";
+      return;
     }
-  })();
-});
+    status.textContent = "Obsidian への接続を確認しています。";
+    const reply = decodeResponse(await chrome.runtime.sendMessage({ kind: "pair", grantId }), {
+      kind: "unavailable",
+    });
+    status.textContent =
+      reply.kind === "saved"
+        ? "ペアリングしました。商品ページを開くと所持を確認します。"
+        : "ペアリングできません。Obsidian の起動と接続用フォルダを確認してください。";
+    if (reply.kind === "saved") allow.hidden = true;
+  } catch (error) {
+    const name = error instanceof DOMException ? error.name : undefined;
+    status.textContent =
+      name === "AbortError"
+        ? "接続用フォルダの選択が取り消されました。"
+        : name === "NotAllowedError" || name === "SecurityError"
+          ? "ブラウザが接続用フォルダへのアクセスを許可しませんでした。"
+          : "接続用フォルダの読み込みに失敗しました。";
+  } finally {
+    pair.disabled = false;
+  }
+}
 
-allow.addEventListener("click", async () => {
+async function allowAutomatically(): Promise<void> {
   changed = true;
   allow.disabled = true;
   try {
     const permission = await restoreDirectoryPermission();
     if (permission !== "granted") {
-      status.textContent = "許可されませんでした。「毎回許可」を選ぶと再起動後も自動で接続します。";
+      status.textContent =
+        "許可されませんでした。毎回許可する選択肢を選ぶと、ブラウザを開き直しても自動で接続します。";
       return;
     }
+    allow.hidden = true;
     const reply = decodeConnectionStatus(await chrome.runtime.sendMessage({ kind: "status" }));
     status.textContent = pairingLabel[reply.state];
   } catch {
@@ -89,16 +90,27 @@ allow.addEventListener("click", async () => {
   } finally {
     allow.disabled = false;
   }
-});
+}
 
-document.querySelector("#disconnect")?.addEventListener("click", async () => {
+async function disconnect(): Promise<void> {
   changed = true;
   const reply = decodeResponse(await chrome.runtime.sendMessage({ kind: "disconnect" }), {
     kind: "unavailable",
   });
   status.textContent =
     reply.kind === "saved"
-      ? "このChromeの接続を解除しました。Obsidian側でも解除できます。"
+      ? "このブラウザの接続を解除しました。Obsidian 側でも解除できます。"
       : statusLabel(reply, true);
   if (reply.kind === "saved") allow.hidden = true;
-});
+}
+
+status.textContent = "接続を確認しています…";
+void chrome.runtime.sendMessage({ kind: "status" }).then(
+  (reply: unknown) => describe(decodeConnectionStatus(reply)),
+  () => {
+    if (!changed) status.textContent = pairingLabel.unknown;
+  },
+);
+pair.addEventListener("click", () => void pairWithFolder());
+allow.addEventListener("click", () => void allowAutomatically());
+document.querySelector("#disconnect")?.addEventListener("click", () => void disconnect());

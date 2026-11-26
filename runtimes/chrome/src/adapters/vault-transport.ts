@@ -4,18 +4,10 @@ import {
   maxReplyBytes,
   maxRequestBytes,
   response,
-  type Request,
   type Response,
 } from "@book-props/vault-contract";
-import initialize, { VaultTrust } from "../dist/tls/vault_tls.js";
-
-export type VaultPeer = { origin: string; anchor: string };
-export type Exchange = (
-  peer: VaultPeer,
-  request: Request,
-  token?: string,
-  signal?: AbortSignal,
-) => Promise<Response | undefined>;
+import type { Exchange, VaultPeer } from "../extension/vault-session.ts";
+import initialize, { VaultTrust } from "../../dist/tls/vault_tls.js";
 
 const encoder = new TextEncoder();
 const maxCarrierFrame = 64 * 1024;

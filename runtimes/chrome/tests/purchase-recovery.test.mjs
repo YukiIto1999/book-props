@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { VaultClient } from "../src/vault-client.ts";
+import { install, vaultClient } from "./vault-storage.mjs";
 
 const origin = "https://bp-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.localhost:4242";
 const anchor = "AQID";
@@ -12,25 +12,6 @@ const code = "A".repeat(22);
 const firstToken = "F".repeat(43);
 const secondToken = "S".repeat(43);
 const grantId = "955d60ba-36ca-4263-b469-202f97034c09";
-
-function storage(initial) {
-  const values = { ...initial };
-  return {
-    setAccessLevel: async () => {},
-    get: async (keys) => Object.fromEntries([keys].flat().map((key) => [key, values[key]])),
-    set: async (update) => Object.assign(values, update),
-    remove: async (key) => {
-      delete values[key];
-    },
-  };
-}
-
-function install(local, session) {
-  globalThis.chrome = {
-    storage: { local: storage(local), session: storage(session) },
-  };
-  return globalThis.chrome.storage;
-}
 
 function connection(token, connectionScope = scope) {
   return { origin, anchor, token, expiresAt: Date.now() + 60_000, scope: connectionScope };
@@ -71,7 +52,7 @@ function purchaseOf(title, id = requestId) {
 // Records what reaches the plugin and answers from `reply`, which may also throw or wait.
 function plugin(reply, authorization = grants()) {
   const sent = [];
-  const client = new VaultClient(({ origin, anchor }, body, token) => {
+  const client = vaultClient(({ origin, anchor }, body, token) => {
     sent.push({ origin, anchor, body, token });
     return reply(body);
   }, authorization);
@@ -108,7 +89,7 @@ void test("purchase recovery does not let another popup replace the record it is
   const started = Promise.withResolvers();
   const response = Promise.withResolvers();
   const purchases = [];
-  const { changeBook, forgetPending, hasPending, reconcilePending } = new VaultClient(
+  const { changeBook, forgetPending, hasPending, reconcilePending } = vaultClient(
     async (_peer, request) => {
       if (request.action === "reconcile") {
         started.resolve(request);
@@ -299,7 +280,7 @@ void test("a late request to open a note cannot open the same book in another Va
   const wishSent = Promise.withResolvers();
   const wishReply = Promise.withResolvers();
   const sent = [];
-  const { changeBook, pair } = new VaultClient(
+  const { changeBook, pair } = vaultClient(
     (_peer, body, token, signal) => {
       sent.push(body.action);
       if (body.action === "pair") return Promise.resolve(connectionReply(otherScope));

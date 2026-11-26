@@ -1,4 +1,4 @@
-import type { Reply } from "./messages.ts";
+import type { Reply } from "./outcomes.ts";
 
 export function statusLabel(reply: Reply, manual: boolean): string {
   if (reply.kind === "observed") {

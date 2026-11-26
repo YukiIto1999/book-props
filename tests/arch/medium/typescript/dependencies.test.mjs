@@ -30,19 +30,39 @@ const sourceOptions = {
 
 const obsidianSource = resolve(root, obsidian, "src");
 /**
- * The Obsidian plugin's layers and the source files each may import, by path under `src`; a path
- * ending in `/` names a folder. `values` may be imported at all, `types` only with `import type`.
- * `main.ts` composes the plugin. The core seam starts the core alone; the catalog orchestrates
- * through the note format and the ports it declares, which the other adapters implement; views
- * render what the catalog and the core decide.
+ * Each runtime's layers and the source files each may import, by path under its `src`; a path
+ * ending in `/` names a folder. `values` may be imported at all, `types` only with `import type`;
+ * a `noChrome` layer must not touch the `chrome` API.
+ * Obsidian: `main.ts` composes the plugin. The core seam starts the core alone; the catalog
+ * orchestrates through the note format and the ports it declares, which the other adapters
+ * implement; views render what the catalog and the core decide.
+ * Chrome: entries only wire; adapters implement the extension's ports with chrome.* and DOM APIs;
+ * views render; the extension logic depends on none of them.
  */
-const layers = new Map([
-  ["main.ts", { values: ["core/", "shared/", "adapters/", "catalog/", "views/"], types: [] }],
-  ["core/", { values: ["core/"], types: [] }],
-  ["shared/", { values: ["shared/"], types: [] }],
-  ["adapters/", { values: ["shared/", "adapters/"], types: ["core/", "catalog/ports.ts"] }],
-  ["catalog/", { values: ["shared/", "catalog/", "adapters/note-format/"], types: ["core/"] }],
-  ["views/", { values: ["shared/", "views/", "catalog/"], types: ["core/", "adapters/"] }],
+const runtimeLayers = new Map([
+  [
+    obsidian,
+    new Map([
+      ["main.ts", { values: ["core/", "shared/", "adapters/", "catalog/", "views/"], types: [] }],
+      ["core/", { values: ["core/"], types: [] }],
+      ["shared/", { values: ["shared/"], types: [] }],
+      ["adapters/", { values: ["shared/", "adapters/"], types: ["core/", "catalog/ports.ts"] }],
+      ["catalog/", { values: ["shared/", "catalog/", "adapters/note-format/"], types: ["core/"] }],
+      ["views/", { values: ["shared/", "views/", "catalog/"], types: ["core/", "adapters/"] }],
+    ]),
+  ],
+  [
+    extension,
+    new Map([
+      [
+        "composition/",
+        { values: ["composition/", "adapters/", "extension/", "views/"], types: [] },
+      ],
+      ["adapters/", { values: ["adapters/", "extension/"], types: [] }],
+      ["views/", { values: ["views/", "extension/"], types: [], noChrome: true }],
+      ["extension/", { values: ["extension/"], types: [], noChrome: true }],
+    ]),
+  ],
 ]);
 /** Only the core seam loads the core's bindings and binary. */
 const wasm = /^\.\.\/\.\.\/dist\/wasm\/book_props_vault(?:\.js|_bg\.wasm)$/;
@@ -115,18 +135,43 @@ function within(path, prefix) {
   return prefix.endsWith("/") ? path.startsWith(prefix) : path === prefix;
 }
 
-function layerOf(path) {
-  return [...layers.keys()].find((layer) => within(path, layer));
+function layerOf(area, source) {
+  const path = relative(resolve(root, area, "src"), source);
+  return [...runtimeLayers.get(area).keys()].find((layer) => within(path, layer));
 }
 
-function verifyLayer(source, target, types, message) {
-  const policy = layers.get(layerOf(relative(obsidianSource, source)));
+function verifyLayer(area, source, target, types, message) {
+  const policy = runtimeLayers.get(area).get(layerOf(area, source));
   const allowed = [...policy.values, ...(types ? policy.types : [])];
-  const imported = relative(obsidianSource, target);
+  const imported = relative(resolve(root, area, "src"), target);
   assert.ok(
     allowed.some((prefix) => within(imported, prefix)),
     `${message}: ${types ? "type" : "value"} import outside the layer`,
   );
+}
+
+function referencesChrome(file) {
+  const parsed = ts.createSourceFile(
+    file,
+    readFileSync(file, "utf8"),
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  let found = false;
+  function visit(node) {
+    if (ts.isIdentifier(node) && node.text === "chrome") found = true;
+    else ts.forEachChild(node, visit);
+  }
+  visit(parsed);
+  return found;
+}
+
+/** Every runtime source file belongs to a layer, and a `noChrome` layer never names the API. */
+function verifySourceLayer(area, source) {
+  const layer = layerOf(area, source);
+  assert.ok(layer, `${source} is in no layer`);
+  if (runtimeLayers.get(area).get(layer).noChrome)
+    assert.ok(!referencesChrome(source), `${source} uses the chrome API`);
 }
 
 function verifyBuiltin(area, source, specifier, message) {
@@ -152,8 +197,8 @@ function verifyImport({ area, policy, source, specifier, typeOnly: types, worksp
   if (area === obsidian && verifyPluginExternal(source, specifier, message)) return;
   if (
     area === extension &&
-    source.endsWith("/src/vault-transport.ts") &&
-    specifier === "../dist/tls/vault_tls.js"
+    source.endsWith("/src/adapters/vault-transport.ts") &&
+    specifier === "../../dist/tls/vault_tls.js"
   )
     return;
   if (isBuiltin(specifier)) return verifyBuiltin(area, source, specifier, message);
@@ -176,7 +221,7 @@ function verifyImport({ area, policy, source, specifier, typeOnly: types, worksp
     /\/(?:tests?|dist|node_modules)\/|\.test\.[^/]+$/,
     message,
   );
-  if (area === obsidian) verifyLayer(source, local.resolvedFileName, types, message);
+  if (runtimeLayers.has(area)) verifyLayer(area, source, local.resolvedFileName, types, message);
 }
 
 await test("runtime dependencies resolve only through the active package boundaries", () => {
@@ -198,8 +243,7 @@ await test("runtime dependencies resolve only through the active package boundar
     const sources = globSync(search, { cwd: root });
     assert.notEqual(sources.length, 0, area);
     for (const source of sources.map((path) => resolve(root, path))) {
-      if (area === obsidian)
-        assert.ok(layerOf(relative(obsidianSource, source)), `${source} is in no layer`);
+      if (runtimeLayers.has(area)) verifySourceLayer(area, source);
       for (const { specifier, typeOnly: types } of moduleSpecifiers(source))
         verifyImport({ area, policy, source, specifier, typeOnly: types, workspaceEntries });
     }

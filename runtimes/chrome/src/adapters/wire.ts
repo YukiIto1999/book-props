@@ -1,14 +1,13 @@
-import { response, type Response } from "@book-props/vault-contract";
+import { siteOf } from "@book-props/book-products";
+import { product, response, type Product, type Response } from "@book-props/vault-contract";
+import type { ConnectionStatus, PageAnswer, PageState, Reply } from "../extension/outcomes.ts";
+import type { PopupAction } from "../extension/popup.ts";
 
-// Shapes exchanged between the extension pages and the worker over chrome.runtime messaging.
-export type Reply = Response | { kind: "forgotten" | "scopeMismatch" | "manualCheck" };
-export type PageState = { supported: boolean; hasBook: boolean; pending: boolean; reply: Reply };
-// "unknown" means the plugin could not be reached, which says nothing about the pairing.
-// `configured` is always reported; undefined means no connection has been set up.
-export type ConnectionStatus = {
-  configured: string | undefined;
-  state: "paired" | "unpaired" | "unknown";
-};
+// Messages exchanged between the extension's contexts over chrome.runtime and chrome.tabs messaging.
+export type PopupMessage = { kind: "inspect" | PopupAction };
+export type OptionsMessage = { kind: "status" | "disconnect" } | { kind: "pair"; grantId: string };
+export type PageMessage = { kind: "check"; product: Product };
+export type TabMessage = { kind: "product" } | { kind: "show"; url: string; reply: Reply };
 
 // Reads one field of a runtime message or stored record without trusting its shape.
 export function messageField(message: unknown, key: string): unknown {
@@ -38,5 +37,14 @@ export function decodeConnectionStatus(value: unknown): ConnectionStatus {
   return {
     configured: typeof configured === "string" ? configured : undefined,
     state: state === "paired" || state === "unpaired" ? state : "unknown",
+  };
+}
+
+export function decodePageAnswer(answer: unknown): PageAnswer {
+  const extracted = product.safeParse(messageField(answer, "product"));
+  const url = messageField(answer, "url");
+  return {
+    ...(extracted.success ? { product: extracted.data } : {}),
+    ...(typeof url === "string" && siteOf(url) ? { url } : {}),
   };
 }

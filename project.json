@@ -94,7 +94,7 @@
       "dependsOn": ["verify", "build", "test-connection"]
     },
     "test-connection": {
-      "command": "node --experimental-transform-types --disable-warning=ExperimentalWarning --test runtimes/obsidian/tests/medium/connection.test.mjs",
+      "command": "node --experimental-transform-types --disable-warning=ExperimentalWarning --test runtimes/obsidian/tests/medium/*.test.mjs",
       "dependsOn": ["prepare-wasm"],
       "cache": true
     },

@@ -45,7 +45,7 @@ function access<T>(
     const open = indexedDB.open("connection-grant", 1);
     open.onupgradeneeded = () => open.result.createObjectStore("pairing");
     open.onsuccess = () => resolve(open.result);
-    open.onerror = () => reject(open.error);
+    open.onerror = () => reject(open.error ?? new Error("IndexedDB を開けませんでした。"));
   });
   return database.then(
     (db) =>
@@ -53,7 +53,7 @@ function access<T>(
         const tx = db.transaction("pairing", mode);
         let completed: T;
         tx.oncomplete = () => resolve(completed);
-        tx.onabort = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error ?? new Error("IndexedDB の処理が中断されました。"));
         work(tx.objectStore("pairing"), (value) => (completed = value));
       }),
   );
@@ -187,4 +187,10 @@ export async function selectConnectionDirectory(): Promise<string | undefined> {
 export async function restoreDirectoryPermission(): Promise<PermissionState> {
   const entry = await stored("paired");
   return entry ? entry.directory.requestPermission(mode) : "denied";
+}
+
+/** 保存済みの接続用フォルダの許可の状態。ペアリングしていなければなし */
+export async function directoryPermission(): Promise<PermissionState | undefined> {
+  const entry = await stored("paired");
+  return entry?.directory.queryPermission(mode);
 }

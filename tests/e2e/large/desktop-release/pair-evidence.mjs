@@ -6,8 +6,7 @@ import { timeout } from "./wait.mjs";
 
 const directory = ".book-props-connection-directory";
 export const paired = "ペアリング済みです。";
-export const unavailable =
-  "接続を確認できません。Obsidian を開いてください。接続用フォルダの許可が切れている場合は「今後も自動で接続する」を押してください。";
+export const unavailable = "接続を確認できません。Obsidian を開いてください。";
 
 export async function text(page, selector, expected) {
   try {
@@ -76,8 +75,7 @@ export async function pairWith(settings, options, chrome, evidence) {
   );
   assert(path, "Obsidian did not open the configured endpoint (no connection directory)");
   assert(isAbsolute(path));
-  const success =
-    "ペアリングしました。初回設定の仕上げに「今後も自動で接続する」で「毎回許可」を選んでください。";
+  const success = "ペアリングしました。商品ページを開くと所持を確認します。";
   const approval = new AbortController();
   try {
     await options.bringToFront();

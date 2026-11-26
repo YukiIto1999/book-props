@@ -2,23 +2,51 @@
 
 # Book Props
 
-書店の商品ページで「持っている」「欲しい」を確認し、Obsidianで蔵書と読書記録を管理する。
-本はVault内のMarkdown一冊一ページで管理する。初版と改訂版は別の版として扱い、紙と電子は内容が同じと確認できれば同じ版にまとめる。「欲しい」は本単位で、版の所持とは別に記録する。
+蔵書を Obsidian で一冊一ノートとして管理し、書店の商品ページで「持っている」「欲しい」を確かめる。Obsidian プラグインと、Chrome などの Chromium 系ブラウザの拡張で構成する。
+
+## できること
+
+- 本は Vault 内の Markdown 一冊一ページで管理する。初版と改訂版は別の版として扱い、紙と電子は内容が同じと確認できれば同じ版にまとめる。「欲しい」は本単位で、版の所持とは別に記録する。
+- Obsidian のコマンドから、本の登録と編集、本棚の検索と絞り込み、版の移動、記録のアーカイブと復元、JSON の入出力を行う。
+- 書誌は ISBN か書名で国立国会図書館サーチから、または対応サイトの商品ページから取り込める。
+- 対応サイト（Amazon.co.jp、楽天ブックス、バリューブックス、BOOKOFF オンライン）の商品ページで、拡張が「この版を所持」「別版を所持」「欲しいに登録済み」などを表示する。拡張のポップアップから購入や購入希望を記録し、Obsidian でノートを開ける。
+
+## 動作環境
+
+- Windows または Linux のデスクトップ版 Obsidian 1.13.0 以降。
+- 同じ端末の Chrome などの Chromium 系ブラウザ（拡張を使う場合）。Vivaldi でも動作を確かめている。
+- スマートフォンでは同期済みの Markdown を読めるが、プラグインと拡張は動かない。
 
 ## 導入
 
-[GitHub の最新 Release](https://github.com/YukiIto1999/book-props/releases/latest) の Assets から `book-props-v<版>.zip` を取得する。
-ZIP には Chrome 拡張と Obsidian プラグインが入っている。
-[導入手順](docs/installation.md)に従って、展開し、両方を読み込んで接続する。証明書の登録、追加の実行ファイル、GitHub CLI は不要。
-配布物の手元での検証は任意。
-Chrome Web Store と Obsidian Community Plugins では配布しない。
+[GitHub の最新 Release](https://github.com/YukiIto1999/book-props/releases/latest) の Assets から `book-props-<版>.zip` を取得する。ZIP には Obsidian プラグインとブラウザ拡張が入っている。[導入手順](docs/installation.md)に従って、両方を読み込んで接続する。証明書の登録、追加の実行ファイル、GitHub CLI は不要。
 
-Chrome との連携は、同じ Windows または Linux 端末のデスクトップ版 Obsidian と Chrome で動く。専用サーバー、データベース、同期サービスは不要。スマートフォンでは同期済み Markdown を読めるが、専用プラグインと Chrome 拡張は動かない。
+Release には、Obsidian 用の `main.js` と `manifest.json`、Chrome Web Store 用の `book-props-chrome-<版>.zip` も添付する。中身は ZIP と同じファイルである。
+
+## 使い方
+
+1. Obsidian の「設定」→「Book Props」で、Vault の書籍フォルダを指定する。
+2. 「Chromeとの接続」で「接続を始める」を押す。ホームの `Book Props` の下に、Vault 名の接続用フォルダができる。
+3. 拡張の接続設定で「接続用フォルダを選ぶ」を押し、そのフォルダを選んで、ブラウザに編集を許可する。
+4. 対応サイトで本の商品ページを開くと、拡張が所持の状態を表示する。ポップアップから購入や購入希望を Vault に記録できる。
+
+Obsidian では「書籍を登録・編集」「本棚を開く」「本・版を管理」のコマンドを使う。
+
+## 通信、Vault 外のファイル、プライバシー
+
+- **国立国会図書館サーチ**：ISBN か書名で書誌を探すと、入力した語を `https://ndlsearch.ndl.go.jp/api/opensearch` に送り、結果を読む。
+- **書店の商品ページ**：商品 URL で書誌を探すと、対応サイトのそのページを、クエリ文字列を除いて取得する。
+- **ブラウザ拡張との接続**：プラグインは `127.0.0.1` だけで待ち受け、同じ端末の拡張からの接続を受ける。書籍のデータは TLS 1.3 の中でやり取りする。Book Props 独自のサーバーはない。
+- **Vault 外のファイル**：接続用フォルダ `~/Book Props/<Vault 名>/` には、端末内の接続先、書籍フォルダを示す不透明な識別子、起動中の TLS の信頼アンカー、一度だけ使うペアリングの検証値を置く。本の内容、鍵、セッショントークンは置かない。ペアリングを解除したときや書籍フォルダを変えたときに削除する。版を別の本へ移すと、移した版の控えを Windows では `%LOCALAPPDATA%\BookProps\edition-moves\`、Linux では `$XDG_DATA_HOME/BookProps/edition-moves/`（未設定時は `~/.local/share` の下）に残す。
+- **外部プログラム**：Windows では、接続用フォルダに書き込めるのが自分のアカウントだけであることを、Windows 標準の PowerShell で確かめる。
+- **ブラウザ拡張**：対応サイトの商品ページから、書名、著者、ISBN、版の表記、出版社、発行日、表紙画像のアドレスを読み取り、同じ端末の Obsidian にだけ送る。詳しくは[プライバシーポリシー](PRIVACY.md)を参照する。
+
+利用状況の送信、広告、アカウント、課金はない。
 
 ## 開発
 
-[CONTRIBUTING](CONTRIBUTING.md)に、開発環境、検証、保守の手順を記す。[文書の案内](docs/README.md)から要件とアーキテクチャを参照できる。
+[CONTRIBUTING](CONTRIBUTING.md)に、開発環境、検証、配布の手順を記す。[文書の案内](docs/README.md)から要件とアーキテクチャを参照できる。
 
 ## ライセンス
 
-Book Propsのコードと文書は[MITライセンス](LICENSE)で利用できる。
+Book Props のコードと文書は [MIT ライセンス](LICENSE)で利用できる。同梱した依存のライセンスは、各 Release に添付する `THIRD-PARTY-NOTICES.txt` にある。

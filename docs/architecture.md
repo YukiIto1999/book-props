@@ -69,8 +69,8 @@ Linux x64のObsidian 1.13.7で、子プロセスが標準入出力で読み取�
 
 ### 配布条件
 
-[配布要件](requirements.md#公開と配布)に従い、GitHub Releases では Chrome 拡張と Obsidian プラグインを同じ版の ZIP にまとめる。
-将来ストアに掲載するときにも、業務処理、Vault の保存形式、Chrome との契約や接続方式を変えず、同じプラグイン成果物を使えることを組み込み方式の選定条件にする。
+[配布要件](requirements.md#公開と配布)に従い、GitHub Releases では Chrome 拡張と Obsidian プラグインを同じ版で添付し、両方をまとめた ZIP と、ストアへそのまま出せるファイルを同じビルドから作る。
+ストアに掲載するときにも、業務処理、Vault の保存形式、Chrome との契約や接続方式を変えず、同じプラグイン成果物を使えることを組み込み方式の選定条件にする。
 
 [Community Pluginsの標準配布](https://docs.obsidian.md/plugins/releasing/submit-plugin)でObsidianが取得するのは `main.js`、`manifest.json`、任意の `styles.css` で、個別の実行ファイルや `.node` は含まれない。[公開時の規約](https://docs.obsidian.md/community-directory/developer-policies)では依存の自己インストールも認めていない。別添の子プロセスを前提にすると、そのまま掲載するだけでは動かない。
 
@@ -309,21 +309,23 @@ Wasm境界では、[Rustの非同期実行をTokioに固定する規律](https:/
 
 アプリからの書き込みは一つの経路に集める。一方、Obsidianでの直接編集や利用者が選ぶ同期経由の書き込みまで同じ競合制御に通すことは必須にしない。これは、同じ集約へ書く全経路に同じ制御を求める[「整合性を一つの書き込みパスに閉じる」](https://github.com/YukiIto1999/architecture-standard/blob/main/concerns/transaction/single-write-path.md#整合性を一つの書き込みパスに閉じる)に対する例外である。[外部書き込みの実測](#照合と保存)では `Vault.process` が外部更新を上書きした。直接編集と同期方式の自由を維持したまま、外部更新も最終確認から確定まで同じ競合制御に通せるようになれば見直す。
 
-GitHub Releases で配る ZIP は、[配布要件](requirements.md#公開と配布)に従い、利用者が手動で差し替える。
+手動導入では、GitHub Releases で配る ZIP を[配布要件](requirements.md#公開と配布)に従って利用者が差し替える。
 GitHub Releases は新版を配布するが、展開済みの Chrome 拡張と Obsidian プラグインを同じ版に入れ替える機能は持たない。
-初版では[標準の署名検証付き自動更新の規律](https://github.com/YukiIto1999/architecture-standard/blob/main/structure/deploy/layout.md#配備対象と配備先)に対して手動更新を採り、配布 ZIP の署名とその検証は省かない。
+初版では[標準の署名検証付き自動更新の規律](https://github.com/YukiIto1999/architecture-standard/blob/main/structure/deploy/layout.md#配備対象と配備先)に対して手動更新を採り、配布物の署名とその検証は省かない。
+Obsidian のコミュニティプラグインと Chrome Web Store に掲載すると、両方がそれぞれの仕組みで自動更新される。その場合も Release の添付ファイルを正本とし、ストアには同じファイルを出す。
 利用者や更新頻度が増えて手動の差し替えを維持できなくなったとき、または両方を署名検証後に同じ版へ更新できる配布経路を採れるようになったときに見直す。
 
 [CI](../.github/workflows/ci.yml)はブランチの変更と PR に対してルートの `verify` を実行する。
-[Release ワークフロー](../.github/workflows/release.yml)は両コンポーネントをビルドし、一つの ZIP を作る。
+[Release ワークフロー](../.github/workflows/release.yml)は両コンポーネントを一度だけビルドし、手動導入用の ZIP、Obsidian が取得する `main.js` と `manifest.json`、Chrome Web Store に出す拡張の ZIP、依存のライセンスを作る。ZIP 以外は ZIP の中身と同じバイト列であることを梱包後に照合する。
+版タグは `0.5.0` のように `v` を付けない。Obsidian が版と同じ名前のタグの Release からプラグインを取得するためである。
 ZIP の SPDX SBOM を OSV-Scanner で検査し、Windows・Linux が同じ SHA-256 の ZIP で新規導入、再接続と Vault 保存を確認する。Windows では v0.1.0 の未確定な購入を保持したまま更新し、元の書籍フォルダだけで再照会できることも確認する。
 手動起動は受け入れまでで止まり、証明を発行しない。
-版タグからの起動では、同じ走行で受け入れた ZIP と SBOM を対象に GitHub Actions が署名付きビルド証明を発行する。
+版タグからの起動では、同じ走行で受け入れた添付ファイルと SBOM を対象に GitHub Actions が署名付きビルド証明を発行する。
 証明と添付ファイルのハッシュの照合が通った場合だけ公開し、Immutable Releases が公開版と添付ファイルを証明する。
 
-[標準の Cosign 規定](https://github.com/YukiIto1999/architecture-standard/blob/main/tools/build/cosign.md)に対し、GitHub 上で公開する ZIP には、長期の署名鍵を運用せず公開工程を検証できる OIDC 署名を採る。
+[標準の Cosign 規定](https://github.com/YukiIto1999/architecture-standard/blob/main/tools/build/cosign.md)に対し、GitHub 上で公開する添付ファイルには、長期の署名鍵を運用せず公開工程を検証できる OIDC 署名を採る。
 公開リポジトリの GitHub Actions の署名記録は [Sigstore の公開透明性ログ](https://docs.github.com/en/actions/concepts/security/artifact-attestations#how-github-generates-artifact-attestations)にも残る。
-公開ログへの記録を許容できない配布先を追加する場合、または GitHub の証明で公開工程と配布 ZIP を照合できなくなった場合は見直す。
+公開ログへの記録を許容できない配布先を追加する場合、または GitHub の証明で公開工程と配布物を照合できなくなった場合は見直す。
 運用手順は [CONTRIBUTING](../CONTRIBUTING.md#配布版の準備) に置く。
 
 Chrome と Obsidian は TLS 内の書籍操作に同じ TypeScript の検証スキーマを使う。TLS の Wasm アダプターはバイト列だけを扱い、操作や書籍の型を持たない。TypeScript 以外の利用主体を追加し、同じスキーマを直接使えなくなった場合は、公開契約の供給方法を見直す。

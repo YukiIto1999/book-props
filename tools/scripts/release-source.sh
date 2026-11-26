@@ -7,11 +7,12 @@ test "$commit" = "$(git rev-parse "$GITHUB_SHA^{commit}")"
 git merge-base --is-ancestor "$commit" "refs/remotes/origin/$DEFAULT_BRANCH"
 version=$(jq -er '.version' package.json)
 [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
-for manifest in runtimes/obsidian/manifest.json runtimes/book-extension/manifest.json; do
+for manifest in manifest.json runtimes/book-extension/manifest.json; do
   jq -e --arg version "$version" '.version == $version' "$manifest" > /dev/null
 done
 
-tag="v$version"
+# Obsidian downloads main.js and manifest.json from the release whose tag equals the version.
+tag="$version"
 case "$GITHUB_EVENT_NAME" in
   workflow_dispatch)
     test "$GITHUB_REF" = "refs/heads/$DEFAULT_BRANCH"

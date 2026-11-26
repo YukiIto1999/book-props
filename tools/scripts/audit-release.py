@@ -53,12 +53,40 @@ def verify_spdx(spdx, artifact, digest, expected, local):
         raise SystemExit("SPDX is missing runtime components:\n" + "\n".join(sorted(missing)))
 
 
+def file_digest(path):
+    with path.open("rb") as source:
+        return hashlib.file_digest(source, "sha256").hexdigest()
+
+
+def check_assets(artifact):
+    """Each store's files must be bytes of the audited ZIP, so its SBOM and attestation describe them."""
+    directory = artifact.parent
+    version = artifact.name.removeprefix("book-props-").removesuffix(".zip")
+    with ZipFile(artifact) as archive:
+        members = {name: archive.read(name) for name in archive.namelist()}
+    shared = {name: members[name] for name in ("LICENSE", "THIRD-PARTY-NOTICES.txt")}
+    chrome = {name.removeprefix("chrome/"): data for name, data in members.items() if name.startswith("chrome/")}
+    store = directory / f"book-props-chrome-{version}.zip"
+    with ZipFile(store) as archive:
+        if {name: archive.read(name) for name in archive.namelist()} != chrome | shared:
+            raise SystemExit(f"{store.name} differs from the audited ZIP")
+    for name, member in (
+        ("main.js", "obsidian/main.js"),
+        ("manifest.json", "obsidian/manifest.json"),
+        ("THIRD-PARTY-NOTICES.txt", "THIRD-PARTY-NOTICES.txt"),
+    ):
+        if (directory / name).read_bytes() != members[member]:
+            raise SystemExit(f"{name} differs from {member} in the audited ZIP")
+    listed = dict(reversed(line.split("  ", 1)) for line in (directory / "SHA256SUMS").read_text().splitlines())
+    names = {artifact.name, store.name, "main.js", "manifest.json", "THIRD-PARTY-NOTICES.txt"}
+    if set(listed) != names or any(listed[name] != file_digest(directory / name) for name in names):
+        raise SystemExit("SHA256SUMS does not match the release assets")
+
+
 def audit(artifact):
     expected, local = archive_components(artifact)
-    with artifact.open("rb") as source:
-        digest = hashlib.file_digest(source, "sha256").hexdigest()
-    if (artifact.parent / "SHA256SUMS").read_text() != f"{digest}  {artifact.name}\n":
-        raise SystemExit("The ZIP does not match SHA256SUMS")
+    digest = file_digest(artifact)
+    check_assets(artifact)
     spdx = artifact.with_suffix(".spdx.json")
     subprocess.run(
         (

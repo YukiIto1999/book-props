@@ -54,9 +54,9 @@ export default defineConfig([
     extends: [tseslint.configs.disableTypeChecked],
     rules: { ...Object.fromEntries(typedObsidianRules), "no-implied-eval": "error" },
   },
-  // 審査は manifest.json と LICENSE を別に確かめる
-  { files: ["manifest.json"], rules: { "obsidianmd/validate-manifest": "off" } },
-  { files: ["LICENSE"], rules: { "obsidianmd/validate-license": "off" } },
+  // 審査が掲載前に別に確かめる項目も、ここでは誤りとして止める
+  { files: ["manifest.json"], rules: { "obsidianmd/validate-manifest": "error" } },
+  { files: ["LICENSE"], rules: { "obsidianmd/validate-license": "error" } },
   globalIgnores([
     "**/node_modules",
     "**/dist",

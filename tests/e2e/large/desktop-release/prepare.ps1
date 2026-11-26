@@ -1,15 +1,15 @@
 param(
     [Parameter(Mandatory)][string]$AssetDirectory,
-    [Parameter(Mandatory)][ValidatePattern('^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$')][string]$Tag,
+    [Parameter(Mandatory)][ValidatePattern('^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$')][string]$Tag,
     [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{64}$')][string]$Digest
 )
 
 $ErrorActionPreference = 'Stop'
 $filename = "book-props-$Tag.zip"
 $archive = Join-Path $AssetDirectory $filename
-$expected = (Get-Content (Join-Path $AssetDirectory 'SHA256SUMS') -Raw).Trim()
+$listed = (Get-Content (Join-Path $AssetDirectory 'SHA256SUMS')) -ccontains "$Digest  $filename"
 $actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-if ($actual -cne $Digest -or $expected -cne "$Digest  $filename") { throw 'ZIP hash mismatch' }
+if ($actual -cne $Digest -or -not $listed) { throw 'ZIP hash mismatch' }
 Write-Host "Input SHA-256: $actual"
 
 $root = Join-Path $env:RUNNER_TEMP 'book-props-desktop'

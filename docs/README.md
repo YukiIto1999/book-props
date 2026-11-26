@@ -9,6 +9,7 @@
 | [プロジェクトの入口](../README.ja.md)    | 説明 | 利用できる環境と導入の入口を知る                     | 現在の構成                   |
 | [Windows・Linux での導入と運用](installation.md) | 手順 | 利用者が導入、接続、更新、切り戻しを行う | 手動導入 |
 | [CONTRIBUTING](../CONTRIBUTING.md)       | 手順 | 保守者が開発環境を用意し、検証と導入版の準備を行う   | 現在の開発手順               |
+| [ストアへの掲載](store-listing.md)       | 手順 | 所有者が Obsidian と Chrome Web Store に申請する     | 未申請                       |
 | [要件](requirements.md)                  | 参照 | 利用者と実装者が、動作、範囲、受入条件を確認する     | 承認した振る舞い             |
 | [アーキテクチャ](architecture.md)        | 説明 | 実装者が、責務、記録の正本、接続と検証経路を確認する | 実装と確認済み・未確認の範囲 |
 

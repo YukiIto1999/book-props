@@ -1,10 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-  <rect x="20" y="16" width="74" height="92" rx="9" fill="#1d6a72"/>
-  <path d="M29 16h7v92h-7a9 9 0 0 1-9-9V25a9 9 0 0 1 9-9z" fill="#134a50"/>
-  <rect x="46" y="34" width="34" height="9" rx="4.5" fill="#e9f4f3"/>
-  <rect x="46" y="50" width="22" height="7" rx="3.5" fill="#8fc4c0"/>
-  <path d="M101 99l12 12" stroke="#ffffff" stroke-width="16" stroke-linecap="round"/>
-  <circle cx="86" cy="84" r="21" fill="#ffffff"/>
-  <path d="M101 99l12 12" stroke="#f0a531" stroke-width="9" stroke-linecap="round"/>
-  <circle cx="86" cy="84" r="16" fill="#fff6e3" stroke="#f0a531" stroke-width="8"/>
+<defs>
+<clipPath id="top"><path d="M34 16h39a23 23 0 0 1 0 46H34z"/></clipPath>
+<clipPath id="bot"><path d="M34 58h44a27 27 0 0 1 0 54H34z"/></clipPath>
+</defs>
+<rect x="22" y="16" width="24" height="96" rx="12" fill="#ff5a36"/>
+<path d="M34 16h39a23 23 0 0 1 0 46H34z" fill="#4a86ff"/>
+<path d="M34 58h44a27 27 0 0 1 0 54H34z" fill="#22c2a8"/>
+<g clip-path="url(#top)"><rect x="22" y="16" width="24" height="96" rx="12" fill="#6a78e6"/></g>
+<g clip-path="url(#bot)"><rect x="22" y="16" width="24" height="96" rx="12" fill="#4fa88f"/><path d="M34 16h39a23 23 0 0 1 0 46H34z" fill="#2aa9c4"/></g>
+<g clip-path="url(#bot)"><g clip-path="url(#top)"><rect x="22" y="16" width="24" height="96" rx="12" fill="#3f9bb0"/></g></g>
 </svg>

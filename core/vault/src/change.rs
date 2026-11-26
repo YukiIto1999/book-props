@@ -80,7 +80,7 @@ const fn kind(decision: &Decision) -> &'static str {
     match decision {
         Decision::None => "none",
         Decision::InvalidIsbn { .. } => "invalidIsbn",
-        Decision::InsufficientEvidence => "insufficientEvidence",
+        Decision::InsufficientEvidence { .. } => "insufficientEvidence",
         Decision::ConflictingEvidence => "conflictingEvidence",
         Decision::ChooseBook { .. } => "chooseBook",
         Decision::ChooseEdition { .. } => "chooseEdition",

@@ -1,6 +1,7 @@
 use book_props_vault::{
-    BooksRequest, CopiesRequest, ManagementRequest, MoveRequest, StepRequest, allows_step,
-    canonical_isbn_list, missing_move_copies, plan_management, plan_move, settle_shelf,
+    BooksRequest, CopiesRequest, ManagementRequest, MoveRequest, OptionsRequest, RestoreRequest,
+    StepRequest, allows_step, book_options, canonical_isbn_list, missing_move_copies,
+    plan_management, plan_move, restore_targets, settle_shelf,
 };
 use serde_json::{Value, json};
 
@@ -415,6 +416,72 @@ fn a_saved_copy_is_missing_when_no_book_holds_or_moves_its_edition() {
     released["editions"] = json!([]);
     assert_eq!(missing(vec![released]), json!({"missing": [false, true]}));
     assert_eq!(missing(vec![]), json!({"missing": [true, true]}));
+}
+
+#[test]
+fn a_saved_copy_goes_back_only_to_an_unarchived_book_of_its_move() {
+    let targets = |books: Vec<Value>| {
+        let request: RestoreRequest = serde_json::from_value(json!({"books": books, "copies": [
+            {"sourceId": "source", "destinationId": "destination"},
+            {"sourceId": "gone", "destinationId": "destination"}
+        ]}))
+        .expect("decode restore request");
+        serde_json::to_value(restore_targets(&request)).expect("encode restore targets")
+    };
+    assert_eq!(
+        targets(shelf()),
+        json!({"targets": [["source", "destination"], ["destination"]]})
+    );
+    let mut archived = shelf();
+    archived[1]["archivedAt"] = json!(STAMP);
+    assert_eq!(targets(archived), json!({"targets": [["source"], []]}));
+    let mut books = shelf();
+    books.push(book("unrelated", json!([])));
+    assert_eq!(
+        targets(books),
+        json!({"targets": [["source", "destination"], ["destination"]]})
+    );
+}
+
+fn options(book_id: &str, books: &[Value]) -> Value {
+    let request: OptionsRequest =
+        serde_json::from_value(json!({"books": books, "bookId": book_id}))
+            .expect("decode options request");
+    serde_json::to_value(book_options(&request)).expect("encode book options")
+}
+
+#[test]
+fn an_open_book_offers_its_editions_and_the_other_unarchived_books_as_destinations() {
+    let mut books = shelf();
+    books[0]["editions"]
+        .as_array_mut()
+        .expect("editions")
+        .push(json!({"id": "old", "owned": false, "isbns": [], "archivedAt": STAMP}));
+    let mut archived = book("archived", json!([]));
+    archived["archivedAt"] = json!(STAMP);
+    books.push(archived);
+    books.push(book("other", json!([])));
+    assert_eq!(
+        options("source", &books),
+        json!({"kind": "open", "editions": [
+            {"id": "first", "archived": false, "destinations": ["destination", "other"]},
+            {"id": "old", "archived": true, "destinations": []}
+        ]})
+    );
+    assert_eq!(options("archived", &books), json!({"kind": "archived"}));
+    assert_eq!(options("gone", &books), json!({"kind": "missing"}));
+}
+
+#[test]
+fn a_book_recording_a_move_offers_only_resuming_or_cancelling_it() {
+    let mut source = moving(shelf()[0].clone(), None);
+    source["archivedAt"] = json!(STAMP);
+    let books = [source, shelf()[1].clone()];
+    assert_eq!(options("source", &books), json!({"kind": "moving"}));
+    assert_eq!(
+        options("destination", &books),
+        json!({"kind": "open", "editions": []})
+    );
 }
 
 #[test]

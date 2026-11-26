@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createBookNote, readBookNote } from "../src/book-note.ts";
 import { product, key, row, original, scope } from "./catalog-fixture.mjs";
+import { notes as noteFormat } from "./core.mjs";
+
+const createBookNote = (book) => noteFormat.create(book);
+const readBookNote = (raw) => noteFormat.read(raw);
 
 void test("an edition that appears on another page before the write is rejected without changing either page", async () => {
   const { files, notes, catalog } = scope(original);

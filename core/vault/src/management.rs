@@ -1,8 +1,9 @@
 //! Which management commands the stored books accept, and the change each one writes.
 
 use crate::model::{
-    Book, BookStep, CustomField, Edition, ManagementCommand, ManagementPlan, ManagementRequest,
-    MoveCopy, MoveStage, StepRequest,
+    Book, BookOptions, BookStep, CustomField, Edition, EditionOptions, ManagementCommand,
+    ManagementPlan, ManagementRequest, MoveCopy, MoveStage, OptionsRequest, RestoreRequest,
+    RestoreTargets, StepRequest,
 };
 use crate::moving;
 
@@ -131,6 +132,11 @@ fn archive(source: &Book, edition_id: Option<&str>, stamp: Option<&str>) -> Opti
     })
 }
 
+/// A saved copy goes back only to an unarchived book of its move.
+fn takes_back(book: &Book, source_id: &str, destination_id: &str) -> bool {
+    (book.id == source_id || book.id == destination_id) && book.archived_at.is_none()
+}
+
 /// A saved copy goes back to either book of its move, into an unarchived book, while no book
 /// holds the edition or one of its ISBNs.
 fn restore_copy(
@@ -139,18 +145,77 @@ fn restore_copy(
     edition_id: &str,
     copy: Option<&MoveCopy>,
 ) -> Option<BookStep> {
-    let copy =
-        copy.filter(|copy| source.id == copy.source_id || source.id == copy.destination_id)?;
+    let copy = copy.filter(|copy| takes_back(source, &copy.source_id, &copy.destination_id))?;
     let edition = &copy.edition;
     let refused = edition.id != edition_id
         || edition.archived_at.is_some()
         || books
             .iter()
-            .any(|book| book.moving() || clashes(book, edition))
-        || source.archived_at.is_some();
+            .any(|book| book.moving() || clashes(book, edition));
     (!refused).then(|| BookStep::RestoreEdition {
         edition: Box::new(edition.clone()),
     })
+}
+
+/// The books each saved copy may go back to: its source, then its destination, while present and
+/// unarchived.
+#[must_use]
+pub fn restore_targets(request: &RestoreRequest) -> RestoreTargets {
+    let targets = request
+        .copies
+        .iter()
+        .map(|copy| {
+            [&copy.source_id, &copy.destination_id]
+                .into_iter()
+                .filter(|id| {
+                    request.books.iter().any(|book| {
+                        book.id == **id && takes_back(book, &copy.source_id, &copy.destination_id)
+                    })
+                })
+                .cloned()
+                .collect()
+        })
+        .collect();
+    RestoreTargets { targets }
+}
+
+/// Which management commands to offer for a book. A book with an unsettled move can only resume
+/// or cancel it, an archived book and an archived edition can only be restored, and an unarchived
+/// edition may move to any other unarchived book.
+#[must_use]
+pub fn book_options(request: &OptionsRequest) -> BookOptions {
+    let books = &request.books;
+    let Some(book) = books.iter().find(|book| book.id == request.book_id) else {
+        return BookOptions::Missing;
+    };
+    if book.moving() {
+        return BookOptions::Moving;
+    }
+    if book.archived_at.is_some() {
+        return BookOptions::Archived;
+    }
+    let destinations: Vec<String> = books
+        .iter()
+        .filter(|other| other.id != book.id && other.archived_at.is_none())
+        .map(|other| other.id.clone())
+        .collect();
+    let editions = book
+        .editions
+        .iter()
+        .map(|edition| {
+            let archived = edition.archived_at.is_some();
+            EditionOptions {
+                id: edition.id.clone(),
+                archived,
+                destinations: if archived {
+                    Vec::new()
+                } else {
+                    destinations.clone()
+                },
+            }
+        })
+        .collect();
+    BookOptions::Open { editions }
 }
 
 /// Whether the change may be written to the latest content of its book note.

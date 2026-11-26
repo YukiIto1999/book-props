@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { Catalog } from "../src/catalog.ts";
-import { createBookNote } from "../src/book-note.ts";
-import { core } from "./core.mjs";
+import { Catalog } from "../src/catalog/catalog.ts";
+import { core, notes as noteFormat } from "./core.mjs";
+
+const createBookNote = (book) => noteFormat.create(book);
 
 const product = {
   title: "設計入門",
@@ -69,7 +70,7 @@ function scope(initial, moveCopies = memoryCopies()) {
     },
     canUpdate: () => true,
   };
-  return { files, notes, catalog: new Catalog(files, core) };
+  return { files, notes, catalog: new Catalog(files, core, noteFormat) };
 }
 
 export { product, first, key, row, original, scope };

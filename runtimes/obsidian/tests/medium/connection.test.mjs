@@ -4,11 +4,12 @@ import { mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/pro
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { Catalog } from "../../src/catalog.ts";
-import { ConnectionGrant } from "../../src/connection-grant.ts";
-import { Connection, scopeOf } from "../../src/connection.ts";
-import { LocalMoveCopies } from "../../src/local-move-copies.ts";
-import { createHost } from "../../src/tls-identity.ts";
+import { ConnectionGrant } from "../../src/adapters/connection/connection-grant.ts";
+import { Connection, scopeOf } from "../../src/adapters/connection/connection.ts";
+import { createHost } from "../../src/adapters/connection/tls-identity.ts";
+import { LocalMoveCopies } from "../../src/adapters/local-move-copies.ts";
+import { NoteFormat } from "../../src/adapters/note-format/note-format.ts";
+import { Catalog } from "../../src/catalog/catalog.ts";
 import * as core from "../../dist/wasm/book_props_vault.js";
 import { post, prove, readCard } from "./connection-support.mjs";
 
@@ -59,7 +60,7 @@ await test("only the extension that proved the folder can save a purchase throug
   const grant = await ConnectionGrant.create("Reading Vault", profile);
   assert.equal(grant.directory, join(await realpath(profile), "Book Props", "Reading Vault"));
   const files = bookFiles(folder);
-  const catalog = new Catalog(files, core);
+  const catalog = new Catalog(files, core, new NoteFormat(core));
   // Only purchases reach the Vault; any other request arriving here fails the test.
   const dispatch = async (input, signal) => {
     assert.equal(input.action, "purchase");

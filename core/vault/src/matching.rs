@@ -25,7 +25,7 @@ pub fn inspect(request: &CatalogRequest) -> Outcome {
         &request.product,
         &isbns,
         request.selection.as_ref(),
-        inspect_only,
+        request.action,
     ) {
         Ok(book) => book,
         Err(reason) => return Outcome::undetermined(reason),
@@ -57,8 +57,9 @@ fn locate_book<'a>(
     product: &Product,
     isbns: &[String],
     selection: Option<&Selection>,
-    inspect_only: bool,
+    action: Action,
 ) -> Result<Option<&'a Book>, Decision> {
+    let inspect_only = action == Action::Inspect;
     let title = normalized_title(&product.title);
     let named = !title.is_empty()
         && product
@@ -66,7 +67,7 @@ fn locate_book<'a>(
             .iter()
             .any(|author| !normalized(author).is_empty());
     if selection.is_none() && !named && isbns.is_empty() {
-        return Err(Decision::InsufficientEvidence);
+        return Err(insufficient_evidence(books, action));
     }
     let visible_books = || {
         books
@@ -112,26 +113,58 @@ fn locate_book<'a>(
     if let Some(first) = first
         && let Some(second) = matches.next()
     {
-        let book_ids = [first, second]
-            .into_iter()
-            .chain(matches)
-            .map(|book| book.id.clone())
-            .collect();
-        return Err(Decision::ChooseBook { book_ids });
+        return Err(Decision::ChooseBook {
+            book_ids: unarchived_ids([first, second].into_iter().chain(matches)),
+            new_book: creates_book(action),
+        });
     }
     Ok(first)
 }
 
+/// Whether the action may record the product as a book not stored yet.
+const fn creates_book(action: Action) -> bool {
+    matches!(
+        action,
+        Action::Purchase | Action::RecordOwnership | Action::SetWish
+    )
+}
+
+/// Whether the action may record the product as an edition its book does not hold yet.
+const fn creates_edition(action: Action) -> bool {
+    matches!(action, Action::Purchase | Action::RecordOwnership)
+}
+
+/// The ids of the books the user may pick: an archived book takes no product.
+fn unarchived_ids<'a>(books: impl IntoIterator<Item = &'a Book>) -> Vec<String> {
+    books
+        .into_iter()
+        .filter(|book| book.archived_at.is_none())
+        .map(|book| book.id.clone())
+        .collect()
+}
+
+/// Nothing names the book: the user may pick any unarchived book, or a new one when the action
+/// creates books.
+fn insufficient_evidence(books: &[Book], action: Action) -> Decision {
+    Decision::InsufficientEvidence {
+        book_ids: unarchived_ids(books),
+        new_book: creates_book(action),
+    }
+}
+
 /// The outcome when no stored book is the product.
 fn unknown_book(request: &CatalogRequest, isbns: Vec<String>) -> Outcome {
-    let decision = match request.action {
-        Action::Inspect | Action::ClearWish | Action::CancelOwnership => Decision::None,
-        _ if request.product.title.trim().is_empty() => Decision::InsufficientEvidence,
+    let action = request.action;
+    let decision = match action {
+        _ if !creates_book(action) => Decision::None,
+        _ if request.product.title.trim().is_empty() => {
+            insufficient_evidence(&request.books, action)
+        }
         Action::SetWish => Decision::CreateBook {
             wanted: true,
             record_edition: false,
         },
-        Action::Purchase | Action::RecordOwnership => Decision::CreateBook {
+        _ => Decision::CreateBook {
             wanted: false,
             record_edition: true,
         },
@@ -176,9 +209,7 @@ impl<'a> Evidence<'a> {
             .collect();
         let label = self.label.as_deref();
         let ownership = ownership(edition, &active, selected == Some("new"), label);
-        let decision = if selected == Some("new")
-            && matches!(action, Action::Purchase | Action::RecordOwnership)
-        {
+        let decision = if selected == Some("new") && creates_edition(action) {
             Decision::AddEdition {
                 wanted_before: book.wanted,
                 wanted_after: action == Action::RecordOwnership && book.wanted,
@@ -330,7 +361,7 @@ fn decision(
             },
         };
     }
-    if action != Action::CancelOwnership && new_revision(editions, label) {
+    if creates_edition(action) && new_revision(editions, label) {
         return Decision::AddEdition {
             wanted_before: book.wanted,
             wanted_after: after,
@@ -338,6 +369,7 @@ fn decision(
     }
     Decision::ChooseEdition {
         edition_ids: editions.iter().map(|edition| edition.id.clone()).collect(),
+        new_edition: creates_edition(action),
     }
 }
 

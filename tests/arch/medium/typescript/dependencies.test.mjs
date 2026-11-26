@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { globSync, readFileSync, realpathSync } from "node:fs";
 import { isBuiltin } from "node:module";
-import { dirname, resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import ts from "@typescript/typescript6";
@@ -28,8 +28,54 @@ const sourceOptions = {
   moduleResolution: ts.ModuleResolutionKind.NodeNext,
 };
 
+const obsidianSource = resolve(root, obsidian, "src");
+/**
+ * The Obsidian plugin's layers and the source files each may import, by path under `src`; a path
+ * ending in `/` names a folder. `values` may be imported at all, `types` only with `import type`.
+ * `main.ts` composes the plugin. The core seam starts the core alone; the catalog orchestrates
+ * through the note format and the ports it declares, which the other adapters implement; views
+ * render what the catalog and the core decide.
+ */
+const layers = new Map([
+  ["main.ts", { values: ["core/", "shared/", "adapters/", "catalog/", "views/"], types: [] }],
+  ["core/", { values: ["core/"], types: [] }],
+  ["shared/", { values: ["shared/"], types: [] }],
+  ["adapters/", { values: ["shared/", "adapters/"], types: ["core/", "catalog/ports.ts"] }],
+  ["catalog/", { values: ["shared/", "catalog/", "adapters/note-format/"], types: ["core/"] }],
+  ["views/", { values: ["shared/", "views/", "catalog/"], types: ["core/", "adapters/"] }],
+]);
+/** Only the core seam loads the core's bindings and binary. */
+const wasm = /^\.\.\/\.\.\/dist\/wasm\/book_props_vault(?:\.js|_bg\.wasm)$/;
+/** Packages that only some layers or files of the plugin may use. */
+const confined = new Map([
+  ["obsidian", /^(?:main\.ts|adapters\/|views\/)/],
+  ["yaml", /^adapters\/note-format\//],
+  ["ws", /^adapters\/connection\/connection\.ts$/],
+  ["@peculiar/x509", /^adapters\/connection\/tls-identity\.ts$/],
+  ["reflect-metadata", /^adapters\/connection\/tls-identity\.ts$/],
+]);
+/** The adapters that reach the system, each with the Node built-ins it needs. */
+const builtins = new Map([
+  ["adapters/local-move-copies.ts", /^node:(?:crypto|fs\/promises|os|path)$/],
+  [
+    "adapters/connection/connection-grant.ts",
+    /^node:(?:child_process|crypto|fs\/promises|os|path|util)$/,
+  ],
+  ["adapters/connection/connection.ts", /^node:(?:crypto|http|stream|tls)$/],
+  ["adapters/connection/tls-identity.ts", /^node:(?:crypto|tls)$/],
+  ["adapters/bibliography-sources.ts", /^node:https$/],
+]);
+
 function manifest(path) {
   return JSON.parse(readFileSync(resolve(root, path, "package.json"), "utf8"));
+}
+
+/** An import that brings in types only; node erases it, so it loads nothing at runtime. */
+function typeOnly(node) {
+  if (ts.isImportTypeNode(node)) return true;
+  if (ts.isImportDeclaration(node))
+    return node.importClause?.phaseModifier === ts.SyntaxKind.TypeKeyword;
+  return ts.isExportDeclaration(node) && node.isTypeOnly;
 }
 
 function moduleSpecifiers(file) {
@@ -42,59 +88,75 @@ function moduleSpecifiers(file) {
   const specifiers = [];
   function visit(node) {
     if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier) {
-      specifiers.push(node.moduleSpecifier);
+      specifiers.push([node.moduleSpecifier, typeOnly(node)]);
     } else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument)) {
-      specifiers.push(node.argument.literal);
+      specifiers.push([node.argument.literal, true]);
     } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
-      specifiers.push(node.arguments[0]);
+      specifiers.push([node.arguments[0], false]);
     } else if (
       ts.isImportEqualsDeclaration(node) &&
       ts.isExternalModuleReference(node.moduleReference)
     ) {
-      specifiers.push(node.moduleReference.expression);
+      specifiers.push([node.moduleReference.expression, false]);
     }
     ts.forEachChild(node, visit);
   }
   visit(parsed);
-  return specifiers.map((specifier) => {
+  return specifiers.map(([specifier, types]) => {
     assert.ok(
       specifier && ts.isStringLiteralLike(specifier),
       `${file} has an uninspectable import`,
     );
-    return specifier.text;
+    return { specifier: specifier.text, typeOnly: types };
   });
+}
+
+function within(path, prefix) {
+  return prefix.endsWith("/") ? path.startsWith(prefix) : path === prefix;
+}
+
+function layerOf(path) {
+  return [...layers.keys()].find((layer) => within(path, layer));
+}
+
+function verifyLayer(source, target, types, message) {
+  const policy = layers.get(layerOf(relative(obsidianSource, source)));
+  const allowed = [...policy.values, ...(types ? policy.types : [])];
+  const imported = relative(obsidianSource, target);
+  assert.ok(
+    allowed.some((prefix) => within(imported, prefix)),
+    `${message}: ${types ? "type" : "value"} import outside the layer`,
+  );
 }
 
 function verifyBuiltin(area, source, specifier, message) {
   assert.equal(area, obsidian, message);
-  const restricted = [
-    ["/src/local-move-copies.ts", /^node:(?:fs\/promises|os|path)$/],
-    ["/src/connection-grant.ts", /^node:(?:child_process|fs\/promises|os|path|util)$/],
-    ["/src/connection.ts", /^node:(?:http|stream|tls)$/],
-    ["/src/tls-identity.ts", /^node:tls$/],
-  ];
-  if (restricted.some(([caller, allowed]) => source.endsWith(caller) && allowed.test(specifier)))
-    return;
-  assert.match(specifier, /^node:(?:crypto|https)$/, message);
+  const allowed = builtins.get(relative(obsidianSource, source));
+  assert.ok(allowed?.test(specifier), message);
 }
 
-function verifyImport({ area, policy, source, specifier, workspaceEntries }) {
+/** The plugin's own limits on the core's binary and on packages; `true` when nothing else applies. */
+function verifyPluginExternal(source, specifier, message) {
+  const path = relative(obsidianSource, source);
+  if (wasm.test(specifier)) {
+    assert.match(path, /^core\//, message);
+    return true;
+  }
+  const confinement = confined.get(specifier);
+  if (confinement) assert.match(path, confinement, message);
+  return specifier === "obsidian";
+}
+
+function verifyImport({ area, policy, source, specifier, typeOnly: types, workspaceEntries }) {
   const message = `${source}: ${specifier}`;
-  if (
-    area === obsidian &&
-    source.endsWith("/src/wasm.ts") &&
-    /^\.\.\/dist\/wasm\/book_props_vault(?:\.js|_bg\.wasm)$/.test(specifier)
-  )
-    return;
+  if (area === obsidian && verifyPluginExternal(source, specifier, message)) return;
   if (
     area === extension &&
     source.endsWith("/src/vault-transport.ts") &&
     specifier === "../dist/tls/vault_tls.js"
   )
     return;
-  if (area === obsidian && specifier === "obsidian") return;
   if (isBuiltin(specifier)) return verifyBuiltin(area, source, specifier, message);
-  if (specifier === "ws") assert.ok(source.endsWith("/src/connection.ts"), message);
   if (policy.externals.includes(specifier)) return;
   if (workspaceEntries.has(specifier)) {
     assert.ok(policy.packages.includes(workspaceEntries.get(specifier)), message);
@@ -114,6 +176,7 @@ function verifyImport({ area, policy, source, specifier, workspaceEntries }) {
     /\/(?:tests?|dist|node_modules)\/|\.test\.[^/]+$/,
     message,
   );
+  if (area === obsidian) verifyLayer(source, local.resolvedFileName, types, message);
 }
 
 await test("runtime dependencies resolve only through the active package boundaries", () => {
@@ -135,8 +198,10 @@ await test("runtime dependencies resolve only through the active package boundar
     const sources = globSync(search, { cwd: root });
     assert.notEqual(sources.length, 0, area);
     for (const source of sources.map((path) => resolve(root, path))) {
-      for (const specifier of moduleSpecifiers(source))
-        verifyImport({ area, policy, source, specifier, workspaceEntries });
+      if (area === obsidian)
+        assert.ok(layerOf(relative(obsidianSource, source)), `${source} is in no layer`);
+      for (const { specifier, typeOnly: types } of moduleSpecifiers(source))
+        verifyImport({ area, policy, source, specifier, typeOnly: types, workspaceEntries });
     }
   }
 });

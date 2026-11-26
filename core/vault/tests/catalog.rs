@@ -205,3 +205,51 @@ fn an_archived_edition_does_not_hide_an_active_book_or_count_as_another_owned_ed
         "unowned"
     );
 }
+
+#[test]
+fn choosing_a_book_lists_the_unarchived_candidates_and_a_new_book_only_for_actions_that_create_one()
+{
+    let mut books = catalog();
+    let named = |id: &str| json!({"id": id, "title": "設計入門", "authors": ["山田 太郎"], "wanted": false, "editions": []});
+    let mut archived = named("archived");
+    archived["archivedAt"] = json!("2025-01-01T00:00:00Z");
+    let rows = books.as_array_mut().expect("books");
+    rows.push(archived);
+    rows.push(named("other"));
+    rows.push(json!({"id": "unrelated", "title": "別の本", "authors": [], "wanted": false, "editions": []}));
+    let product = json!({"title": "設計入門", "authors": ["山田 太郎"]});
+    assert_eq!(
+        request("purchase", product.clone(), books.clone())["decision"],
+        json!({"kind": "chooseBook", "bookIds": ["book", "other"], "newBook": true})
+    );
+    assert_eq!(
+        request("cancelOwnership", product, books.clone())["decision"],
+        json!({"kind": "chooseBook", "bookIds": ["book", "other"], "newBook": false})
+    );
+    let untitled = json!({"label": "初版"});
+    assert_eq!(
+        request("setWish", untitled.clone(), books.clone())["decision"],
+        json!({"kind": "insufficientEvidence", "bookIds": ["book", "other", "unrelated"], "newBook": true})
+    );
+    assert_eq!(
+        request("clearWish", untitled, books)["decision"],
+        json!({"kind": "insufficientEvidence", "bookIds": ["book", "other", "unrelated"], "newBook": false})
+    );
+}
+
+#[test]
+fn choosing_an_edition_lists_the_unarchived_editions_and_a_new_one_unless_ownership_is_cancelled() {
+    let mut books = catalog();
+    books[0]["editions"].as_array_mut().expect("editions").push(
+        json!({"id": "old", "owned": true, "isbns": [], "archivedAt": "2025-01-01T00:00:00Z"}),
+    );
+    let product = json!({"title":"設計入門", "authors":["山田 太郎"], "isbns":["9780262033848"]});
+    assert_eq!(
+        request("recordOwnership", product.clone(), books.clone())["decision"],
+        json!({"kind": "chooseEdition", "editionIds": ["first", "second"], "newEdition": true})
+    );
+    assert_eq!(
+        request("cancelOwnership", product, books)["decision"],
+        json!({"kind": "chooseEdition", "editionIds": ["first", "second"], "newEdition": false})
+    );
+}

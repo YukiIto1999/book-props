@@ -1,17 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import "./core.mjs";
+import { notes } from "./core.mjs";
 
-import {
-  createBookNote,
-  editEdition,
-  readBookNote,
-  readScopedNote,
-  removeEdition,
-  removePurchases,
-  updateCustomField,
-  writeBookUpdate,
-} from "../src/book-note.ts";
+const createBookNote = (book) => notes.create(book);
+const editEdition = (raw, input) => notes.editEdition(raw, input);
+const readBookNote = (raw) => notes.read(raw);
+const readScopedNote = (raw) => notes.readScoped(raw);
+const removeEdition = (raw, editionId) => notes.removeEdition(raw, editionId);
+const removePurchases = (raw, remove) => notes.removePurchases(raw, remove);
+const updateCustomField = (raw, baseline, input) => notes.updateCustomField(raw, baseline, input);
+const writeBookUpdate = (raw, input) => notes.writeUpdate(raw, input);
 
 const bookId = "4fa20a45-80a4-4c8c-b74c-c3e307076da5";
 const initialEdition = "44c09e2e-4f07-4bed-9a59-300146205362";

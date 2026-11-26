@@ -7,9 +7,10 @@ mod portable;
 mod shelf;
 
 pub use management::{
-    BookStep, BooksRequest, CopiesRequest, CustomField, ManagementCommand, ManagementPlan,
-    ManagementRequest, MissingCopies, MoveBackup, MoveCopy, MoveMarker, MovePlan, MoveRequest,
-    MoveSource, MoveStage, SettledShelf, ShelfBook, StepRequest,
+    BookOptions, BookStep, BooksRequest, CopiesRequest, CopyPlace, CustomField, EditionOptions,
+    ManagementCommand, ManagementPlan, ManagementRequest, MissingCopies, MoveBackup, MoveCopy,
+    MoveMarker, MovePlan, MoveRequest, MoveSource, MoveStage, OptionsRequest, RestoreRequest,
+    RestoreTargets, SettledShelf, ShelfBook, StepRequest,
 };
 pub use portable::{
     ImportPlan, ImportRequest, NoteFacts, PortableEnvelope, PortableExport, PortableNote,
@@ -176,6 +177,9 @@ pub enum Ownership {
 }
 
 /// What to confirm with the user, or what to write.
+///
+/// A decision that asks the user to pick a book or an edition lists the picks the action allows:
+/// the runtime only renders them.
 #[derive(Serialize, Tsify)]
 #[serde(
     tag = "kind",
@@ -187,13 +191,24 @@ pub enum Decision {
     InvalidIsbn {
         input: String,
     },
-    InsufficientEvidence,
+    /// The product names no book; the user may pick any unarchived book.
+    InsufficientEvidence {
+        book_ids: Vec<String>,
+        /// The action may record the product as a book not stored yet.
+        new_book: bool,
+    },
     ConflictingEvidence,
+    /// Several books match the product; the user may pick an unarchived one among them.
     ChooseBook {
         book_ids: Vec<String>,
+        /// The action may record the product as a book not stored yet.
+        new_book: bool,
     },
+    /// The book's unarchived editions do not settle on one; the user may pick one of them.
     ChooseEdition {
         edition_ids: Vec<String>,
+        /// The action may record the product as an edition the book does not hold yet.
+        new_edition: bool,
     },
     CreateBook {
         wanted: bool,

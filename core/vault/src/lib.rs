@@ -14,19 +14,20 @@ mod shelf;
 mod text;
 
 pub use change::plan_change;
-pub use management::{allows_step, plan_management};
+pub use management::{allows_step, book_options, plan_management, restore_targets};
 pub use matching::inspect;
 pub use model::{
-    Action, Admission, Book, BookStep, BookWrite, BooksRequest, CatalogRequest, ChangePlan,
-    ChangeRequest, CopiesRequest, CustomField, Decision, Details, Edition, EditionPatch,
-    EditionWrite, ExpiryRequest, ImportPlan, ImportRequest, IsbnList, ManagementCommand,
-    ManagementPlan, ManagementRequest, MissingCopies, MoveBackup, MoveCopy, MoveMarker, MovePlan,
-    MoveRequest, MoveSource, MoveStage, NewBook, NoteFacts, Outcome, Ownership, OwnershipFilter,
-    PortableEnvelope, PortableExport, PortableNote, PortableNotes, PortableProblem,
-    PortableVerdict, PresentNote, Product, PurchaseKey, RangeKind, Receipt, ReceiptExpiry,
-    ReceiptWrite, ReconcileRequest, Reconciliation, Selection, SettledShelf, ShelfBook, ShelfBound,
-    ShelfField, ShelfOverview, ShelfQuery, ShelfRange, ShelfRecord, ShelfRequest, ShelfSelection,
-    ShelfTag, ShelfValue, ShelfView, StepRequest, WishFilter, WritePlan,
+    Action, Admission, Book, BookOptions, BookStep, BookWrite, BooksRequest, CatalogRequest,
+    ChangePlan, ChangeRequest, CopiesRequest, CopyPlace, CustomField, Decision, Details, Edition,
+    EditionOptions, EditionPatch, EditionWrite, ExpiryRequest, ImportPlan, ImportRequest, IsbnList,
+    ManagementCommand, ManagementPlan, ManagementRequest, MissingCopies, MoveBackup, MoveCopy,
+    MoveMarker, MovePlan, MoveRequest, MoveSource, MoveStage, NewBook, NoteFacts, OptionsRequest,
+    Outcome, Ownership, OwnershipFilter, PortableEnvelope, PortableExport, PortableNote,
+    PortableNotes, PortableProblem, PortableVerdict, PresentNote, Product, PurchaseKey, RangeKind,
+    Receipt, ReceiptExpiry, ReceiptWrite, ReconcileRequest, Reconciliation, RestoreRequest,
+    RestoreTargets, Selection, SettledShelf, ShelfBook, ShelfBound, ShelfField, ShelfOverview,
+    ShelfQuery, ShelfRange, ShelfRecord, ShelfRequest, ShelfSelection, ShelfTag, ShelfValue,
+    ShelfView, StepRequest, WishFilter, WritePlan,
 };
 pub use moving::{missing_move_copies, plan_move, settle_shelf};
 pub use portable::{
@@ -177,6 +178,26 @@ pub fn settle_shelf_request(request: &str) -> Result<Ts<SettledShelf>, JsError> 
 pub fn missing_move_copies_request(request: &str) -> Result<Ts<MissingCopies>, JsError> {
     let request: CopiesRequest = serde_json::from_str(request)?;
     Ok(missing_move_copies(&request).into_ts()?)
+}
+
+/// The books each saved edition copy may go back to, from the JSON text of a `RestoreRequest`.
+///
+/// # Errors
+/// Throws when the request is not a well-formed `RestoreRequest`.
+#[wasm_bindgen(js_name = restoreTargets)]
+pub fn restore_targets_request(request: &str) -> Result<Ts<RestoreTargets>, JsError> {
+    let request: RestoreRequest = serde_json::from_str(request)?;
+    Ok(restore_targets(&request).into_ts()?)
+}
+
+/// Which management commands one book takes, from the JSON text of an `OptionsRequest`.
+///
+/// # Errors
+/// Throws when the request is not a well-formed `OptionsRequest`.
+#[wasm_bindgen(js_name = bookOptions)]
+pub fn book_options_request(request: &str) -> Result<Ts<BookOptions>, JsError> {
+    let request: OptionsRequest = serde_json::from_str(request)?;
+    Ok(book_options(&request).into_ts()?)
 }
 
 /// The calendar date a person wrote, as `YYYY-MM-DD`, or nothing when it names no real day.

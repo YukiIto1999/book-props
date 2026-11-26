@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readBookNote } from "../src/book-note.ts";
-import { draftProduct, inputValues } from "../src/registration-draft.ts";
+import { draftProduct, inputValues } from "../src/views/registration-draft.ts";
 import { first, key, original, product, row, scope } from "./catalog-fixture.mjs";
+import { notes as noteFormat } from "./core.mjs";
+
+const readBookNote = (raw) => noteFormat.read(raw);
 
 // 書誌検索や商品ページから選んだ書誌。表紙と出版日は登録画面の入力欄に出ない。
 const fetched = {

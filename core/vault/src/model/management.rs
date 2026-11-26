@@ -348,3 +348,65 @@ pub struct CopiesRequest {
 pub struct MissingCopies {
     pub(crate) missing: Vec<bool>,
 }
+
+/// The books of the moves whose editions were saved outside the Vault.
+#[derive(Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoreRequest {
+    pub(crate) books: Vec<Book>,
+    pub(crate) copies: Vec<CopyPlace>,
+}
+
+/// The two books of the move an edition was saved outside the Vault for.
+#[derive(Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct CopyPlace {
+    pub(crate) source_id: String,
+    pub(crate) destination_id: String,
+}
+
+/// For each saved copy in request order, the books it may go back to: its source, then its
+/// destination.
+#[derive(Serialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoreTargets {
+    pub(crate) targets: Vec<Vec<String>>,
+}
+
+/// The book to offer management commands for, and the books read with it.
+#[derive(Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct OptionsRequest {
+    pub(crate) books: Vec<Book>,
+    pub(crate) book_id: String,
+}
+
+/// Which management commands the user may give for one book.
+#[derive(Serialize, Tsify)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum BookOptions {
+    /// No book has the id.
+    Missing,
+    /// The book records an unsettled move, which can only be resumed or cancelled.
+    Moving,
+    /// The book is archived and can only be restored.
+    Archived,
+    /// The book can be archived and take custom fields and editions; each of its editions in note
+    /// order lists what it takes.
+    Open { editions: Vec<EditionOptions> },
+}
+
+/// What one edition of an open book takes.
+#[derive(Serialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct EditionOptions {
+    pub(crate) id: String,
+    /// The edition is archived and can only be restored; otherwise it can be edited and archived.
+    pub(crate) archived: bool,
+    /// The books the edition may move to.
+    pub(crate) destinations: Vec<String>,
+}

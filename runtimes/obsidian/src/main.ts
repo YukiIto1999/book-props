@@ -1,20 +1,24 @@
 import { FileSystemAdapter, Notice, Plugin, TFolder, normalizePath } from "obsidian";
 import type { TAbstractFile } from "obsidian";
-import type { Request, Response } from "@book-props/vault-contract";
-import { Catalog, type Result } from "./catalog.ts";
-import { decodeConfiguration, type Configuration } from "./configuration.ts";
-import type { ConnectionGrant } from "./connection-grant.ts";
-import { Connection } from "./connection.ts";
-import { LibraryTools } from "./library-tools.ts";
-import { addNoteTemplates } from "./note-templates.ts";
-import { Registration } from "./registration.ts";
-import { Settings } from "./settings.ts";
-import { Shelf } from "./shelf.ts";
-import { VaultConnection } from "./vault-connection.ts";
-import { VaultFiles } from "./vault-files.ts";
-import { startCatalogCore, type CatalogCore } from "./wasm.ts";
+import { bibliographySources } from "./adapters/bibliography-sources.ts";
+import { decodeConfiguration, type Configuration } from "./adapters/configuration.ts";
+import type { ConnectionGrant } from "./adapters/connection/connection-grant.ts";
+import { Connection } from "./adapters/connection/connection.ts";
+import { VaultConnection } from "./adapters/connection/vault-connection.ts";
+import { NoteFormat } from "./adapters/note-format/note-format.ts";
+import { VaultFiles } from "./adapters/vault-files.ts";
+import { Catalog, type Product } from "./catalog/catalog.ts";
+import { startCatalogCore, type CatalogCore } from "./core/catalog-core.ts";
+import { answerExtension, type ExtensionHost } from "./views/extension-requests.ts";
+import { LibraryTools } from "./views/library-tools.ts";
+import { addNoteTemplates } from "./views/note-templates.ts";
+import type { LocalAction } from "./views/registration-messages.ts";
+import { Registration } from "./views/registration.ts";
+import { Settings } from "./views/settings.ts";
+import { Shelf } from "./views/shelf.ts";
 
-type OpenRequest = Extract<Request, { action: "open" }>;
+/** 起動したcoreと、それを使う本ページの書式。プラグインの読み込みで一度だけ作る。 */
+type Runtime = Readonly<{ core: CatalogCore; notes: NoteFormat }>;
 
 export default class BookProps extends Plugin {
   folder = "";
@@ -22,7 +26,7 @@ export default class BookProps extends Plugin {
   private readonly clientId = crypto.randomUUID();
   private readonly fileVersions = new WeakMap<TAbstractFile, number>();
   private fileSequence = 0;
-  private core?: CatalogCore;
+  private runtime?: Runtime;
   private config: Configuration = {};
   private readonly link = new VaultConnection({
     vaultPath: () => this.vaultPath(),
@@ -50,15 +54,27 @@ export default class BookProps extends Plugin {
     return version;
   };
 
+  /** 書籍フォルダの本を扱う目録を、Vaultのファイルと起動済みのcoreで組み立てる。 */
+  private openCatalog(folder: string, { core, notes }: Runtime): Catalog {
+    return new Catalog(new VaultFiles(this.app, folder, this.fileVersion), core, notes);
+  }
+
+  private openRegistration(catalog: Catalog, product?: Product, intent?: LocalAction): void {
+    const services = { catalog, sources: bibliographySources, clientId: this.clientId };
+    new Registration(this.app, services, product, intent).open();
+  }
+
   override async onload(): Promise<void> {
-    this.core = await startCatalogCore();
+    const core = startCatalogCore();
+    const runtime = { core, notes: new NoteFormat(core) };
+    this.runtime = runtime;
     const saved: unknown = await this.loadData();
     this.config = decodeConfiguration(saved);
     this.registerEvent(this.app.vault.on("modify", (file) => this.fileVersions.delete(file)));
     const { folder } = this.config;
     if (folder && normalizePath(folder) === folder) {
       this.folder = folder;
-      this.catalog = new Catalog(new VaultFiles(this.app, folder, this.fileVersion), this.core);
+      this.catalog = this.openCatalog(folder, runtime);
     }
     const settings = new Settings(this.app, this);
     this.addSettingTab(settings);
@@ -67,16 +83,15 @@ export default class BookProps extends Plugin {
       name: "書籍を登録・編集",
       callback: () => {
         if (!this.catalog) new Notice("Book Propsの設定で書籍フォルダを指定してください。");
-        else new Registration(this.app, this.catalog, this.clientId).open();
+        else this.openRegistration(this.catalog);
       },
     });
     this.addCommand({
       id: "open-shelf",
       name: "本棚を開く",
       callback: () => {
-        if (!this.catalog || !this.core)
-          new Notice("Book Propsの設定で書籍フォルダを指定してください。");
-        else new Shelf(this.app, this.catalog, this.core).open();
+        if (!this.catalog) new Notice("Book Propsの設定で書籍フォルダを指定してください。");
+        else new Shelf(this.app, this.catalog).open();
       },
     });
     this.addCommand({
@@ -88,7 +103,7 @@ export default class BookProps extends Plugin {
           new LibraryTools(this.app, this.catalog, this.app.workspace.getActiveFile()?.path).open();
       },
     });
-    addNoteTemplates(this, () => this.folder);
+    addNoteTemplates(this, () => this.folder, runtime.notes);
     this.app.workspace.onLayoutReady(() => {
       if (this.unloaded) return;
       if (!this.changing) {
@@ -112,8 +127,9 @@ export default class BookProps extends Plugin {
 
   async selectFolder(proposed: string): Promise<boolean> {
     const folder = proposed.trim();
+    const { runtime } = this;
     if (
-      !this.core ||
+      !runtime ||
       !folder ||
       normalizePath(folder) !== folder ||
       !(this.app.vault.getAbstractFileByPath(folder) instanceof TFolder)
@@ -132,7 +148,7 @@ export default class BookProps extends Plugin {
       if (this.unloaded) return false;
       this.config = next;
       this.folder = folder;
-      this.catalog = new Catalog(new VaultFiles(this.app, folder, this.fileVersion), this.core);
+      this.catalog = this.openCatalog(folder, runtime);
       await this.link.release(grant, saved);
       return true;
     } finally {
@@ -183,75 +199,15 @@ export default class BookProps extends Plugin {
   ): Promise<Connection> {
     const catalog = this.catalog;
     if (!catalog) throw new Error("書籍フォルダを確認できません。");
+    const requests: ExtensionHost = {
+      app: this.app,
+      folder: () => this.folder,
+      current: (opened) => this.catalog === opened,
+      openRegistration: (...form) => this.openRegistration(...form),
+    };
     return Connection.start(host, port, scope, grant, (request, signal) =>
-      this.dispatch(catalog, request, signal),
+      answerExtension(requests, catalog, request, signal),
     );
-  }
-
-  /** Brings Obsidian forward on the book page the extension asked for, or on registration when no book matches. */
-  private async openFromExtension(
-    request: OpenRequest,
-    catalog: Catalog,
-    signal: AbortSignal,
-  ): Promise<Response> {
-    if (request.intent) {
-      window.focus();
-      new Registration(this.app, catalog, this.clientId, request.product, request.intent).open();
-      return { kind: "opened" };
-    }
-    const inspection = await catalog.execute(
-      { action: "inspect", product: request.product },
-      signal,
-    );
-    if (signal.aborted || this.catalog !== catalog) return { kind: "unavailable" };
-    if (inspection.kind !== "unreadable" && inspection.kind !== "observed")
-      return { kind: inspection.kind === "conflict" ? "conflict" : "unavailable" };
-    return this.showInspection(inspection, catalog, request.product);
-  }
-
-  private async showInspection(
-    inspection: Extract<Result, { kind: "unreadable" | "observed" }>,
-    catalog: Catalog,
-    product: OpenRequest["product"],
-  ): Promise<Response> {
-    const { path } = inspection;
-    window.focus();
-    if (!path) {
-      new Registration(this.app, catalog, this.clientId, product).open();
-      return { kind: "opened" };
-    }
-    const file = this.app.vault.getFileByPath(path);
-    if (!file || !file.path.startsWith(`${this.folder}/`)) return { kind: "unavailable" };
-    if (inspection.kind === "unreadable") {
-      await this.app.workspace.getLeaf(false).openFile(file, {
-        state: { mode: "source", source: true },
-      });
-      new Notice(
-        `「${file.path}」を読み取れません。${inspection.reason} 記録を修正してから、Chromeで照合し直してください。`,
-        12_000,
-      );
-    } else await this.app.workspace.getLeaf(false).openFile(file);
-    return { kind: "opened" };
-  }
-
-  private async dispatch(
-    catalog: Catalog,
-    request: Exclude<Request, { action: "pair" | "status" }>,
-    signal: AbortSignal,
-  ): Promise<Response> {
-    if (this.catalog !== catalog || signal.aborted) return { kind: "unavailable" };
-    if (request.action === "open") return this.openFromExtension(request, catalog, signal);
-    const execution =
-      request.action === "reconcile"
-        ? await catalog.reconcile({ ...request, action: "purchase" }, signal)
-        : await catalog.execute(request, signal);
-    if (execution.kind === "observed")
-      return {
-        kind: "observed",
-        ownership: execution.outcome.ownership,
-        wanted: execution.outcome.wanted,
-      };
-    return { kind: execution.kind };
   }
 
   override onunload(): void {

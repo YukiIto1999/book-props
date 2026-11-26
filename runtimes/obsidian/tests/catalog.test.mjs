@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createBookNote, readBookNote } from "../src/book-note.ts";
-
 import { product, first, key, row, original, scope } from "./catalog-fixture.mjs";
+import { notes as noteFormat } from "./core.mjs";
+
+const createBookNote = (book) => noteFormat.create(book);
+const readBookNote = (raw) => noteFormat.read(raw);
 
 void test("concurrent requests for an unregistered edition converge to one page and one edition", async () => {
   const { notes, catalog } = scope();

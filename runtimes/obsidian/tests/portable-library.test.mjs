@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { core } from "./core.mjs";
+import { PortableLibrary, PortableLibraryError } from "../src/catalog/portable-library.ts";
+import { core, notes as noteFormat } from "./core.mjs";
 
-import { readBookNote } from "../src/book-note.ts";
-import { PortableLibrary, PortableLibraryError } from "../src/portable-library.ts";
-
-const portable = new PortableLibrary(core);
+const readBookNote = (raw) => noteFormat.read(raw);
+const portable = new PortableLibrary(core, noteFormat);
 const encodePortableLibrary = (raws) => portable.encode(raws);
 const decodePortableLibrary = (json) => portable.decode(json);
 

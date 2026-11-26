@@ -1,16 +1,8 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import test from "node:test";
+import { emptyFilter, ShelfQuery } from "../src/catalog/shelf-query.ts";
 import { core } from "./core.mjs";
 
-// shelf.ts の画面部は Obsidian の Modal を継承する。純粋な絞り込みだけを読み込むため、型定義しかない obsidian を空のクラスで解決する。
-const obsidian = `data:text/javascript,${encodeURIComponent("export class Modal {} export class Setting {}")}`;
-registerHooks({
-  resolve: (specifier, context, next) =>
-    specifier === "obsidian" ? { url: obsidian, shortCircuit: true } : next(specifier, context),
-});
-const { emptyFilter } = await import("../src/shelf.ts");
-const { ShelfQuery } = await import("../src/shelf-query.ts");
 const selectBooks = (entries, filter) => {
   const shelf = ShelfQuery.open(core, entries);
   try {

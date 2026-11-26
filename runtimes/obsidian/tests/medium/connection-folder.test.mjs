@@ -5,10 +5,10 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { connectionFile } from "@book-props/vault-contract";
-import { ConnectionGrant, vaultGrant } from "../../src/connection-grant.ts";
-import { establish, SetupFailure } from "../../src/connection-setup.ts";
-import { Connection, scopeOf } from "../../src/connection.ts";
-import { createHost } from "../../src/tls-identity.ts";
+import { ConnectionGrant, vaultGrant } from "../../src/adapters/connection/connection-grant.ts";
+import { establish, SetupFailure } from "../../src/adapters/connection/connection-setup.ts";
+import { Connection, scopeOf } from "../../src/adapters/connection/connection.ts";
+import { createHost } from "../../src/adapters/connection/tls-identity.ts";
 import { post, prove, readCard } from "./connection-support.mjs";
 
 async function temporary(context, prefix) {

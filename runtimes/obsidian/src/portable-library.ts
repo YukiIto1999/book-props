@@ -1,5 +1,5 @@
 import { BookNoteError } from "./book-note-error.ts";
-import { readBookNote, removeExpiredPurchases } from "./book-note.ts";
+import { readBookNote, removePurchases } from "./book-note.ts";
 import { isJsonObject } from "./json-object.ts";
 
 const portableFormat = "book-props-vault";
@@ -102,7 +102,7 @@ export function encodePortableLibrary(raws: readonly string[]): string {
   const collector = new Collector();
   raws.forEach((raw, position) => {
     collector.add(
-      asNote(position, () => removeExpiredPurchases(raw, Infinity)),
+      asNote(position, () => removePurchases(raw, (purchases) => purchases.map(() => true))),
       position,
     );
   });

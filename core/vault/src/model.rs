@@ -64,6 +64,10 @@ pub struct Book {
     #[tsify(optional)]
     pub(crate) archived_at: Option<String>,
     pub(crate) editions: Vec<Edition>,
+    /// Purchases already applied to this book, kept to recognise a retried request.
+    pub(crate) applied_purchases: Vec<Receipt>,
+    /// An edition move recorded on this book has not settled.
+    pub(crate) pending_move: bool,
 }
 
 /// An edition of a stored book.
@@ -201,4 +205,199 @@ impl Outcome {
 pub enum IsbnList {
     Valid { values: Vec<String> },
     Invalid { input: String },
+}
+
+/// The idempotency key the browser attaches to a purchase.
+#[derive(Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct PurchaseKey {
+    pub(crate) client_id: String,
+    pub(crate) request_id: String,
+    /// Milliseconds since the epoch; `null` when JavaScript held no finite number.
+    #[tsify(type = "number")]
+    pub(crate) issued_at: Option<f64>,
+}
+
+/// The record that a purchase request was applied, stored with the book it changed.
+#[derive(Clone, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct Receipt {
+    pub(crate) request_id: String,
+    pub(crate) client_id: String,
+    /// The runtime's fingerprint of the request contents.
+    pub(crate) input_hash: String,
+    /// When the purchase was applied, as an ISO 8601 UTC instant.
+    pub(crate) applied_at: String,
+    pub(crate) book_id: String,
+    pub(crate) edition_id: String,
+}
+
+/// Whether an operation may start, checked before the catalog is read.
+#[derive(Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct Admission {
+    pub(crate) action: Action,
+    #[tsify(optional)]
+    pub(crate) purchase: Option<PurchaseKey>,
+    /// The runtime clock in milliseconds since the epoch.
+    pub(crate) now: i64,
+}
+
+/// One read of the catalog while changing it for a product.
+#[derive(Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeRequest {
+    pub(crate) catalog: CatalogRequest,
+    #[tsify(optional)]
+    pub(crate) purchase: Option<PurchaseKey>,
+    /// The runtime's fingerprint of the request contents; present with a purchase key.
+    #[tsify(optional)]
+    pub(crate) input_hash: Option<String>,
+    /// The revision planned on the first read. Absent on the first read itself.
+    #[tsify(optional)]
+    pub(crate) expected: Option<String>,
+    /// The runtime clock in milliseconds since the epoch, stamped on a new receipt.
+    pub(crate) now: i64,
+    /// The id a new book takes.
+    pub(crate) new_book_id: String,
+    /// The id a new edition takes.
+    pub(crate) new_edition_id: String,
+}
+
+/// What the runtime does with one read of the catalog.
+#[derive(Serialize, Tsify)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+#[tsify(missing_as_null)]
+pub enum ChangePlan {
+    /// The same request was applied before.
+    Replayed {
+        book_id: String,
+        edition_id: String,
+    },
+    Conflict,
+    Unavailable,
+    /// Nothing to write; the outcome only reports the catalog.
+    Observed {
+        outcome: Outcome,
+    },
+    /// The user must resolve the outcome before anything is written.
+    NeedsInput {
+        outcome: Outcome,
+    },
+    Write(Box<WritePlan>),
+}
+
+/// The book or change to write, and the revision that must still hold when it is written.
+#[derive(Serialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct WritePlan {
+    pub(crate) revision: String,
+    pub(crate) book_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub(crate) edition_id: Option<String>,
+    /// The wish, edition, and receipt the book holds after the write.
+    pub(crate) change: BookWrite,
+    /// The book note to create; absent when an existing book changes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub(crate) new_book: Option<NewBook>,
+}
+
+/// A book note to create.
+#[derive(Serialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct NewBook {
+    pub(crate) id: String,
+    pub(crate) title: String,
+    pub(crate) authors: Vec<String>,
+    pub(crate) wanted: bool,
+    pub(crate) editions: Vec<EditionWrite>,
+    pub(crate) applied_purchases: Vec<Receipt>,
+}
+
+/// The wish, and optionally the edition and receipt, to write to one book.
+#[derive(Serialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct BookWrite {
+    pub(crate) wanted: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub(crate) edition: Option<EditionWrite>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub(crate) receipt: Option<Receipt>,
+}
+
+/// An edition to add, or the ownership and blank values to write to a stored edition.
+#[derive(Clone, Serialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct EditionWrite {
+    pub(crate) id: String,
+    pub(crate) owned: bool,
+    pub(crate) isbns: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub(crate) label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub(crate) publisher: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub(crate) published_on: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub(crate) cover: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub(crate) purchased_on: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub(crate) purchased_from: Option<String>,
+}
+
+/// Whether a purchase was applied before, asked after the browser lost the answer.
+#[derive(Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct ReconcileRequest {
+    pub(crate) purchase: PurchaseKey,
+    pub(crate) input_hash: String,
+    pub(crate) books: Vec<Book>,
+}
+
+/// What the catalog records about a purchase request.
+#[derive(Serialize, Tsify)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum Reconciliation {
+    Replayed {
+        book_id: String,
+        edition_id: String,
+    },
+    Conflict,
+    /// No book records the request.
+    Unknown,
+}
+
+/// Receipts to check against the retention period.
+#[derive(Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct ExpiryRequest {
+    pub(crate) receipts: Vec<Receipt>,
+    /// The runtime clock in milliseconds since the epoch.
+    pub(crate) now: i64,
+}
+
+/// For each receipt in request order, whether it is past the retention period.
+#[derive(Serialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct ReceiptExpiry {
+    pub(crate) expired: Vec<bool>,
 }

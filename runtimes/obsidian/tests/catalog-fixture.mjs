@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { initSync, inspect, normalizeIsbns } from "../dist/wasm/book_props_vault.js";
+import * as core from "../dist/wasm/book_props_vault.js";
 import { Catalog } from "../src/catalog.ts";
 import { createBookNote } from "../src/book-note.ts";
 
-initSync({
+core.initSync({
   module: readFileSync(new URL("../dist/wasm/book_props_vault_bg.wasm", import.meta.url)),
 });
 const product = {
@@ -73,7 +73,7 @@ function scope(initial, moveCopies = memoryCopies()) {
     },
     canUpdate: () => true,
   };
-  return { files, notes, catalog: new Catalog(files, { inspect, normalizeIsbns }) };
+  return { files, notes, catalog: new Catalog(files, core) };
 }
 
 export { product, first, key, row, original, scope };

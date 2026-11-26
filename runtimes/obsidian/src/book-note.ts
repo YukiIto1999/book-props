@@ -145,9 +145,17 @@ export function writeBookUpdate(raw: string, input: BookUpdate): string {
   return saved;
 }
 
-export function removeExpiredPurchases(raw: string, before: number): string {
+/**
+ * 選んだ適用済み購入の記録だけを取り除く。他の行と本文は一文字も変えない。
+ * @param remove - 本ページにある購入の記録ごとに、取り除くかを返す判定
+ */
+export function removePurchases(
+  raw: string,
+  remove: (purchases: readonly AppliedPurchase[]) => readonly boolean[],
+): string {
   const { header, managed, book } = parseNote(raw);
-  const keep = book.appliedPurchases.filter(({ appliedAt }) => Date.parse(appliedAt) >= before);
+  const removed = remove(book.appliedPurchases);
+  const keep = book.appliedPurchases.filter((_, index) => removed[index] !== true);
   if (keep.length === book.appliedPurchases.length) return raw;
   const rows = keep.map(storePurchase);
   const saved = spliceNote(raw, header, fieldEdits(header, managed, { "applied-purchases": rows }));

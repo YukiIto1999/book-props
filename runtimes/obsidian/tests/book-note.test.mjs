@@ -7,7 +7,7 @@ import {
   readBookNote,
   readScopedNote,
   removeEdition,
-  removeExpiredPurchases,
+  removePurchases,
   updateCustomField,
   writeBookUpdate,
 } from "../src/book-note.ts";
@@ -130,9 +130,9 @@ void test("expiry deletes only old receipt data, even when the last receipt is r
   };
   let raw = writeBookUpdate(note, { wanted: true, edition, receipt });
   raw = writeBookUpdate(raw, { wanted: true, edition, receipt: fresh });
-  const pruned = removeExpiredPurchases(raw, Date.parse("2026-12-01T00:00:00Z"));
+  const pruned = removePurchases(raw, () => [true, false]);
   assert.deepEqual(readBookNote(pruned).book.appliedPurchases, [fresh]);
-  const last = removeExpiredPurchases(pruned, Date.parse("2026-12-04T00:00:00Z"));
+  const last = removePurchases(pruned, () => [true]);
   assert.deepEqual(readBookNote(last).book.appliedPurchases, []);
   assert.deepEqual(readBookNote(last).book.editions, readBookNote(note).book.editions);
   assert.ok(last.includes("my-rating: 4 # personal property"));

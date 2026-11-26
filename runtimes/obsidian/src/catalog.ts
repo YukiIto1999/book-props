@@ -1,28 +1,22 @@
 import type { Product as WireProduct } from "@book-props/vault-contract";
-import { writeBookUpdate, type BookRecord } from "./book-note.ts";
+import { createBookNote, writeBookUpdate, type BookRecord } from "./book-note.ts";
 import { manageBooks, type Management, type ManagementResult } from "./book-management.ts";
-import { catalogRequest } from "./catalog-core.ts";
+import { CatalogRules, type Commit, type Stamp } from "./catalog-core.ts";
 import { importNotes, pruneReceipts, type ImportResult } from "./catalog-maintenance.ts";
 import {
   assertUnchanged,
-  bookChange,
   CatalogChanged,
   confirmedWrite,
   hasPendingMove,
   inputHash,
-  newBookNote,
-  planWrite,
   Refuse,
-  replayOf,
-  revision,
-  updatedEdition,
-  validKey,
   type Write,
   type WriteProgress,
 } from "./catalog-purchase.ts";
 import { readCatalog, readEntries, readEntry, readFailure, readStable } from "./catalog-read.ts";
 import { settledShelf } from "./edition-move.ts";
 import { missingMoveCopies, type MoveCopies } from "./edition-recovery.ts";
+import { optionalField } from "./optional-field.ts";
 import { decodePortableLibrary, encodePortableLibrary } from "./portable-library.ts";
 import type { Action, CatalogCore, IsbnList, Outcome } from "./wasm.ts";
 
@@ -59,17 +53,18 @@ export interface BookFiles {
   create(bookId: string, raw: string): Promise<string>;
   canUpdate(path: string, latest: string): boolean;
 }
+type Request = Pick<Write, "operation" | "signal" | "hash">;
 
 export class Catalog {
   private tail: Promise<unknown> = Promise.resolve();
   private accepting = true;
 
   private readonly files: BookFiles;
-  private readonly core: CatalogCore;
+  private readonly rules: CatalogRules;
 
   constructor(files: BookFiles, core: CatalogCore) {
     this.files = files;
-    this.core = core;
+    this.rules = new CatalogRules(core);
   }
 
   async entries(): Promise<StoredBook[]> {
@@ -88,34 +83,34 @@ export class Catalog {
     });
   }
 
-  private report(operation: Operation, entries: readonly StoredBook[]): Outcome {
-    // 要求はJSONの文字列で渡す。本ごとに項目を変換して境界を越えるより、一度の解析のほうが速い。
-    return this.core.inspect(JSON.stringify(catalogRequest(operation, entries)));
-  }
-
   async preview(operation: Operation): Promise<Result> {
     try {
       const entries = await this.entries();
       if (!this.accepting || hasPendingMove(entries)) return { kind: "unavailable" };
-      return { kind: "observed", outcome: this.report(operation, entries) };
+      return { kind: "observed", outcome: this.rules.inspect(operation, entries) };
     } catch (error: unknown) {
       return readFailure(error) ?? { kind: "unavailable" };
     }
   }
 
   normalizeIsbns(isbns: readonly string[]): IsbnList {
-    return this.core.normalizeIsbns([...isbns]);
+    return this.rules.normalizeIsbns(isbns);
   }
 
   async reconcile(operation: Operation, signal?: AbortSignal): Promise<Result> {
     const { purchase } = operation;
-    if (this.halted(signal) || operation.action !== "purchase" || !purchase || !validKey(purchase))
+    if (
+      this.halted(signal) ||
+      operation.action !== "purchase" ||
+      !purchase ||
+      !this.rules.admits(operation)
+    )
       return { kind: "unknown" };
     try {
       const { value: entries } = await readCatalog(this.files, signal);
       const hash = await inputHash(operation);
       if (this.halted(signal)) return { kind: "unknown" };
-      return replayOf(entries, purchase, hash) ?? { kind: "unknown" };
+      return this.rules.reconcile(purchase, hash, entries);
     } catch {
       return { kind: "unknown" };
     }
@@ -163,7 +158,11 @@ export class Catalog {
           }
         }
         const entries = hasPendingMove(initial) ? await this.entries() : initial;
-        if (!hasPendingMove(entries)) await pruneReceipts(this.managementContext, entries);
+        const now = Date.now();
+        if (!hasPendingMove(entries))
+          await pruneReceipts(this.managementContext, entries, (receipts) =>
+            this.rules.expired(receipts, now),
+          );
       } catch {
         return;
       }
@@ -187,11 +186,9 @@ export class Catalog {
   private async run(operation: Operation, signal?: AbortSignal): Promise<Result> {
     const progress: WriteProgress = { started: false };
     try {
-      if (this.halted(signal)) return { kind: "notSaved" };
-      const { action, purchase } = operation;
-      if (action === "purchase" && (!purchase || !validKey(purchase))) return { kind: "notSaved" };
-      const hash = purchase && (await inputHash(operation));
-      const step = await this.prepare(operation, signal, hash);
+      if (this.halted(signal) || !this.rules.admits(operation)) return { kind: "notSaved" };
+      const hash = operation.purchase && (await inputHash(operation));
+      const step = await this.prepare({ operation, signal, hash });
       if (step.kind !== "write") return step;
       return await this.commitWrite(step, progress);
     } catch (error: unknown) {
@@ -210,7 +207,7 @@ export class Catalog {
       } catch (error: unknown) {
         if (!(error instanceof CatalogChanged) || progress.started) throw error;
         if (attempt !== 0) return { kind: "conflict" };
-        const refreshed = await this.refreshPlan(plan);
+        const refreshed = await this.refreshPlan(plan, plan.commit);
         if (refreshed.kind !== "write") return refreshed;
         plan = refreshed;
       }
@@ -219,88 +216,85 @@ export class Catalog {
   }
 
   /** 判定を二度読み、変わっていなければ書き込む内容を決める。書き込まない場合は結果を返す。 */
-  private async prepare(
-    operation: Operation,
-    signal: AbortSignal | undefined,
-    hash: string | undefined,
-  ): Promise<Result | Write> {
-    const { action, purchase } = operation;
+  private async prepare(request: Request): Promise<Result | Write> {
+    const { operation, signal, hash } = request;
     const { value: entries } = await readCatalog(this.files, signal);
     if (this.halted(signal)) return { kind: "notSaved" };
-    const replay = replayOf(entries, purchase, hash);
-    if (replay) return replay;
-    if (hasPendingMove(entries)) return { kind: "unavailable" };
-    const original = this.report(operation, entries);
-    const { kind } = original.decision;
-    if (action === "inspect") {
-      const path = entries.find(({ book }) => book.id === original.bookId)?.path;
-      return { kind: "observed", outcome: original, path };
+    const stamp: Stamp = {
+      now: Date.now(),
+      newBookId: crypto.randomUUID(),
+      newEditionId: crypto.randomUUID(),
+    };
+    const plan = this.rules.plan(operation, entries, hash, stamp);
+    if (plan.kind === "observed" && operation.action === "inspect") {
+      const path = entries.find(({ book }) => book.id === plan.outcome.bookId)?.path;
+      return { ...plan, path };
     }
-    if (kind === "none") return { kind: "observed", outcome: original };
-    if (kind !== "createBook" && kind !== "addEdition" && kind !== "update")
-      return { kind: "needsInput", outcome: original };
-    return this.refreshPlan({ operation, signal, hash, expected: revision(action, original) });
+    if (plan.kind !== "write") return plan;
+    return this.refreshPlan(request, { ...stamp, expected: plan.revision });
   }
 
-  private async refreshPlan({
-    operation,
-    signal,
-    hash,
-    expected,
-  }: Pick<Write, "operation" | "signal" | "hash" | "expected">): Promise<Result | Write> {
+  /** 読み直した目録で、最初の判定と同じ計画になるときだけ書き込む内容を決める。 */
+  private async refreshPlan(
+    { operation, signal, hash }: Request,
+    planned: Commit,
+  ): Promise<Result | Write> {
     if (this.halted(signal)) return { kind: "notSaved" };
     const { value: fresh, versions } = await readCatalog(this.files, signal);
-    if (hasPendingMove(fresh)) return { kind: "unavailable" };
-    const outcome = this.report(operation, fresh);
-    const freshReplay = replayOf(fresh, operation.purchase, hash);
-    if (freshReplay) return freshReplay;
-    if (revision(operation.action, outcome) !== expected) return { kind: "conflict" };
+    const commit = { ...planned, now: Date.now() };
+    const plan = this.rules.plan(operation, fresh, hash, commit);
+    if (plan.kind !== "write") return plan;
     if (this.halted(signal)) return { kind: "notSaved" };
-    return planWrite({ operation, signal, hash, expected, fresh, versions, outcome });
+    const target = plan.newBook ? undefined : fresh.find(({ book }) => book.id === plan.bookId);
+    return {
+      kind: "write",
+      operation,
+      signal,
+      hash,
+      commit,
+      fresh,
+      versions,
+      plan,
+      ...optionalField("target", target),
+    };
   }
 
   private async write(step: Write, progress: WriteProgress): Promise<string> {
     if (this.halted(step.signal)) throw new Refuse("notSaved");
-    const { target, outcome } = step;
-    const { decision } = outcome;
+    const { target, plan } = step;
     assertUnchanged(step.versions, this.files.versions(), target?.path, target?.path);
-    if (decision.kind === "createBook") {
-      const raw = newBookNote(step, decision.wanted);
-      progress.change = bookChange(decision.wanted, step.newRecord, step.receipt);
+    if (plan.newBook) {
+      const raw = createBookNote(plan.newBook);
+      progress.change = plan.change;
       progress.started = true;
-      return this.files.create(step.bookId, raw);
+      return this.files.create(plan.bookId, raw);
     }
-    if (!target || (decision.kind !== "addEdition" && decision.kind !== "update"))
-      throw new Refuse("conflict");
+    if (!target) throw new Refuse("conflict");
     return this.files.process(target.path, (raw, currentPath) =>
       this.applyUpdate(step, progress, raw, currentPath),
     );
   }
 
-  /** 本ページの最新の内容で判定し直し、変わっていなければ購入希望・版・購入の記録を書き換える。 */
+  /** 本ページの最新の内容で計画し直し、変わっていなければ購入希望・版・購入の記録を書き換える。 */
   private applyUpdate(
     step: Write,
     progress: WriteProgress,
     raw: string,
     currentPath: string,
   ): string {
-    const { operation, bookId } = step;
+    const { bookId } = step.plan;
     if (this.halted(step.signal)) throw new Refuse("notSaved");
     if (!this.files.canUpdate(currentPath, raw)) throw new Refuse("unavailable");
     const latest = readEntry(currentPath, raw);
-    if (latest?.id !== bookId || latest.pendingMove) throw new Refuse("conflict");
+    if (latest?.id !== bookId) throw new Refuse("conflict");
     const updated = step.fresh.map((entry) =>
       entry.book.id === bookId ? { path: currentPath, book: latest } : entry,
     );
-    if (replayOf(updated, operation.purchase, step.hash)) throw new Refuse("conflict");
-    const verified = this.report(operation, updated);
-    if (revision(operation.action, verified) !== step.expected) throw new Refuse("conflict");
-    const plan = verified.decision;
-    if (plan.kind !== "addEdition" && plan.kind !== "update") throw new Refuse("conflict");
+    const verified = this.rules.plan(step.operation, updated, step.hash, step.commit);
+    if (verified.kind !== "write" || verified.newBook) throw new Refuse("conflict");
     assertUnchanged(step.versions, this.files.versions(), step.target?.path, currentPath);
-    const change = bookChange(plan.wantedAfter, updatedEdition(step, plan, latest), step.receipt);
-    const written = writeBookUpdate(raw, change);
-    progress.change = change;
+    const written = writeBookUpdate(raw, verified.change);
+    progress.change = verified.change;
     progress.started = true;
     return written;
   }

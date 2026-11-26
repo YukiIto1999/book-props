@@ -1,6 +1,6 @@
 import type { BookContext } from "./book-change.ts";
-import { readScopedNote, removeExpiredPurchases } from "./book-note.ts";
-import { assertUnchanged, CatalogChanged, receiptRetention, Refuse } from "./catalog-purchase.ts";
+import { readScopedNote, removePurchases, type AppliedPurchase } from "./book-note.ts";
+import { assertUnchanged, CatalogChanged, Refuse } from "./catalog-purchase.ts";
 import { readEntry, readStable } from "./catalog-read.ts";
 import type { StoredBook } from "./catalog.ts";
 import type { PortableNote } from "./portable-library.ts";
@@ -95,23 +95,25 @@ export async function importNotes(
   }
 }
 
-/** 保存期間を過ぎた適用済み購入の記録だけを取り除く。書き換えられない本は次の機会に回す。 */
+/**
+ * 保存期間を過ぎた適用済み購入の記録だけを取り除く。書き換えられない本は次の機会に回す。
+ * @param expired - 購入の記録ごとに、保存期間を過ぎたかを返す判定
+ */
 export async function pruneReceipts(
   context: BookContext,
   entries: readonly StoredBook[],
+  expired: (receipts: readonly AppliedPurchase[]) => readonly boolean[],
 ): Promise<void> {
-  const receiptsBefore = Date.now() - receiptRetention;
   for (const { path, book } of entries) {
     if (!context.active()) break;
-    if (!book.appliedPurchases.some(({ appliedAt }) => Date.parse(appliedAt) < receiptsBefore))
-      continue;
+    if (!expired(book.appliedPurchases).includes(true)) continue;
     await context.files
       .process(path, (raw, currentPath) => {
         const current = readScopedNote(raw);
         const writable = context.active() && context.files.canUpdate(currentPath, raw);
         if (!writable || current?.id !== book.id || current.pendingMove)
           throw new Refuse("unavailable");
-        return removeExpiredPurchases(raw, receiptsBefore);
+        return removePurchases(raw, expired);
       })
       .catch(() => undefined);
   }

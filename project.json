@@ -14,7 +14,7 @@
       "cache": true
     },
     "types": {
-      "command": "tsc -p runtimes/obsidian && tsc -p runtimes/chrome && tsc -p tsconfig.root.json",
+      "command": "tsc -p runtimes/obsidian && tsc -p runtimes/chrome",
       "dependsOn": ["prepare-wasm", "prepare-browser-wasm"],
       "cache": true
     },

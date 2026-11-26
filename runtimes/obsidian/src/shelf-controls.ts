@@ -2,12 +2,12 @@ import { Setting } from "obsidian";
 import { isOptionKey } from "./option-keys.ts";
 import {
   readingLabels,
-  tagKey,
   type Bounds,
   type FieldKey,
   type ShelfFields,
   type ShelfFilter,
 } from "./shelf-fields.ts";
+import type { ShelfTag } from "./shelf-query.ts";
 
 const ownershipLabels = { any: "すべて", owned: "所有あり", unowned: "所有なし" } as const;
 const wishLabels = { any: "すべて", wanted: "欲しい本", unwanted: "購入希望なし" } as const;
@@ -151,11 +151,11 @@ export function mountFilterControls(parent: HTMLElement, controls: FilterControl
   mountColumnToggles(parent, controls);
 }
 
-/** Mounts one toggle button per shelf tag and returns them by folded tag key. */
+/** Mounts one toggle button per shelf tag and returns them by the core's tag key. */
 export function mountTagBar(
   parent: HTMLElement,
-  tags: readonly string[],
-  toggleTag: (tag: string) => void,
+  tags: readonly ShelfTag[],
+  toggleTag: (tag: string, key: string) => void,
 ): ReadonlyMap<string, HTMLButtonElement> {
   const buttons = new Map<string, HTMLButtonElement>();
   if (!tags.length) return buttons;
@@ -163,10 +163,10 @@ export function mountTagBar(
     attr: { role: "group", "aria-label": "タグで絞り込む（選んだタグがすべて付いた本）" },
   });
   bar.createSpan({ text: "タグ: " });
-  for (const tag of tags) {
-    const button = bar.createEl("button", { text: `#${tag}`, attr: { "aria-pressed": "false" } });
-    button.addEventListener("click", () => toggleTag(tag));
-    buttons.set(tagKey(tag), button);
+  for (const { name, key } of tags) {
+    const button = bar.createEl("button", { text: `#${name}`, attr: { "aria-pressed": "false" } });
+    button.addEventListener("click", () => toggleTag(name, key));
+    buttons.set(key, button);
   }
   return buttons;
 }

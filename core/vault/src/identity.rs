@@ -121,7 +121,7 @@ fn isbn13_check(digits: &[u8]) -> u8 {
     b'0' + ((10 - sum % 10) % 10) as u8
 }
 
-fn isbn13(text: &str) -> Option<String> {
+pub(crate) fn isbn13(text: &str) -> Option<String> {
     let (mut bytes, size) = isbn_symbols(text)?;
     if size == 10 {
         widen_isbn10(&mut bytes)?;

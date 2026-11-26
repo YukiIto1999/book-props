@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
+import { core } from "./core.mjs";
 
 // shelf.ts の画面部は Obsidian の Modal を継承する。純粋な絞り込みだけを読み込むため、型定義しかない obsidian を空のクラスで解決する。
 const obsidian = `data:text/javascript,${encodeURIComponent("export class Modal {} export class Setting {}")}`;
@@ -8,8 +9,21 @@ registerHooks({
   resolve: (specifier, context, next) =>
     specifier === "obsidian" ? { url: obsidian, shortCircuit: true } : next(specifier, context),
 });
-const { emptyFilter, selectBooks, shelfTags, shopSearches } = await import("../src/shelf.ts");
-const { calendarDate } = await import("../src/shelf-fields.ts");
+const { emptyFilter, shopSearches } = await import("../src/shelf.ts");
+const { ShelfQuery } = await import("../src/shelf-query.ts");
+const { calendarDate } = core;
+// 本棚を開いて一度だけ問い合わせ、閉じる。
+const withShelf = (entries, read) => {
+  const shelf = ShelfQuery.open(core, entries);
+  try {
+    return read(shelf);
+  } finally {
+    shelf.close();
+  }
+};
+const selectBooks = (entries, filter) =>
+  withShelf(entries, (shelf) => shelf.select(filter).rows.map(({ entry }) => entry));
+const shelfTags = (entries) => withShelf(entries, (shelf) => shelf.tags.map(({ name }) => name));
 
 let serial = 0;
 const edition = (fields = {}) => ({ id: `edition-${++serial}`, owned: true, isbns: [], ...fields });

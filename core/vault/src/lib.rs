@@ -1,5 +1,6 @@
 //! Catalog rules for the Vault: identity evidence, matching, the decisions they lead to, the
-//! purchase changes planned from them, and the management of stored books and edition moves.
+//! purchase changes planned from them, the management of stored books and edition moves, the
+//! shelf's queries, and the portable library.
 
 mod change;
 mod identity;
@@ -7,7 +8,10 @@ mod management;
 mod matching;
 mod model;
 mod moving;
+mod portable;
 mod receipt;
+mod shelf;
+mod text;
 
 pub use change::plan_change;
 pub use management::{allows_step, plan_management};
@@ -15,13 +19,22 @@ pub use matching::inspect;
 pub use model::{
     Action, Admission, Book, BookStep, BookWrite, BooksRequest, CatalogRequest, ChangePlan,
     ChangeRequest, CopiesRequest, CustomField, Decision, Details, Edition, EditionPatch,
-    EditionWrite, ExpiryRequest, IsbnList, ManagementCommand, ManagementPlan, ManagementRequest,
-    MissingCopies, MoveBackup, MoveCopy, MoveMarker, MovePlan, MoveRequest, MoveSource, MoveStage,
-    NewBook, Outcome, Ownership, Product, PurchaseKey, Receipt, ReceiptExpiry, ReceiptWrite,
-    ReconcileRequest, Reconciliation, Selection, SettledShelf, ShelfBook, StepRequest, WritePlan,
+    EditionWrite, ExpiryRequest, ImportPlan, ImportRequest, IsbnList, ManagementCommand,
+    ManagementPlan, ManagementRequest, MissingCopies, MoveBackup, MoveCopy, MoveMarker, MovePlan,
+    MoveRequest, MoveSource, MoveStage, NewBook, NoteFacts, Outcome, Ownership, OwnershipFilter,
+    PortableEnvelope, PortableExport, PortableNote, PortableNotes, PortableProblem,
+    PortableVerdict, PresentNote, Product, PurchaseKey, RangeKind, Receipt, ReceiptExpiry,
+    ReceiptWrite, ReconcileRequest, Reconciliation, Selection, SettledShelf, ShelfBook, ShelfBound,
+    ShelfField, ShelfOverview, ShelfQuery, ShelfRange, ShelfRecord, ShelfRequest, ShelfSelection,
+    ShelfTag, ShelfValue, ShelfView, StepRequest, WishFilter, WritePlan,
 };
 pub use moving::{missing_move_copies, plan_move, settle_shelf};
+pub use portable::{
+    check_portable_notes, decode_portable_library, encode_portable_library, plan_import,
+};
 pub use receipt::{admits, expired_receipts, reconcile};
+pub use shelf::{ShelfError, ShelfIndex};
+pub use text::calendar_date;
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::{JsError, wasm_bindgen};
 
@@ -164,4 +177,105 @@ pub fn settle_shelf_request(request: &str) -> Result<Ts<SettledShelf>, JsError> 
 pub fn missing_move_copies_request(request: &str) -> Result<Ts<MissingCopies>, JsError> {
     let request: CopiesRequest = serde_json::from_str(request)?;
     Ok(missing_move_copies(&request).into_ts()?)
+}
+
+/// The calendar date a person wrote, as `YYYY-MM-DD`, or nothing when it names no real day.
+#[wasm_bindgen(js_name = calendarDate)]
+#[must_use]
+pub fn calendar_date_value(value: &str) -> Option<String> {
+    calendar_date(value)
+}
+
+/// One shelf the runtime opened. Its books stay in the core while the user changes the query, so
+/// each query crosses the seam alone.
+#[wasm_bindgen]
+pub struct OpenShelf {
+    index: ShelfIndex,
+}
+
+/// Opens a shelf over the JSON text of a `ShelfRequest`.
+///
+/// # Errors
+/// Throws when the request is not a well-formed `ShelfRequest`.
+#[wasm_bindgen(js_name = openShelf)]
+pub fn open_shelf(request: &str) -> Result<OpenShelf, JsError> {
+    let request: ShelfRequest = serde_json::from_str(request)?;
+    Ok(OpenShelf {
+        index: ShelfIndex::new(request),
+    })
+}
+
+#[wasm_bindgen]
+impl OpenShelf {
+    /// The fields and tags the shelf offers, and how it shows each book.
+    ///
+    /// # Errors
+    /// Throws when the overview cannot be passed back to JavaScript.
+    pub fn overview(&self) -> Result<Ts<ShelfOverview>, JsError> {
+        Ok(self.index.overview().into_ts()?)
+    }
+
+    /// The distinct texts a field holds, for the runtime to rank in its locale.
+    #[wasm_bindgen(js_name = collationTexts)]
+    #[must_use]
+    pub fn collation_texts(&self, key: &str) -> Vec<String> {
+        self.index.collation_texts(key)
+    }
+
+    /// Takes the rank of each collation text of a field; texts that compare equal share a rank.
+    ///
+    /// # Errors
+    /// Throws when the ranks do not follow the collation texts one for one.
+    pub fn collate(&mut self, key: &str, ranks: &[u32]) -> Result<(), JsError> {
+        Ok(self.index.collate(key, ranks)?)
+    }
+
+    /// The books the JSON text of a `ShelfQuery` selects, in order.
+    ///
+    /// # Errors
+    /// Throws when the query is malformed or its sort field and the title were not collated.
+    pub fn select(&self, query: &str) -> Result<Ts<ShelfSelection>, JsError> {
+        let query: ShelfQuery = serde_json::from_str(query)?;
+        Ok(self.index.select(&query)?.into_ts()?)
+    }
+}
+
+/// Reads the JSON text of a portable library into its notes, up to the first problem with the
+/// document.
+///
+/// # Errors
+/// Throws when the result cannot be passed back to JavaScript.
+#[wasm_bindgen(js_name = decodePortableLibrary)]
+pub fn decode_portable_library_text(json: &str) -> Result<Ts<PortableEnvelope>, JsError> {
+    Ok(decode_portable_library(json).into_ts()?)
+}
+
+/// Whether notes may travel together, from the JSON text of `PortableNotes`.
+///
+/// # Errors
+/// Throws when the request is not well-formed `PortableNotes`.
+#[wasm_bindgen(js_name = checkPortableNotes)]
+pub fn check_portable_notes_request(request: &str) -> Result<Ts<PortableVerdict>, JsError> {
+    let request: PortableNotes = serde_json::from_str(request)?;
+    Ok(check_portable_notes(&request).into_ts()?)
+}
+
+/// The JSON text of a portable library, from the JSON text of a `PortableExport` of checked notes.
+///
+/// # Errors
+/// Throws when the request is not a well-formed `PortableExport`.
+#[wasm_bindgen(js_name = encodePortableLibrary)]
+pub fn encode_portable_library_request(request: &str) -> Result<String, JsError> {
+    let request: PortableExport = serde_json::from_str(request)?;
+    Ok(encode_portable_library(request)?)
+}
+
+/// Plans an import from the JSON text of an `ImportRequest`.
+///
+/// # Errors
+/// Throws when the request is not a well-formed `ImportRequest`.
+#[wasm_bindgen(js_name = planImport)]
+pub fn plan_import_request(request: &str) -> Result<Ts<ImportPlan>, JsError> {
+    let request: ImportRequest = serde_json::from_str(request)?;
+    Ok(plan_import(&request).into_ts()?)
 }

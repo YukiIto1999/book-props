@@ -74,8 +74,9 @@ export default class BookProps extends Plugin {
       id: "open-shelf",
       name: "本棚を開く",
       callback: () => {
-        if (!this.catalog) new Notice("Book Propsの設定で書籍フォルダを指定してください。");
-        else new Shelf(this.app, this.catalog).open();
+        if (!this.catalog || !this.core)
+          new Notice("Book Propsの設定で書籍フォルダを指定してください。");
+        else new Shelf(this.app, this.catalog, this.core).open();
       },
     });
     this.addCommand({

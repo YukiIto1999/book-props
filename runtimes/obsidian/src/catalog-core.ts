@@ -24,6 +24,8 @@ import type {
   CustomField as WireField,
   Edition,
   ExpiryRequest,
+  ImportPlan,
+  ImportRequest,
   IsbnList,
   ManagementCommand,
   ManagementPlan,
@@ -34,6 +36,8 @@ import type {
   MoveRequest,
   NewBook,
   Outcome,
+  PortableNote,
+  PresentNote,
   ReceiptExpiry,
   ReceiptWrite,
   ReconcileRequest,
@@ -84,7 +88,7 @@ export function catalogMarker({
   return { editionId, destinationId, digest, ...optionalField("backup", recorded) };
 }
 
-function catalogField(field: CustomField): WireField {
+export function catalogField(field: CustomField): WireField {
   return field.kind === "choice" ? { ...field, choices: [...field.choices] } : { ...field };
 }
 
@@ -182,6 +186,16 @@ export class CatalogRules {
 
   normalizeIsbns(isbns: readonly string[]): IsbnList {
     return this.core.normalizeIsbns([...isbns]);
+  }
+
+  calendarDate(value: string): string | undefined {
+    return this.core.calendarDate(value);
+  }
+
+  /** 入出力の記録を、書籍の保存範囲のいまの本ページへ取り込めるか。作る本は記録の順に返す。 */
+  planImport(desired: readonly PortableNote[], present: readonly PresentNote[]): ImportPlan {
+    const request: ImportRequest = { desired: [...desired], present: [...present] };
+    return this.core.planImport(JSON.stringify(request));
   }
 
   /** 目録を読む前に、操作を始めてよいか。購入には再確認を受け付ける期間内の要求IDがいる。 */

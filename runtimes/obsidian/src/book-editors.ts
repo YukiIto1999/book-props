@@ -4,7 +4,6 @@ import type { Catalog, StoredBook } from "./catalog.ts";
 import { actionMessage, validDate } from "./management-ui.ts";
 import { isOptionKey } from "./option-keys.ts";
 import { optionalField } from "./optional-field.ts";
-import { calendarDate } from "./shelf-fields.ts";
 
 const editionFields = [
   ["label", "版"],
@@ -24,11 +23,13 @@ function isDateField(key: EditionField): boolean {
  * 編集した日付だけを保存形式に正規化するための検査
  * @param metadata - 保存する版の入力値
  * @param baseline - 編集を開始した時点の版
+ * @param calendarDate - 実在する日付をYYYY-MM-DDにする、coreの日付の規則
  * @returns 最初の日付のエラー
  */
 function normalizeDates(
   metadata: Partial<Record<EditionField, string>>,
   baseline: EditionRecord | undefined,
+  calendarDate: (value: string) => string | undefined,
 ): string | undefined {
   for (const [key, label] of editionFields) {
     const value = metadata[key];
@@ -87,7 +88,9 @@ export class EditionEditor extends Modal {
             status.setText(`ISBNの確認数字を確認してください: ${normalized.input}`);
             return;
           }
-          const invalidDate = normalizeDates(metadata, this.baseline);
+          const invalidDate = normalizeDates(metadata, this.baseline, (value) =>
+            this.catalog.calendarDate(value),
+          );
           if (invalidDate) {
             status.setText(invalidDate);
             return;
@@ -127,7 +130,7 @@ export class EditionEditor extends Modal {
   private mountMetadata(metadata: Partial<Record<EditionField, string>>): void {
     for (const [key, label] of editionFields) {
       const stored = this.baseline?.[key];
-      const day = isDateField(key) && stored ? calendarDate(stored) : undefined;
+      const day = isDateField(key) && stored ? this.catalog.calendarDate(stored) : undefined;
       if (stored !== undefined) metadata[key] = stored;
       new Setting(this.contentEl).setName(label).addText((field) => {
         field.inputEl.setAttribute("aria-label", label);

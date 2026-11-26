@@ -1,15 +1,13 @@
 import type { BookRecord, EditionRecord } from "./book-note.ts";
 import { isOptionKey } from "./option-keys.ts";
 import {
-  currentEditions,
   customValue,
   readingLabels,
-  tagKey,
-  tagName,
   type FieldKey,
   type ShelfEntry,
   type ShopSearch,
 } from "./shelf-fields.ts";
+import type { ShelfRow, ShelfTag } from "./shelf-query.ts";
 
 type RowActions = Readonly<{
   columns: ReadonlySet<FieldKey>;
@@ -17,7 +15,7 @@ type RowActions = Readonly<{
   openBook: (path: string) => void;
   showAuthor: (name: string) => void;
   showPublisher: (publisher: string) => void;
-  toggleTag: (tag: string) => void;
+  toggleTag: (tag: string, key: string) => void;
 }>;
 
 function readingLabel(status: string | undefined): string | undefined {
@@ -108,27 +106,36 @@ function drawEditions(
   for (const edition of editions) drawEdition(items.createEl("li"), edition, actions);
 }
 
-function drawTags(row: HTMLElement, book: BookRecord, actions: RowActions): void {
-  if (!book.tags?.length) return;
+function drawTags(
+  row: HTMLElement,
+  book: BookRecord,
+  tags: readonly ShelfTag[],
+  actions: RowActions,
+): void {
+  if (!tags.length) return;
   const line = row.createDiv();
-  for (const tag of book.tags) {
-    const name = tagName(tag);
+  (book.tags ?? []).forEach((tag, index) => {
+    const shown = tags[index];
+    if (!shown) return;
     line
       .createEl("button", {
-        text: `#${name}`,
+        text: `#${shown.name}`,
         attr: {
-          "aria-label": `タグ「${name}」で絞り込む`,
-          "aria-pressed": String(actions.selectedTags.has(tagKey(tag))),
+          "aria-label": `タグ「${shown.name}」で絞り込む`,
+          "aria-pressed": String(actions.selectedTags.has(shown.key)),
         },
       })
-      .addEventListener("click", () => actions.toggleTag(tag));
-  }
+      .addEventListener("click", () => actions.toggleTag(tag, shown.key));
+  });
 }
 
-/** Draws one shelf book with its current editions, honoring the chosen columns. */
-export function drawRow(list: HTMLElement, entry: ShelfEntry, actions: RowActions): void {
+/** Draws one shelf book with the editions and tags the core shows, honoring the chosen columns. */
+export function drawRow(
+  list: HTMLElement,
+  { entry, tags, editions }: ShelfRow<ShelfEntry>,
+  actions: RowActions,
+): void {
   const { book } = entry;
-  const editions = currentEditions(book);
   const row = list.createEl("li");
   drawHeading(row, entry, editions, actions);
   if (actions.columns.has("finishedOn") && book.finishedOn)
@@ -136,7 +143,7 @@ export function drawRow(list: HTMLElement, entry: ShelfEntry, actions: RowAction
   drawCustomColumns(row, book, actions.columns);
   drawAuthors(row, book, actions);
   drawEditions(row, editions, actions);
-  drawTags(row, book, actions);
+  drawTags(row, book, tags, actions);
 }
 
 export function drawFacet(

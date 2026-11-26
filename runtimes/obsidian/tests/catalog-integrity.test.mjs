@@ -5,8 +5,12 @@ import { join } from "node:path";
 import test from "node:test";
 import { createBookNote, readBookNote } from "../src/book-note.ts";
 import { LocalMoveCopies } from "../src/local-move-copies.ts";
-import { encodePortableLibrary } from "../src/portable-library.ts";
+import { PortableLibrary } from "../src/portable-library.ts";
 import { first, key, original, product, row, scope } from "./catalog-fixture.mjs";
+import { core } from "./core.mjs";
+
+const portable = new PortableLibrary(core);
+const encodePortableLibrary = (raws) => portable.encode(raws);
 
 const source = readBookNote(original).book;
 const [edition] = source.editions;

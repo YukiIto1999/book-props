@@ -3,13 +3,23 @@
 //! The serde names are the wire contract: the TypeScript declarations are generated from them.
 
 mod management;
+mod portable;
+mod shelf;
 
 pub use management::{
     BookStep, BooksRequest, CopiesRequest, CustomField, ManagementCommand, ManagementPlan,
     ManagementRequest, MissingCopies, MoveBackup, MoveCopy, MoveMarker, MovePlan, MoveRequest,
     MoveSource, MoveStage, SettledShelf, ShelfBook, StepRequest,
 };
+pub use portable::{
+    ImportPlan, ImportRequest, NoteFacts, PortableEnvelope, PortableExport, PortableNote,
+    PortableNotes, PortableProblem, PortableVerdict, PresentNote,
+};
 use serde::{Deserialize, Serialize};
+pub use shelf::{
+    OwnershipFilter, RangeKind, ShelfBound, ShelfField, ShelfOverview, ShelfQuery, ShelfRange,
+    ShelfRecord, ShelfRequest, ShelfSelection, ShelfTag, ShelfValue, ShelfView, WishFilter,
+};
 use tsify::Tsify;
 
 /// What the caller intends to do with the product it observed.

@@ -22,7 +22,7 @@ import {
 import { readCatalog, readEntries, readEntry, readFailure, readStable } from "./catalog-read.ts";
 import { missingMoveCopies, settledShelf, type MoveCopies } from "./edition-recovery.ts";
 import { optionalField } from "./optional-field.ts";
-import { decodePortableLibrary, encodePortableLibrary } from "./portable-library.ts";
+import { PortableLibrary } from "./portable-library.ts";
 import type { Action, CatalogCore, IsbnList, Outcome } from "./wasm.ts";
 
 export type { Action, Outcome } from "./wasm.ts";
@@ -66,10 +66,12 @@ export class Catalog {
 
   private readonly files: BookFiles;
   private readonly rules: CatalogRules;
+  private readonly portable: PortableLibrary;
 
   constructor(files: BookFiles, core: CatalogCore) {
     this.files = files;
     this.rules = new CatalogRules(core);
+    this.portable = new PortableLibrary(core);
   }
 
   async entries(): Promise<StoredBook[]> {
@@ -100,6 +102,11 @@ export class Catalog {
 
   normalizeIsbns(isbns: readonly string[]): IsbnList {
     return this.rules.normalizeIsbns(isbns);
+  }
+
+  /** 人が書いた実在する日付をYYYY-MM-DDにする。実在しない日付なら`undefined`。 */
+  calendarDate(value: string): string | undefined {
+    return this.rules.calendarDate(value);
   }
 
   async reconcile(operation: Operation, signal?: AbortSignal): Promise<Result> {
@@ -143,12 +150,12 @@ export class Catalog {
         if (hasPendingMove(entries)) throw new Refuse("conflict");
         return Promise.all(entries.map(({ path }) => this.files.read(path)));
       });
-      return encodePortableLibrary(markdown);
+      return this.portable.encode(markdown);
     });
   }
 
   importLibrary(json: string): Promise<ImportResult> {
-    const desired = decodePortableLibrary(json);
+    const desired = this.portable.decode(json);
     return this.serial(() => importNotes(this.managementContext, desired));
   }
 

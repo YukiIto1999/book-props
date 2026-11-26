@@ -1,12 +1,18 @@
 import {
   admits,
   allowsStep,
+  calendarDate,
+  checkPortableNotes,
+  decodePortableLibrary,
+  encodePortableLibrary,
   expiredReceipts,
   initSync,
   inspect,
   missingMoveCopies,
   normalizeIsbns,
+  openShelf,
   planChange,
+  planImport,
   planManagement,
   planMove,
   reconcile,
@@ -33,6 +39,9 @@ export type {
   CustomField,
   Edition,
   ExpiryRequest,
+  FieldKey,
+  ImportPlan,
+  ImportRequest,
   IsbnList,
   ManagementCommand,
   ManagementPlan,
@@ -43,12 +52,27 @@ export type {
   MoveRequest,
   MoveStage,
   NewBook,
+  NoteFacts,
+  OpenShelf,
   Outcome,
+  PortableExport,
+  PortableNote,
+  PortableNotes,
+  PortableProblem,
+  PresentNote,
+  RangeKind,
   ReceiptExpiry,
   ReceiptWrite,
   ReconcileRequest,
   Reconciliation,
   SettledShelf,
+  ShelfBound,
+  ShelfField,
+  ShelfQuery,
+  ShelfRecord,
+  ShelfRequest,
+  ShelfTag,
+  ShelfView,
   StepRequest,
 } from "../dist/wasm/book_props_vault.js";
 
@@ -65,6 +89,12 @@ export type CatalogCore = Readonly<{
   planMove: typeof planMove;
   settleShelf: typeof settleShelf;
   missingMoveCopies: typeof missingMoveCopies;
+  calendarDate: typeof calendarDate;
+  openShelf: typeof openShelf;
+  decodePortableLibrary: typeof decodePortableLibrary;
+  checkPortableNotes: typeof checkPortableNotes;
+  encodePortableLibrary: typeof encodePortableLibrary;
+  planImport: typeof planImport;
 }>;
 
 /**
@@ -88,5 +118,11 @@ export async function startCatalogCore(): Promise<CatalogCore> {
     planMove,
     settleShelf,
     missingMoveCopies,
+    calendarDate,
+    openShelf,
+    decodePortableLibrary,
+    checkPortableNotes,
+    encodePortableLibrary,
+    planImport,
   };
 }

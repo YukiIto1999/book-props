@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import "./core.mjs";
+import { core } from "./core.mjs";
 
 import { readBookNote } from "../src/book-note.ts";
-import {
-  decodePortableLibrary,
-  encodePortableLibrary,
-  PortableLibraryError,
-} from "../src/portable-library.ts";
+import { PortableLibrary, PortableLibraryError } from "../src/portable-library.ts";
+
+const portable = new PortableLibrary(core);
+const encodePortableLibrary = (raws) => portable.encode(raws);
+const decodePortableLibrary = (json) => portable.decode(json);
 
 const bookId = "4fa20a45-80a4-4c8c-b74c-c3e307076da5";
 const otherBookId = "0b6f4c1e-3a2d-4e5f-8a9b-1c2d3e4f5a6b";

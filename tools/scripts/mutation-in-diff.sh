@@ -10,18 +10,18 @@ set -euo pipefail
 #   no-change       比較元から HEAD までに変更が無い
 #   zero-mutants    変更はあるが、変異の対象が 0 件だった
 #   analyzed        cargo-mutants が完走した(raw_status が 0、2、3)
-#   limit-exceeded  tools/verification-budget.json の上限で止めた
+#   limit-exceeded  tools/verification-time.json の上限で止めた
 #   run-failed      それ以外の終了 status(baseline の失敗など)
 # analyzed、no-change、zero-mutants のときだけ、HEAD を次の比較元として保存する。
 readonly state_dir="work/mutation"
 readonly last_file="$state_dir/last-analyzed-commit"
-readonly budget="tools/verification-budget.json"
+readonly limits="tools/verification-time.json"
 
-budget_value() {
-  node -p "require('./$budget').$1"
+limit_of() {
+  node -p "require('./$limits')['$1'].limit_seconds"
 }
-limit_seconds="$(budget_value mutation_in_diff_seconds)"
-mutant_timeout="$(budget_value mutant_timeout_seconds)"
+limit_seconds="$(limit_of mutation-in-diff)"
+mutant_timeout="$(limit_of mutant)"
 
 started="$(date -Iseconds)"
 head="$(git rev-parse HEAD)"

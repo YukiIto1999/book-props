@@ -32,5 +32,13 @@ jobs:
       - name: Install the workspace dependencies
         run: devenv shell -- pnpm install --frozen-lockfile
 
+      # 入口ごとの上限は tools/verification-time.json だけに置く
       - name: Verify (T1)
-        run: devenv shell -- pnpm verify
+        run: |
+          limit=$(jq -er '.verify.limit_seconds' tools/verification-time.json)
+          status=0
+          timeout --signal=TERM --kill-after=60 "$limit" devenv shell -- pnpm verify || status=$?
+          if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
+            echo "::error::verify reached the ${limit}s limit in tools/verification-time.json"
+          fi
+          exit "$status"

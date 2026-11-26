@@ -46,8 +46,16 @@ jobs:
       - name: Install locked dependencies
         run: devenv shell -- pnpm install --frozen-lockfile
 
+      # 入口ごとの上限は tools/verification-time.json だけに置き、pre-push hook も同じ値を読む
       - name: Verify and build both components
-        run: devenv shell -- pnpm verify:push
+        run: |
+          limit=$(jq -er '."verify-push".limit_seconds' tools/verification-time.json)
+          status=0
+          timeout --signal=TERM --kill-after=60 "$limit" devenv shell -- pnpm verify:push || status=$?
+          if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
+            echo "::error::verify-push reached the ${limit}s limit in tools/verification-time.json"
+          fi
+          exit "$status"
 
       - name: Package and audit the release assets
         id: package

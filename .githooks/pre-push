@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# T2。送るコミットの作業ツリーで verify-push を走らせ、合格したときだけ push を通す。
+# 上限と目標は tools/verification-time.json の verify-push の値を、CI と同じく読む。
+# 引数は git が渡す送り先の名前と URL、標準入力は送る ref の一覧である（githooks(5)）。
+remote="${1:-}"
+cd -- "$(git rev-parse --show-toplevel)"
+
+# 検証する内容と送る内容を一致させるため、未コミットの変更と追跡していないファイルを許さない
+if [[ -n "$(git status --porcelain)" ]]; then
+  echo "pre-push: 未コミットの変更か追跡していないファイルがあるため止めた。commit するか退避してから push する" >&2
+  exit 1
+fi
+
+head="$(git rev-parse HEAD)"
+zero="$(git hash-object --stdin </dev/null | tr '0-9a-f' '0')"
+refs=0
+pending=0
+while read -r local_ref local_object _ _; do
+  refs=$((refs + 1))
+  [[ "$local_object" == "$zero" ]] && continue
+  commit="$(git rev-parse "$local_object^{commit}")"
+  # 送り先の追跡ブランチにすでにあるコミットは、そのコミットを送ったときに検証している
+  if [[ -n "$remote" && -n "$(git for-each-ref --contains "$commit" --count=1 --format=x "refs/remotes/$remote/")" ]]; then
+    continue
+  fi
+  if [[ "$commit" != "$head" ]]; then
+    echo "pre-push: $local_ref は HEAD と異なるコミットを送るため止めた。そのコミットを checkout してから push する" >&2
+    exit 1
+  fi
+  pending=$((pending + 1))
+done
+
+if ((refs > 0 && pending == 0)); then
+  echo "pre-push: $remote にまだないコミットを送らないため、検証を省いた" >&2
+  exit 0
+fi
+
+read_value() {
+  devenv shell -- jq -er ".\"verify-push\".$1" tools/verification-time.json 2>/dev/null </dev/null
+}
+limit="$(read_value limit_seconds)"
+target="$(read_value target_seconds)"
+
+status=0
+SECONDS=0
+timeout --signal=TERM --kill-after=60 "$limit" devenv shell -- pnpm verify:push </dev/null || status=$?
+elapsed=$SECONDS
+
+case "$status" in
+  0) echo "pre-push: verify-push に合格した（${elapsed} 秒、目標 ${target} 秒、上限 ${limit} 秒）" >&2 ;;
+  124 | 137) echo "pre-push: verify-push が上限 ${limit} 秒に達したため止めた。push しない" >&2 ;;
+  *) echo "pre-push: verify-push が失敗した（終了 status ${status}、${elapsed} 秒）。push しない" >&2 ;;
+esac
+exit "$status"

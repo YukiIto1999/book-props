@@ -15,8 +15,8 @@ if [[ "$mutant_count" -eq 0 ]]; then
   exit 1
 fi
 
-limit_seconds="$(node -p "require('./tools/verification-budget.json').mutation_full_seconds")"
-mutant_timeout="$(node -p "require('./tools/verification-budget.json').mutant_timeout_seconds")"
+limit_seconds="$(node -p "require('./tools/verification-time.json')['mutation-full'].limit_seconds")"
+mutant_timeout="$(node -p "require('./tools/verification-time.json').mutant.limit_seconds")"
 status=0
 timeout --signal=TERM --kill-after=60 "$limit_seconds" \
   cargo mutants --workspace --test-workspace=true --timeout="$mutant_timeout" || status=$?

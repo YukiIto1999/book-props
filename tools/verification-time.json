@@ -1,0 +1,45 @@
+{
+  "about": "検証の入口ごとの所要時間の目標と上限。目標は構成を見直す目安で、超えても走行は止めない。上限は終わらない走行を止める値で、入口を起動する pre-push hook、CI、tools/scripts の T3 の入口が同じ値を読む。測る環境や範囲が変わったら、次の走行の前に見直す",
+  "environments": {
+    "local": "2026-11-26、WSL2 の Linux 6.18（論理 CPU 12）。他の agent の作業と同時に走らせ、前後の1分の load average は 1.25〜3.82。温まった状態は cargo の build を済ませ、Nx の cache だけを --skip-nx-cache で外した走行。冷えた状態は新しく clone した作業ツリーで、cargo の build 先と Nx の cache が空の走行",
+    "ci": "2026-11-26、GitHub Actions の ubuntu-24.04。cargo と Nx の cache がない冷えた状態。ci.yml の Verify (T1) と release.yml の Verify and build both components の step の所要"
+  },
+  "verify": {
+    "target_seconds": 60,
+    "limit_seconds": 600,
+    "measured": "local の温まった状態 15〜30 秒、ci 89〜110 秒",
+    "progress": "Nx が完了を表示した task",
+    "basis": "目標は local の温まった状態の実測の約2倍。上限は冷えた状態の最長（verify を含む verify-push の local 120 秒）の5倍で、余裕は 480 秒。手元で他の build と CPU を分け合う場合と、Rust の toolchain や依存の更新で cargo の build を最初からやり直す場合を見込む"
+  },
+  "verify-push": {
+    "target_seconds": 90,
+    "limit_seconds": 600,
+    "measured": "local の温まった状態 15〜32 秒、local の冷えた状態 120 秒（pre-push hook として devenv の起動を含む）、ci 67〜76 秒",
+    "progress": "Nx が完了を表示した task",
+    "basis": "目標は local の温まった状態の実測の約3倍で、verify に成果物の生成と実結合を加えた分を見込む。上限は冷えた状態の最長 120 秒の5倍で、余裕は 480 秒。余裕の理由は verify と同じ"
+  },
+  "regression-full": {
+    "limit_seconds": 600,
+    "measured": "verify-push の local の実測と同じ走行（--skip-nx-cache --parallel=1）",
+    "progress": "Nx が完了を表示した task",
+    "basis": "verify-push を cache なしで回す走行なので、verify-push と同じ上限にする"
+  },
+  "mutation-in-diff": {
+    "limit_seconds": 3600,
+    "measured": "2026-11-16 に 066052b で mutant 11 件を 381 秒で分析した走行が1回だけある。現在の core では未計測",
+    "progress": "cargo-mutants が mutants.out に結果を記録した mutant",
+    "basis": "暫定。変異1件のテストの上限の30倍を分析全体に割り当てる。上限に達した場合は limit-exceeded と記録し、次の比較元を進めない"
+  },
+  "mutation-full": {
+    "limit_seconds": 7200,
+    "measured": "未計測",
+    "progress": "cargo-mutants が mutants.out に結果を記録した mutant",
+    "basis": "暫定。差分に限定しない明示実行のため、差分の分析の2倍を割り当てる"
+  },
+  "mutant": {
+    "limit_seconds": 120,
+    "measured": "上記の差分の分析では mutant 1件あたり平均約35秒",
+    "progress": "cargo-mutants が mutants.out に結果を記録した mutant",
+    "basis": "停止しない変異が分析の時間を使い切らないよう、変異ごとのテストの実行に上限を置く。平均の約3.4倍"
+  }
+}

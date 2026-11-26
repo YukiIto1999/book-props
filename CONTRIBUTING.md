@@ -17,6 +17,20 @@ devenv shell -- pnpm verify
 - `devenv shell -- pnpm verify` はCIと同じ入口で、整形、lint、型、依存境界、業務と保存のテストを実行する。Obsidian コミュニティの自動審査と同じ規則でリポジトリの TypeScript を調べる [`tools/obsidian-review`](tools/obsidian-review/eslint.config.mjs) も含み、審査で誤りになる指摘があれば失敗する。`devenv shell -- pnpm verify:push` は成果物の生成とTLS実結合を加える。対象と依存は[`project.json`](project.json)を参照する。
 - 画面や保存経路を変えた場合は、合成データの一時Vaultと別のChromeプロファイルを使い、操作後の表示とMarkdownの両方を確かめる。報告には対象のコミット、OSとアプリの版、操作、期待結果と実際の結果を添える。証明書の秘密鍵、ペアリングコード、資格情報、利用者のVaultの内容は添付しない。
 
+### push の前の検証
+
+追跡している [`.githooks/pre-push`](.githooks/pre-push) が、push の前に `devenv shell -- pnpm verify:push` を走らせ、合格したときだけ push を通す。検証した内容と送る内容を一致させるため、未コミットの変更や追跡していないファイルがある場合と、送るコミットが HEAD と異なる場合は、検証せずに止まる。送るコミットがすべて送り先の追跡ブランチにある場合（push 済みのコミットに付けたタグなど）は、検証を省く。
+
+dotfiles の global のフックを使う環境では、リポジトリを信頼したときだけ `.githooks/` のフックが動く。リポジトリの所有者は、フックの内容を確かめてから一度だけ次を設定する。設定するまでは、push の前に `devenv shell -- pnpm verify:push` を手で実行する。
+
+```sh
+git config dotfiles.hooks.trusted true
+```
+
+global のフックを使わない環境では、`git config core.hooksPath .githooks` で有効にする。
+
+検証の入口ごとの所要時間の目標と上限は [`tools/verification-time.json`](tools/verification-time.json) にだけ置き、フック、CI、`pnpm verify:full` のスクリプトが同じ値を読む。目標を超えても走行は止めず、上限に達した走行だけを止める。値を変えるときは、測った環境と実測、余裕の量と理由を同じファイルに書く。
+
 ## コミット
 
 一つのコミットに一つの目的を入れる。件名は `型: 日本語の要約` の一行とし、本文は付けない。変更の目的と文末は、[commit-purpose](https://github.com/YukiIto1999/architecture-standard/blob/main/principles/documentation/commit-purpose.md)と[sentence-endings](https://github.com/YukiIto1999/architecture-standard/blob/main/principles/documentation/sentence-endings.md)に従う。

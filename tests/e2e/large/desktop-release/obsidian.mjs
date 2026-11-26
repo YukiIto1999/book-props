@@ -145,17 +145,24 @@ export async function selectFolder(page, name) {
   const row = await input.evaluateHandle((element) => element.closest(".setting-item"));
   const button = await row.asElement()?.$("button");
   assert(button, "Missing book folder Apply button");
+  // Settings rows are not redrawn after 適用, so the new notice is the only completion signal.
+  await page.$$eval(".notice", (items) => {
+    for (const item of items) item.setAttribute("data-acceptance-seen", "");
+  });
   await button.press("Enter");
   const applied = await page.waitForFunction(
-    (previous) =>
-      !previous.isConnected ||
-      [...document.querySelectorAll(".notice")].find(
-        (item) => item.textContent === "Vault内の既存フォルダを指定してください。",
-      )?.textContent,
+    (outcomes) =>
+      [...document.querySelectorAll(".notice:not([data-acceptance-seen])")]
+        .map((item) => item.textContent)
+        .find((text) => outcomes.includes(text)),
     { timeout },
-    input,
+    ["書籍フォルダを設定しました。", "Vault内の既存フォルダを指定してください。"],
   );
-  assert.equal(await applied.jsonValue(), true, `Book folder was not applied: ${name}`);
+  assert.equal(
+    await applied.jsonValue(),
+    "書籍フォルダを設定しました。",
+    `Book folder was not applied: ${name}`,
+  );
   await applied.dispose();
   await button.dispose();
   await row.dispose();

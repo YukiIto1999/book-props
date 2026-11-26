@@ -1,9 +1,10 @@
 import {
   Notice,
   PluginSettingTab,
-  Setting,
   type App,
   type Plugin,
+  type SettingDefinition,
+  type SettingDefinitionItem,
   type TextComponent,
 } from "obsidian";
 
@@ -16,8 +17,6 @@ type SettingsHost = Plugin & {
 };
 
 export class Settings extends PluginSettingTab {
-  private pairingSection?: HTMLElement;
-
   constructor(
     app: App,
     private readonly books: SettingsHost,
@@ -25,90 +24,92 @@ export class Settings extends PluginSettingTab {
     super(app, books);
   }
 
-  display(): void {
-    this.containerEl.empty();
-    this.renderFolder();
-    this.renderConnection();
+  getSettingDefinitions(): SettingDefinitionItem[] {
+    const directory = this.books.connectionDirectory;
+    return [
+      this.folder(),
+      {
+        type: "group",
+        heading: "Chromeとの接続",
+        items: [directory ? this.pairing(directory) : this.start()],
+      },
+    ];
   }
 
   // Each 適用 sends the value its input shows now; a redraw shows the applied value, so nothing unseen is sent later.
-  private renderFolder(): void {
-    let folder!: TextComponent;
-    new Setting(this.containerEl)
-      .setName("書籍フォルダ")
-      .setDesc("このVaultの既存フォルダを指定します。Vault全体は指定できません。")
-      .addText((field) => {
-        folder = field.setValue(this.books.folder);
-      })
-      .addButton((button) =>
-        button.setButtonText("適用").onClick(async () => {
-          const accepted = await this.books.selectFolder(folder.getValue());
-          new Notice(
-            accepted ? "書籍フォルダを設定しました。" : "Vault内の既存フォルダを指定してください。",
+  private folder(): SettingDefinition {
+    return {
+      name: "書籍フォルダ",
+      desc: "このVaultの既存フォルダを指定します。Vault全体は指定できません。",
+      render: (setting) => {
+        let folder!: TextComponent;
+        setting
+          .addText((field) => {
+            folder = field.setValue(this.books.folder);
+          })
+          .addButton((button) =>
+            button.setButtonText("適用").onClick(async () => {
+              const accepted = await this.books.selectFolder(folder.getValue());
+              new Notice(
+                accepted
+                  ? "書籍フォルダを設定しました。"
+                  : "Vault内の既存フォルダを指定してください。",
+              );
+              if (accepted) this.update();
+            }),
           );
-          if (accepted) this.display();
-        }),
-      );
+      },
+    };
   }
 
-  private renderConnection(): void {
-    this.containerEl.createEl("h3", { text: "Chromeとの接続" });
-    this.pairingSection = this.containerEl.createDiv();
-    this.refreshPairing();
+  private start(): SettingDefinition {
+    return {
+      name: "接続を始める",
+      desc: "ホームの「Book Props」フォルダの下に接続用フォルダを作り、Chrome 拡張からの接続を受け付けます。",
+      aliases: ["ペアリング"],
+      render: (setting) => {
+        setting.addButton((button) =>
+          button
+            .setButtonText("接続を始める")
+            .setCta()
+            .onClick(async () => {
+              button.setDisabled(true);
+              const started = await this.books.startConnection();
+              new Notice(started === true ? "Chrome からの接続を受け付けています。" : started);
+              this.update();
+            }),
+        );
+      },
+    };
   }
 
-  hide(): void {
-    this.pairingSection = undefined;
-  }
-
-  refreshPairing(): void {
-    const section = this.pairingSection;
-    if (!section) return;
-    section.empty();
-    const directory = this.books.connectionDirectory;
-    if (directory) this.renderPairing(section, directory);
-    else this.renderStart(section);
-  }
-
-  private renderStart(section: HTMLElement): void {
-    new Setting(section)
-      .setName("接続を始める")
-      .setDesc(
-        "ホームの「Book Props」フォルダの下に接続用フォルダを作り、Chrome 拡張からの接続を受け付けます。",
-      )
-      .addButton((button) =>
-        button
-          .setButtonText("接続を始める")
-          .setCta()
-          .onClick(async () => {
-            button.setDisabled(true);
-            const started = await this.books.startConnection();
-            new Notice(started === true ? "Chrome からの接続を受け付けています。" : started);
-            this.refreshPairing();
-          }),
-      );
-  }
-
-  private renderPairing(section: HTMLElement, directory: string): void {
-    section.createEl("p", { text: "Chrome で選ぶ接続用フォルダ:" });
-    section
-      .createEl("p")
-      .createEl("code", { text: directory, cls: "book-props-connection-directory" });
-    new Setting(section)
-      .setName("ペアリング")
-      .addButton((button) =>
-        button.setButtonText("フォルダのパスをコピー").onClick(async () => {
-          await navigator.clipboard.writeText(directory);
-          new Notice("接続用フォルダのパスをコピーしました。");
-        }),
-      )
-      .addButton((button) =>
-        button.setButtonText("ペアリングを解除").onClick(async () => {
-          button.setDisabled(true);
-          const revoked = await this.books.revoke();
-          new Notice(revoked ? "ペアリングを解除しました。" : "ペアリングを解除できませんでした。");
-          this.refreshPairing();
-        }),
-      );
+  private pairing(directory: string): SettingDefinition {
+    return {
+      name: "接続用フォルダ",
+      desc: "Chrome 拡張の接続設定で、このフォルダを選びます。",
+      aliases: ["ペアリング"],
+      render: (setting) => {
+        setting.descEl
+          .createDiv()
+          .createEl("code", { text: directory, cls: "book-props-connection-directory" });
+        setting
+          .addButton((button) =>
+            button.setButtonText("パスをコピー").onClick(async () => {
+              await navigator.clipboard.writeText(directory);
+              new Notice("接続用フォルダのパスをコピーしました。");
+            }),
+          )
+          .addButton((button) =>
+            button.setButtonText("ペアリングを解除").onClick(async () => {
+              button.setDisabled(true);
+              const revoked = await this.books.revoke();
+              new Notice(
+                revoked ? "ペアリングを解除しました。" : "ペアリングを解除できませんでした。",
+              );
+              this.update();
+            }),
+          );
+      },
+    };
   }
 }

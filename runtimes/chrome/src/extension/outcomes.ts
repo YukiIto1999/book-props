@@ -4,7 +4,10 @@ import type { Product, Response } from "@book-props/vault-contract";
 export type Reply =
   | Response
   | { kind: "forgotten" | "scopeMismatch" | "manualCheck" | "consentRequired" };
-export type PageState = { supported: boolean; hasBook: boolean; pending: boolean; reply: Reply };
+/** What a popup shows of a book: its title and authors as the page gave them. */
+type BookHeading = Pick<Product, "title" | "authors">;
+/** The active tab as the popup sees it; `book` only when the page shows one. */
+export type PageState = { supported: boolean; book?: BookHeading; pending: boolean; reply: Reply };
 // "unknown" means the plugin could not be reached, which says nothing about the pairing.
 // `configured` is always reported; undefined means no connection has been set up.
 export type ConnectionStatus = {
@@ -13,6 +16,8 @@ export type ConnectionStatus = {
 };
 /** The book a tab shows; `url` only when it is a supported product page. */
 export type PageAnswer = { product?: Product; url?: string };
+/** The active tab's id, when there is one, and the book it shows. */
+export type ActivePage = PageAnswer & { tabId?: number };
 export type BookChange = "purchase" | "setWish" | "clearWish";
 
 export const unavailable = { kind: "unavailable" } as const;

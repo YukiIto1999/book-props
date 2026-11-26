@@ -6,8 +6,8 @@ import type { PopupAction } from "../extension/popup.ts";
 // Messages exchanged between the extension's contexts over chrome.runtime and chrome.tabs messaging.
 export type PopupMessage = { kind: "inspect" | PopupAction };
 export type OptionsMessage = { kind: "status" | "disconnect" } | { kind: "pair"; grantId: string };
-// A content script asks for consent with `consent` before it reads its page.
-export type PageMessage = { kind: "check"; product: Product } | { kind: "consent" };
+// A content script asks for consent with `consent` before it reads its page, and sends `unmark` only after it checked a book.
+export type PageMessage = { kind: "check"; product: Product } | { kind: "consent" | "unmark" };
 // `consent` only says that consent changed; the page asks again rather than trusting an order of notices.
 export type TabMessage =
   | { kind: "product" }
@@ -32,11 +32,15 @@ export function decodeResponse(value: unknown, fallback: Response): Reply {
   return parsed.success ? parsed.data : fallback;
 }
 
+// Of a book, a page state carries only its title and authors.
+const bookHeading = product.pick({ title: true, authors: true });
+
 export function decodePageState(value: unknown): PageState | undefined {
   if (typeof value !== "object" || value === null) return undefined;
+  const book = bookHeading.safeParse(messageField(value, "book"));
   return {
     supported: messageField(value, "supported") === true,
-    hasBook: messageField(value, "hasBook") === true,
+    ...(book.success ? { book: book.data } : {}),
     pending: messageField(value, "pending") === true,
     reply: decodeResponse(messageField(value, "reply"), { kind: "unavailable" }),
   };

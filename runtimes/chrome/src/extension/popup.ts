@@ -18,6 +18,9 @@ type PopupControls = {
   wishLabel: string;
   openLabel: string;
   pending: boolean;
+  /** The open book's title, and its authors in one line; empty when the page gave none or shows no book. */
+  title: string;
+  authors: string;
 };
 export type PopupView = {
   render(controls: PopupControls): void;
@@ -50,11 +53,12 @@ export class Popup {
       this.view.say("このページの状態を確認できません。");
       return;
     }
-    const { reply } = state;
+    const { reply, book } = state;
     // Before consent the worker read nothing, so no action is offered and the popup only points to the disclosure.
     const agreed = reply.kind !== "consentRequired";
     this.wanted = reply.kind === "observed" && reply.wanted;
-    const canSend = state.hasBook && reply.kind === "observed";
+    const canSend = Boolean(book) && reply.kind === "observed";
+    const shown = agreed ? book : undefined;
     this.view.render({
       canPurchase: canSend && !state.pending,
       canWish: canSend,
@@ -62,6 +66,8 @@ export class Popup {
       wishLabel: this.wanted ? "購入希望を解除" : "欲しい本に追加",
       openLabel: reply.kind === "unreadable" ? "Obsidianで記録を確認" : "Obsidianで開く",
       pending: agreed && state.pending,
+      title: shown?.title ?? "",
+      authors: shown?.authors?.join("、") ?? "",
     });
     this.view.say(agreed ? (message ?? (await this.stateText(state))) : statusLabel(reply, true));
   };
@@ -88,7 +94,7 @@ export class Popup {
     const blocked = state.reply.kind === "unavailable" || state.reply.kind === "unauthorized";
     if (blocked && (await this.folder.permission().catch(() => undefined)) === "prompt")
       return "接続用フォルダの許可が切れています。「接続設定・対応サイト」を開いて許可してください。";
-    if (state.hasBook) return statusLabel(state.reply, true);
+    if (state.book) return statusLabel(state.reply, true);
     return state.supported
       ? "書誌を確認できません。Obsidianで本を指定してください。"
       : "このページは対象外です。Obsidianで本を指定できます。";

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { discloseAfterInstall } from "../src/adapters/disclosure.ts";
+import { TabBadges } from "../src/extension/badge.ts";
 import { consentVersion } from "../src/extension/consent.ts";
 import { Options } from "../src/extension/options.ts";
 import { consentRequired } from "../src/extension/outcomes.ts";
@@ -16,7 +17,7 @@ const book = { title: "本" };
 const observed = { kind: "observed", ownership: "unowned", wanted: true };
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
-// A product page that records every read, check, toast and page watch it is asked for.
+// A product page that records every read, check, unmark, toast and page watch it is asked for.
 function recordedPage(ask) {
   const log = [];
   const page = {
@@ -25,10 +26,13 @@ function recordedPage(ask) {
   };
   const watch = new PageWatch(
     page,
-    async () => (log.push("check"), observed),
+    {
+      consented: ask,
+      check: async () => (log.push("check"), observed),
+      unmark: async () => void log.push("unmark"),
+    },
     { show: (text) => log.push(`show ${text}`), clear: () => log.push("clear") },
     () => (log.push("watch"), () => log.push("unwatch")),
-    ask,
   );
   return { log, watch };
 }
@@ -114,18 +118,22 @@ void test("the worker refuses every page and Vault operation until consent, then
     show: async () => calls.push("show"),
     consentChanged: async () => {},
   };
+  const icon = {
+    show: async (tabId, badge) => void calls.push(`icon ${tabId} ${badge?.tone}`),
+    clearAll: async () => void calls.push("icon clearAll"),
+  };
   let disclosed = 0;
   const operations = workerOperations({
     client,
     tabs,
+    badges: new TabBadges(icon),
     consent,
     disclose: async () => void disclosed++,
   });
   assert.equal(await operations.consented(), false);
-  assert.deepEqual(await operations.check(book), consentRequired);
+  assert.deepEqual(await operations.check(book, 1), consentRequired);
   assert.deepEqual(await operations.inspect(), {
     supported: false,
-    hasBook: false,
     pending: false,
     reply: consentRequired,
   });
@@ -149,10 +157,17 @@ void test("the worker refuses every page and Vault operation until consent, then
 
   await consent.agree();
   assert.equal(await operations.consented(), true);
-  assert.deepEqual(await operations.check(book), observed);
+  assert.deepEqual(await operations.check(book, 1), observed);
   await operations.recheck(1, productUrl);
   assert.equal(disclosed, 1);
-  assert.deepEqual(calls, ["client send", "inTab", "client send", "show"]);
+  assert.deepEqual(calls, [
+    "client send",
+    "icon 1 wanted",
+    "inTab",
+    "client send",
+    "icon 1 wanted",
+    "show",
+  ]);
 });
 
 void test("consent persists across contexts and a newer data practice asks for it again", async () => {
@@ -277,7 +292,6 @@ void test("the popup offers no action before consent and points to the disclosur
     {
       inspect: async () => ({
         supported: false,
-        hasBook: false,
         pending: false,
         reply: consentRequired,
       }),

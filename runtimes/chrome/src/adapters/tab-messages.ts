@@ -17,11 +17,12 @@ async function askTab(tabId: number): Promise<unknown> {
 export const pageTabs: PageTabs = {
   async active() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) return {};
+    const tabId = tab?.id;
+    if (tabId === undefined) return {};
     try {
-      return decodePageAnswer(await askTab(tab.id));
+      return { tabId, ...decodePageAnswer(await askTab(tabId)) };
     } catch {
-      return {};
+      return { tabId };
     }
   },
   async inTab(tabId) {

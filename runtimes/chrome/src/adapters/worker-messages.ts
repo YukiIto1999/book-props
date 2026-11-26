@@ -15,12 +15,13 @@ function isProductPage(sender: chrome.runtime.MessageSender): boolean {
 
 async function productPageRequest(
   operations: WorkerOperations,
+  tabId: number,
   kind: string,
   message: unknown,
 ): Promise<unknown> {
   if (kind !== "check") return unavailable;
   const book = product.safeParse(messageField(message, "product"));
-  return book.success ? operations.check(book.data) : unavailable;
+  return book.success ? operations.check(book.data, tabId) : unavailable;
 }
 
 async function optionsRequest(
@@ -51,10 +52,13 @@ async function receive(
 ): Promise<unknown> {
   const kind = messageField(message, "kind");
   if (sender.id !== chrome.runtime.id || typeof kind !== "string") return unavailable;
+  const tabId = sender.frameId === 0 ? sender.tab?.id : undefined;
   // A content script asks before it reads anything, even on a page that may navigate within itself to a product.
-  if (kind === "consent" && sender.tab && sender.frameId === 0)
-    return { given: await operations.consented() };
-  if (isProductPage(sender)) return productPageRequest(operations, kind, message);
+  if (kind === "consent" && tabId !== undefined) return { given: await operations.consented() };
+  // A page that moved within itself off its product may only take its own tab's mark away.
+  if (kind === "unmark" && tabId !== undefined) return operations.unmark(tabId);
+  if (isProductPage(sender) && tabId !== undefined)
+    return productPageRequest(operations, tabId, kind, message);
   if (sender.url === chrome.runtime.getURL("options.html"))
     return optionsRequest(operations, kind, message);
   if (sender.url === chrome.runtime.getURL("popup.html")) return popupRequest(operations, kind);

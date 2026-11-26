@@ -47,6 +47,27 @@ form {
   display: grid;
   gap: 10px;
 }
+/* The book lines size to the popup instead of widening it, and cut long text with an ellipsis. */
+#title,
+#authors {
+  contain: inline-size;
+  margin: 0;
+  overflow: hidden;
+}
+#title:not([hidden]) {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+#authors {
+  margin-top: 2px;
+  font-size: 0.86rem;
+  opacity: 0.72;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
 #status {
   margin-block: 8px;
 }

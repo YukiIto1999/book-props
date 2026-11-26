@@ -14,7 +14,7 @@ void test("a purchase whose reply is lost stays unknown and blocks another purch
   let pending = false;
   const popup = new Popup(
     {
-      inspect: async () => ({ supported: true, hasBook: true, pending, reply: observed }),
+      inspect: async () => ({ supported: true, book: {}, pending, reply: observed }),
       request: async () => {
         pending = true;
         throw new Error("the worker went away");
@@ -38,10 +38,9 @@ void test("a product page shows an answer only while it still shows the page tha
   const shown = [];
   const watch = new PageWatch(
     page,
-    () => answer.promise,
+    { consented: async () => true, check: () => answer.promise, unmark: async () => {} },
     { show: (text) => shown.push(text), clear: () => {} },
     () => () => {},
-    async () => true,
   );
   await watch.refresh();
   t.mock.timers.tick(375);

@@ -1,23 +1,26 @@
-import type { Product } from "@book-props/vault-contract";
 import { unavailable, type PageAnswer, type Reply } from "../extension/outcomes.ts";
+import type { PageWorker } from "../extension/page-watch.ts";
 import { decodeConsent, decodeResponse, messageField, type PageMessage } from "./wire.ts";
 
-/** Asks the worker about the book on this page. */
-export async function checkWithWorker(book: Product): Promise<Reply> {
-  const reply: unknown = await chrome.runtime.sendMessage({
-    kind: "check",
-    product: book,
-  } satisfies PageMessage);
-  return decodeResponse(reply, unavailable);
-}
-
-/** Asks the worker whether the user consented; throws when the worker cannot be reached. */
-export async function consentFromWorker(): Promise<boolean> {
-  const answer: unknown = await chrome.runtime.sendMessage({
-    kind: "consent",
-  } satisfies PageMessage);
-  return decodeConsent(answer);
-}
+/** Reaches the worker from a product page's content script. */
+export const pageWorker: PageWorker = {
+  async consented() {
+    const answer: unknown = await chrome.runtime.sendMessage({
+      kind: "consent",
+    } satisfies PageMessage);
+    return decodeConsent(answer);
+  },
+  async check(book) {
+    const reply: unknown = await chrome.runtime.sendMessage({
+      kind: "check",
+      product: book,
+    } satisfies PageMessage);
+    return decodeResponse(reply, unavailable);
+  },
+  async unmark() {
+    await chrome.runtime.sendMessage({ kind: "unmark" } satisfies PageMessage);
+  },
+};
 
 /** Answers the worker's messages to this tab: which book it shows, a re-check result to show, and that consent changed. */
 export function answerWorker(page: {

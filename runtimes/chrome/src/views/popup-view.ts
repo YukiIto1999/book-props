@@ -3,8 +3,10 @@ import { required } from "./elements.ts";
 
 type PopupHandlers = Record<"purchase" | "wish" | "open" | "reconcile" | "forget", () => void>;
 
-/** The popup's status line and action buttons. */
+/** The popup's book heading, status line and action buttons. */
 export function popupView(): PopupView & { bind(handlers: PopupHandlers): void } {
+  const title = required("#title", HTMLElement);
+  const authors = required("#authors", HTMLElement);
   const status = required("#status", HTMLElement);
   const purchase = required("#purchase", HTMLButtonElement);
   const wish = required("#wish", HTMLButtonElement);
@@ -13,6 +15,15 @@ export function popupView(): PopupView & { bind(handlers: PopupHandlers): void }
   const forget = required("#forget", HTMLButtonElement);
   return {
     render(controls) {
+      // A clamped line keeps its whole text in the tooltip.
+      for (const [line, text] of [
+        [title, controls.title],
+        [authors, controls.authors],
+      ] as const) {
+        line.textContent = text;
+        line.title = text;
+        line.hidden = !text;
+      }
       purchase.disabled = !controls.canPurchase;
       wish.disabled = !controls.canWish;
       wish.textContent = controls.wishLabel;

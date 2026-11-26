@@ -9,13 +9,18 @@ export type ProductPage = {
   /** The schema-valid book the page shows, if any. */
   product(): Product | undefined;
 };
-/** Asks the worker about a book; throws when the worker cannot be reached. */
-export type BookCheck = (book: Product) => Promise<Reply>;
+/** The worker as a product page reaches it; each call throws when the worker cannot be reached. */
+export type PageWorker = {
+  /** Whether the user consents now. */
+  consented(): Promise<boolean>;
+  /** Asks about a book, and has the tab's toolbar icon marked with the answer. */
+  check(book: Product): Promise<Reply>;
+  /** Removes the tab's mark, because the page no longer shows the book it checked. */
+  unmark(): Promise<void>;
+};
 export type Toast = { show(text: string, duration: number): void; clear(): void };
 /** Starts calling `changed` whenever the page may show another book, and returns how to stop. */
 export type PageChanges = (changed: () => void) => () => void;
-/** Asks whether the user consents now; throws when the worker cannot be reached. */
-export type ConsentQuery = () => Promise<boolean>;
 
 // Product pages redraw in bursts; one check covers the whole burst.
 const settleDelay = 375;
@@ -23,28 +28,22 @@ const settleDelay = 375;
 /** Checks the book on a product page once its details settle, and shows the answer as a toast; reads nothing until the user consents. */
 export class PageWatch {
   private readonly page: ProductPage;
-  private readonly check: BookCheck;
+  private readonly worker: PageWorker;
   private readonly toast: Toast;
   private readonly changes: PageChanges;
-  private readonly ask: ConsentQuery;
   private last = "";
+  // Whether the tab may carry a mark for a book this page checked.
+  private marked = false;
   private scheduled = false;
   private reading = false;
   private asked = 0;
   private stopWatching: () => void = () => undefined;
 
-  constructor(
-    page: ProductPage,
-    check: BookCheck,
-    toast: Toast,
-    changes: PageChanges,
-    ask: ConsentQuery,
-  ) {
+  constructor(page: ProductPage, worker: PageWorker, toast: Toast, changes: PageChanges) {
     this.page = page;
-    this.check = check;
+    this.worker = worker;
     this.toast = toast;
     this.changes = changes;
-    this.ask = ask;
   }
 
   /**
@@ -53,7 +52,7 @@ export class PageWatch {
    */
   refresh = async (): Promise<void> => {
     const ticket = ++this.asked;
-    const given = await this.ask().catch(() => false);
+    const given = await this.worker.consented().catch(() => false);
     if (ticket === this.asked) this.follow(given);
   };
 
@@ -63,6 +62,7 @@ export class PageWatch {
     this.follow(false);
   };
 
+  // When reading stops, the worker clears the marks itself: on withdrawal for every tab, and on leaving for this one.
   private follow(given: boolean): void {
     if (given === this.reading) return;
     this.reading = given;
@@ -73,6 +73,7 @@ export class PageWatch {
     }
     this.stopWatching();
     this.last = "";
+    this.marked = false;
     this.toast.clear();
   }
 
@@ -104,18 +105,19 @@ export class PageWatch {
 
   private async lookup(): Promise<void> {
     const url = this.page.url();
-    if (!siteOf(url)) {
-      this.toast.clear();
-      this.last = "";
-      return;
-    }
-    const book = this.page.product();
-    const key = JSON.stringify([url, book]);
+    const book = siteOf(url) ? this.page.product() : undefined;
+    const key = book ? JSON.stringify([url, book]) : "";
     if (key === this.last) return;
     this.last = key;
     this.toast.clear();
-    if (!book) return;
-    const reply = await this.check(book).catch((): Reply => unavailable);
+    if (!book) {
+      // The page moved within itself away from the book it checked, so its mark no longer applies.
+      if (this.marked) void this.worker.unmark().catch(() => undefined);
+      this.marked = false;
+      return;
+    }
+    this.marked = true;
+    const reply = await this.worker.check(book).catch((): Reply => unavailable);
     if (this.last === key && this.page.url() === url) this.show(reply, false);
   }
 }

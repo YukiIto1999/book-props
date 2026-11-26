@@ -1,5 +1,5 @@
 import { FileSystemAdapter, MarkdownView, TFile, TFolder, normalizePath, type App } from "obsidian";
-import type { BookFiles } from "../catalog/ports.ts";
+import type { BookFiles, NoteFileName } from "../catalog/ports.ts";
 import { LocalMoveCopies, moveCopyDirectory } from "./local-move-copies.ts";
 
 export class VaultFiles implements BookFiles {
@@ -57,11 +57,23 @@ export class VaultFiles implements BookFiles {
     return file.path;
   }
 
-  async create(bookId: string, raw: string): Promise<string> {
-    if (!(this.app.vault.getAbstractFileByPath(this.folder) instanceof TFolder))
-      throw new Error("書籍フォルダが見つかりません。");
-    const created = await this.app.vault.create(`${this.folder}/${bookId}.md`, raw);
+  async create(fileName: NoteFileName, raw: string): Promise<string> {
+    const folder = this.app.vault.getAbstractFileByPath(this.folder);
+    if (!(folder instanceof TFolder)) throw new Error("書籍フォルダが見つかりません。");
+    const name = fileName(folder.children.map((child) => child.name));
+    const created = await this.app.vault.create(`${this.folder}/${name}`, raw);
     return created.path;
+  }
+
+  async rename(path: string, fileName: NoteFileName): Promise<string> {
+    const file = this.file(path);
+    const { parent } = file;
+    if (!parent) throw new Error("書籍フォルダの外にはアクセスできません。");
+    const name = fileName(
+      parent.children.filter((child) => child !== file).map((child) => child.name),
+    );
+    if (name !== file.name) await this.app.fileManager.renameFile(file, `${parent.path}/${name}`);
+    return file.path;
   }
 
   canUpdate(path: string, latest: string): boolean {

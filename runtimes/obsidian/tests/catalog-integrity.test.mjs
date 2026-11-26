@@ -15,6 +15,7 @@ const encodePortableLibrary = (raws) => portable.encode(raws);
 
 const source = readBookNote(original).book;
 const [edition] = source.editions;
+const sourcePath = `Books/${source.title} (${source.id.slice(0, 8)}).md`;
 const destinationId = "8c43856e-f6a9-4bfe-bcbf-bdf427098541";
 const destinationPath = "Books/a-destination.md";
 const destination = createBookNote({
@@ -183,16 +184,16 @@ void test("import recognizes an identical renamed record arriving between writes
   const { catalog, files, notes } = scope();
   const renamed = "Books/synced-renamed.md";
   const create = files.create;
-  files.create = async (id, raw) => {
-    const path = await create(id, raw);
-    if (id === source.id) notes.set(renamed, destination);
+  files.create = async (fileName, raw) => {
+    const path = await create(fileName, raw);
+    if (path === sourcePath) notes.set(renamed, destination);
     return path;
   };
   assert.deepEqual(await catalog.importLibrary(encodePortableLibrary([original, destination])), {
     status: "saved",
     count: 1,
   });
-  assert.deepEqual([...notes.keys()], [`Books/${source.id}.md`, renamed]);
+  assert.deepEqual([...notes.keys()], [sourcePath, renamed]);
   assert.equal((await catalog.execute(inspect)).outcome.ownership, "sameEdition");
 });
 
@@ -201,9 +202,9 @@ void test("import stops after an arriving record with the same ID but different 
   const synced = `${destination}\n# 別の本文\n`;
   const renamed = "Books/synced-renamed.md";
   const create = files.create;
-  files.create = async (id, raw) => {
-    const path = await create(id, raw);
-    if (id === source.id) notes.set(renamed, synced);
+  files.create = async (fileName, raw) => {
+    const path = await create(fileName, raw);
+    if (path === sourcePath) notes.set(renamed, synced);
     return path;
   };
   assert.deepEqual(await catalog.importLibrary(encodePortableLibrary([original, destination])), {
@@ -213,7 +214,7 @@ void test("import stops after an arriving record with the same ID but different 
   assert.deepEqual(
     [...notes],
     [
-      [`Books/${source.id}.md`, original],
+      [sourcePath, original],
       [renamed, synced],
     ],
   );

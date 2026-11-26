@@ -1,5 +1,6 @@
 import type { Capture, EditionRecord, PendingMove } from "../adapters/note-format/book-record.ts";
 import type { MoveStage } from "../core/catalog-core.ts";
+import { sha256Hex } from "../shared/sha256.ts";
 import { change, Stop, type BookContext, type Scope } from "./book-change.ts";
 import type { StoredBook } from "./catalog.ts";
 import type { Management, ManagementResult } from "./management.ts";
@@ -7,13 +8,6 @@ import type { MoveCopy } from "./ports.ts";
 import { assertUnchanged } from "./purchase.ts";
 import { readCatalog } from "./read.ts";
 import { catalogEdition, catalogMarker } from "./rules.ts";
-
-async function signatureOf(value: string): Promise<string> {
-  const bytes = new Uint8Array(
-    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)),
-  );
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
 
 type Verified = Readonly<{ path: string; version: string; raw: string }>;
 
@@ -89,7 +83,7 @@ async function resume(scope: Scope, move: Move): Promise<ManagementResult> {
   const edition = backup?.edition ?? latest.editions.find(({ id }) => id === marker.editionId);
   const destination = entries.find(({ book: { id } }) => id === marker.destinationId);
   if (!captured || !edition || !destination) return "pending";
-  if ((await signatureOf(captured.signature)) !== marker.digest) return "pending";
+  if ((await sha256Hex(captured.signature)) !== marker.digest) return "pending";
   if (!backup) notes.removeEdition(sourceRaw, marker.editionId);
   Object.assign(move, { marker, captured, edition, destination });
   return run(scope, move, plan.stages);
@@ -251,7 +245,7 @@ async function prepareStart(
   if (!writable) return "unavailable";
   const captured = context.notes.captureEdition(sourceRaw, editionId);
   if (!captured) return "conflict";
-  const digest = await signatureOf(captured.signature);
+  const digest = await sha256Hex(captured.signature);
   return { source, marker: { editionId, destinationId, digest }, captured };
 }
 
@@ -260,7 +254,7 @@ async function prepareCancel({ context, source }: Scope): Promise<Move | Managem
   const marker = source.book.pendingMove;
   if (!marker) return "conflict";
   const captured = marker.backup ? context.notes.readEditionBackup(marker.backup) : undefined;
-  if (captured && (await signatureOf(captured.signature)) !== marker.digest) return "pending";
+  if (captured && (await sha256Hex(captured.signature)) !== marker.digest) return "pending";
   return { source, marker, captured };
 }
 

@@ -2,6 +2,7 @@ import type { AppliedPurchase } from "../adapters/note-format/book-record.ts";
 import type { PortableNote, PresentNote } from "../core/catalog-core.ts";
 import type { BookContext } from "./book-change.ts";
 import type { StoredBook } from "./catalog.ts";
+import { noteNaming } from "./note-name.ts";
 import { assertUnchanged, CatalogChanged, Refuse } from "./purchase.ts";
 import { readEntry, readStable } from "./read.ts";
 
@@ -78,11 +79,12 @@ export async function importNotes(
     let snapshot = await importSnapshot(context, desired);
     for (const { bookId: id, markdown } of desired) {
       snapshot = await unchangedOrRescan(snapshot, context, desired);
+      const fileName = await noteNaming(context.notes.read(markdown).book.title, id);
       if (!context.active()) return { status: started ? "pending" : "unavailable", count };
       assertUnchanged(snapshot.versions, context.files.versions());
       if (!snapshot.value.has(id)) continue;
       started = true;
-      const path = await context.files.create(id, markdown);
+      const path = await context.files.create(fileName, markdown);
       count++;
       snapshot = await includeCreated(context, snapshot, id, path, markdown);
     }

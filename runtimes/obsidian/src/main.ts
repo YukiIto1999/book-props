@@ -64,6 +64,21 @@ export default class BookProps extends Plugin {
     new Registration(this.app, services, product, intent).open();
   }
 
+  /** ファイル名が本IDのままの本ページを書名の名前に変え、変えた件数を知らせる。 */
+  private async renameIdNamedNotes(catalog: Catalog): Promise<void> {
+    try {
+      const { renamed, failed } = await catalog.renameIdNamedNotes();
+      if (renamed === 0 && failed === 0)
+        new Notice("ファイル名が本IDのままの本ページはありません。");
+      else {
+        const rest = failed > 0 ? `${failed}件は変えられませんでした。` : "";
+        new Notice(`${renamed}件の本ページのファイル名を書名に変えました。${rest}`);
+      }
+    } catch {
+      new Notice("本ページのファイル名を変えられませんでした。");
+    }
+  }
+
   override async onload(): Promise<void> {
     const core = startCatalogCore();
     const runtime = { core, notes: new NoteFormat(core) };
@@ -101,6 +116,14 @@ export default class BookProps extends Plugin {
         if (!this.catalog) new Notice("Book Propsの設定で書籍フォルダを指定してください。");
         else
           new LibraryTools(this.app, this.catalog, this.app.workspace.getActiveFile()?.path).open();
+      },
+    });
+    this.addCommand({
+      id: "rename-id-named-notes",
+      name: "本IDのファイル名を書名に変える",
+      callback: () => {
+        if (!this.catalog) new Notice("Book Propsの設定で書籍フォルダを指定してください。");
+        else void this.renameIdNamedNotes(this.catalog);
       },
     });
     addNoteTemplates(this, () => this.folder, runtime.notes);

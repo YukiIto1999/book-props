@@ -129,7 +129,7 @@ Wasm内でTokioを起動してObsidianの非同期I/Oを待つ構成は採らな
 
 本の基本項目にはObsidianのプロパティを使い、自由記述は通常のMarkdown本文に置く。
 版の反復部分を扱う編集操作はプラグインで補い、標準のプロパティ編集だけですべての版を扱えるとは約束しない。
-YAMLの `book-title`・`book-authors`・`book-wanted`・`book-reading-status`・`book-finished-on` と `tags` はObsidianのプロパティとして扱う。`book-props` の `schema: 1` の下に `book-id`、`editions`、`applied-purchases`、型付きの `custom-fields` を置く。版の `id` と所有、ISBN-13の別名は同じ版の行に置く。新規ファイル名は本IDに `.md` を付けた名前で、改名後も内部IDで識別する。更新するのは該当するYAMLだけで、手書きの本文や未知のプロパティを再出力で置き換えない。別DBと永続索引は置かない。
+YAMLの `book-title`・`book-authors`・`book-wanted`・`book-reading-status`・`book-finished-on` と `tags` はObsidianのプロパティとして扱う。`book-props` の `schema: 1` の下に `book-id`、`editions`、`applied-purchases`、型付きの `custom-fields` を置く。版の `id` と所有、ISBN-13の別名は同じ版の行に置く。新規ファイル名は、使えない記号を全角に置き換えて切り詰めた書名に、本IDから作る符号を括弧で添えた名前とする。符号はUUIDv4の本IDなら先頭の8桁、それ以外の本IDならSHA-256の先頭の8桁で、どの端末でも本IDだけで決まる。同じフォルダに大文字と小文字だけが違う名前を含めて同じ名前があれば、符号を12桁、本ID全体と長くする。ファイル名では識別せず、改名後も内部IDで識別する。更新するのは該当するYAMLだけで、手書きの本文や未知のプロパティを再出力で置き換えない。別DBと永続索引は置かない。
 
 標準の感想・実用書メモはBook Propsのコマンドで本文末尾に挿入する。利用者が追加・削除するテンプレートはObsidian標準のTemplatesで管理する。
 

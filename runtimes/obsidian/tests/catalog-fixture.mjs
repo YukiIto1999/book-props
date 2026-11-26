@@ -49,6 +49,13 @@ function memoryCopies() {
   };
 }
 
+/** The names directly in `folder`, leaving out the path `except`. */
+function siblings(notes, folder, except) {
+  return [...notes.keys()]
+    .filter((path) => path !== except && path.slice(0, path.lastIndexOf("/")) === folder)
+    .map((path) => path.slice(folder.length + 1));
+}
+
 function scope(initial, moveCopies = memoryCopies()) {
   const notes = new Map(initial === undefined ? [] : [[row, initial]]);
   const files = {
@@ -62,11 +69,20 @@ function scope(initial, moveCopies = memoryCopies()) {
       notes.set(path, change(await files.read(path), path));
       return path;
     },
-    create: async (id, raw) => {
-      const path = `Books/${id}.md`;
+    create: async (fileName, raw) => {
+      const path = `Books/${fileName(siblings(notes, "Books"))}`;
       assert.ok(!notes.has(path));
       notes.set(path, raw);
       return path;
+    },
+    rename: async (path, fileName) => {
+      const folder = path.slice(0, path.lastIndexOf("/"));
+      const renamed = `${folder}/${fileName(siblings(notes, folder, path))}`;
+      const raw = await files.read(path);
+      assert.ok(!notes.has(renamed));
+      notes.delete(path);
+      notes.set(renamed, raw);
+      return renamed;
     },
     canUpdate: () => true,
   };

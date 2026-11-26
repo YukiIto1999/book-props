@@ -189,6 +189,7 @@ try {
   await text(wish, "#status", "Vaultに保存しました。");
   const names = await notes(books);
   assert.equal(names.length, 1);
+  if (!migration) assert.match(names[0], /^Book Props acceptance fixture \([0-9a-f]{8}\)\.md$/);
   const file = join(books, names[0]);
   const wished = await readFile(file, "utf8");
   assert.match(wished, /^book-wanted: true$/m);

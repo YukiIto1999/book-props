@@ -7,6 +7,7 @@ import type { BookContext } from "./book-change.ts";
 import { missingMoveCopies, settledShelf, type MissingCopy } from "./edition-recovery.ts";
 import { importNotes, pruneReceipts, type ImportResult } from "./maintenance.ts";
 import { manageBooks, type Management, type ManagementResult } from "./management.ts";
+import { noteNaming, renameIdNamed, type RenameResult } from "./note-name.ts";
 import type { BookFiles } from "./ports.ts";
 import { PortableLibrary } from "./portable-library.ts";
 import {
@@ -166,6 +167,14 @@ export class Catalog {
     return this.serial(() => importNotes(this.context, desired));
   }
 
+  /** ファイル名が本IDのままの本ページを、書名の名前に変える。 */
+  renameIdNamedNotes(): Promise<RenameResult> {
+    return this.serial(async () => {
+      if (!this.accepting) throw new Refuse("unavailable");
+      return renameIdNamed(this.files, await this.entries(), () => this.accepting);
+    });
+  }
+
   maintain(): Promise<void> {
     return this.serial(async () => {
       if (!this.accepting) return;
@@ -290,12 +299,13 @@ export class Catalog {
   private async write(step: Write, progress: WriteProgress): Promise<string> {
     if (this.halted(step.signal)) throw new Refuse("notSaved");
     const { target, plan } = step;
+    const fileName = plan.newBook && (await noteNaming(plan.newBook.title, plan.bookId));
     assertUnchanged(step.versions, this.files.versions(), target?.path, target?.path);
-    if (plan.newBook) {
+    if (plan.newBook && fileName) {
       const raw = this.context.notes.create(newBookRecord(plan.newBook));
       progress.change = plan.change;
       progress.started = true;
-      return this.files.create(plan.bookId, raw);
+      return this.files.create(fileName, raw);
     }
     if (!target) throw new Refuse("conflict");
     return this.files.process(target.path, (raw, currentPath) =>

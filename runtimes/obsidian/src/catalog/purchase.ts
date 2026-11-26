@@ -1,6 +1,7 @@
 import type { BookRecord } from "../adapters/note-format/book-record.ts";
 import type { BookWrite, ChangePlan } from "../core/catalog-core.ts";
 import { optionalField } from "../shared/optional-field.ts";
+import { sha256Hex } from "../shared/sha256.ts";
 import type { BookContext } from "./book-change.ts";
 import type { Operation, Result, StoredBook } from "./catalog.ts";
 import type { Commit } from "./rules.ts";
@@ -78,11 +79,7 @@ export async function inputHash(input: Operation): Promise<string> {
     purchasedFrom,
   ];
   if (input.selection) stable.push(input.selection.bookId, input.selection.editionId);
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(JSON.stringify(stable)),
-  );
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return sha256Hex(JSON.stringify(stable));
 }
 
 export function hasPendingMove(entries: readonly StoredBook[]): boolean {

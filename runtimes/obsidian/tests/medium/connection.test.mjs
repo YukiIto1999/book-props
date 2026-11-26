@@ -28,8 +28,8 @@ function bookFiles(folder) {
     moveCopies: new LocalMoveCopies(() => join(folder, "edition-moves")),
     versions: () => new Map(),
     read: (path) => readFile(path, "utf8"),
-    create: async (id, markdown) => {
-      const path = join(folder, `${id}.md`);
+    create: async (fileName, markdown) => {
+      const path = join(folder, fileName(await readdir(folder)));
       await writeFile(path, markdown, { flag: "wx" });
       return path;
     },
@@ -135,6 +135,7 @@ await test("only the extension that proved the folder can save a purchase throug
   });
   const notes = await readdir(folder);
   assert.equal(notes.length, 1);
+  assert.match(notes[0], /^Design Handbook \([0-9a-f]{8}\)\.md$/);
   const markdown = await readFile(join(folder, notes[0]), "utf8");
   assert.match(markdown, /owned: true/);
   assert.match(markdown, /9780306406157/);

@@ -34,7 +34,7 @@ Each release also attaches `main.js` and `manifest.json` for Obsidian, and `book
 5. Open a book on a supported store. The extension shows your ownership status, and its popup records purchases and wishes in your vault.
 6. If the extension says that the folder permission has expired, which can happen after you close its settings or restart the browser, select **今後も自動で接続する** in its settings and allow access again. Choosing the option to allow on every visit keeps it connected from then on.
 
-Use the commands **書籍を登録・編集**, **本棚を開く**, and **本・版を管理** to work with your books in Obsidian.
+Use the commands **書籍を登録・編集**, **本棚を開く**, and **本・版を管理** to work with your books in Obsidian. New book notes are named after the title with an eight-character code of the book ID, such as `リーダブルコード (7b91b5a8).md`. Books with the same title get different names in the same folder. Even when two devices register books with the same title before syncing, the names practically never match: both books would also need the same eight-character code, a chance of about one in four billion. You may rename notes freely. Notes created by 0.7.0 or earlier are named after the book ID; the command **本IDのファイル名を書名に変える** renames them. Links to them are updated only when **Automatically update internal links** is on under **Settings → Files and links**, so turn it on before running the command if other notes link to your book notes.
 
 ## Network use, files outside the vault, and privacy
 

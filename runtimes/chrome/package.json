@@ -1,5 +1,5 @@
 {
-  "name": "@book-props/vault-extension",
+  "name": "@book-props/chrome",
   "private": true,
   "type": "module",
   "scripts": {

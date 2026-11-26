@@ -249,7 +249,7 @@ Rustのlintは認知的複雑さが15を超える関数を拒否する。
 
 ### 新構成の実装と検証の入口
 
-Rustの蔵書判断は [`core/vault`](../core/vault) に置く。Obsidianは [`runtimes/obsidian`](../runtimes/obsidian) から `main.js` と `manifest.json` を、Chromeは [`runtimes/book-extension`](../runtimes/book-extension) からManifest V3拡張を組み立てる。接続の要求・応答は [`contracts/book-vault/wire.ts`](../contracts/book-vault/wire.ts) の検証付き契約に従う。
+Rustの蔵書判断は [`core/vault`](../core/vault) に置く。Obsidianは [`runtimes/obsidian`](../runtimes/obsidian) から `main.js` と `manifest.json` を、Chromeは [`runtimes/chrome`](../runtimes/chrome) からManifest V3拡張を組み立てる。接続の要求・応答は [`contracts/book-vault/wire.ts`](../contracts/book-vault/wire.ts) の検証付き契約に従う。
 
 現行の手動導入、再ペアリング、切り戻しは[導入と運用](installation.md)を参照する。以下は実アプリで観測した結果を示す。
 

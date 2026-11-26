@@ -14,7 +14,7 @@
       "cache": true
     },
     "types": {
-      "command": "tsc -p runtimes/obsidian && tsc -p runtimes/book-extension && tsc -p tsconfig.root.json",
+      "command": "tsc -p runtimes/obsidian && tsc -p runtimes/chrome && tsc -p tsconfig.root.json",
       "dependsOn": ["prepare-wasm", "prepare-browser-wasm"],
       "cache": true
     },
@@ -38,8 +38,8 @@
       "cache": true
     },
     "prepare-browser-wasm": {
-      "command": "bash runtimes/book-extension/build.sh wasm",
-      "outputs": ["{workspaceRoot}/runtimes/book-extension/dist/tls"],
+      "command": "bash runtimes/chrome/build.sh wasm",
+      "outputs": ["{workspaceRoot}/runtimes/chrome/dist/tls"],
       "cache": true
     },
     "test-obsidian": {
@@ -55,10 +55,10 @@
       "cache": true
     },
     "test-chrome": {
-      "command": "pnpm --filter @book-props/vault-extension test",
+      "command": "pnpm --filter @book-props/chrome test",
       "inputs": [
         "default",
-        "{workspaceRoot}/runtimes/book-extension/**/*",
+        "{workspaceRoot}/runtimes/chrome/**/*",
         "{workspaceRoot}/contracts/book-vault/**/*"
       ],
       "cache": true
@@ -73,9 +73,9 @@
       "cache": true
     },
     "build-chrome": {
-      "command": "pnpm --filter @book-props/vault-extension build",
+      "command": "pnpm --filter @book-props/chrome build",
       "dependsOn": ["prepare-browser-wasm"],
-      "outputs": ["{workspaceRoot}/runtimes/book-extension/dist"],
+      "outputs": ["{workspaceRoot}/runtimes/chrome/dist"],
       "cache": true
     },
     "build": {

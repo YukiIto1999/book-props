@@ -35,7 +35,7 @@ importers:
 
   libs/book-products: {}
 
-  runtimes/book-extension:
+  runtimes/chrome:
     dependencies:
       '@book-props/book-products':
         specifier: workspace:*

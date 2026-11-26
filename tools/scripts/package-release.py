@@ -11,10 +11,10 @@ from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 
 ROOT = Path(__file__).resolve().parents[2]
+# Bundle name = runtime folder under runtimes/: (files copied from its dist, generated wasm folder kept out of the bundle).
 BUNDLES = {
-    "obsidian": ("obsidian", ("main.js", "manifest.json"), "wasm"),
+    "obsidian": (("main.js", "manifest.json"), "wasm"),
     "chrome": (
-        "book-extension",
         (
             "content.js", "icon-128.png", "icon-16.png", "icon-32.png", "icon-48.png", "manifest.json",
             "options.html", "options.js", "popup.html", "popup.js", "ui.css", "vault_tls_bg.wasm", "worker.js",
@@ -32,7 +32,7 @@ def inspect_json(*command):
 
 def npm_packages():
     report = inspect_json(
-        "pnpm", "--filter", "@book-props/obsidian...", "--filter", "@book-props/vault-extension...",
+        "pnpm", "--filter", "@book-props/obsidian...", "--filter", "@book-props/chrome...",
         "licenses", "list", "--prod", "--json",
     )
     packages = {}
@@ -96,8 +96,8 @@ def sysroot_packages():
     ).strip()
     base = {"alloc", "compiler_builtins", "core", "dlmalloc", "panic_abort", "std"}
     expected = {"obsidian": base, "chrome": base | {"hashbrown"}}
-    for name, (runtime, _, generated) in BUNDLES.items():
-        link_map = (ROOT / "runtimes" / runtime / "dist" / generated / "link.map").read_text()
+    for name, (_, generated) in BUNDLES.items():
+        link_map = (ROOT / "runtimes" / name / "dist" / generated / "link.map").read_text()
         linked = set(re.findall(re.escape(libdir) + r"/lib(\w+)-[0-9a-f]+\.rlib\(", link_map))
         if linked != expected[name]:
             raise SystemExit(f"Review linked Rust libraries ({name}): expected {sorted(expected[name])}, found {sorted(linked)}")
@@ -155,9 +155,9 @@ def rust_notices():
 
 def bundle_inputs(version):
     files = {"LICENSE": ROOT / "LICENSE"}
-    manifests = [ROOT / "package.json", ROOT / "manifest.json", ROOT / "runtimes" / "book-extension" / "manifest.json"]
-    for name, (runtime, members, generated) in BUNDLES.items():
-        source = ROOT / "runtimes" / runtime
+    manifests = [ROOT / "package.json", ROOT / "manifest.json", ROOT / "runtimes" / "chrome" / "manifest.json"]
+    for name, (members, generated) in BUNDLES.items():
+        source = ROOT / "runtimes" / name
         dist = source / "dist"
         if not dist.is_dir():
             raise SystemExit(f"Missing build output: {dist.relative_to(ROOT)}")

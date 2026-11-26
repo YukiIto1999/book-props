@@ -10,7 +10,7 @@ const root = fileURLToPath(new URL("../../../../", import.meta.url));
 const contract = "contracts/book-vault";
 const extractors = "libs/book-products";
 const obsidian = "runtimes/obsidian";
-const extension = "runtimes/book-extension";
+const extension = "runtimes/chrome";
 const dependencies = new Map([
   [contract, { packages: [], externals: ["zod"] }],
   [extractors, { packages: [], externals: [] }],

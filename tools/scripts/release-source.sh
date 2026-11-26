@@ -7,7 +7,7 @@ test "$commit" = "$(git rev-parse "$GITHUB_SHA^{commit}")"
 git merge-base --is-ancestor "$commit" "refs/remotes/origin/$DEFAULT_BRANCH"
 version=$(jq -er '.version' package.json)
 [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
-for manifest in manifest.json runtimes/book-extension/manifest.json; do
+for manifest in manifest.json runtimes/chrome/manifest.json; do
   jq -e --arg version "$version" '.version == $version' "$manifest" > /dev/null
 done
 

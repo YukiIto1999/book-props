@@ -8,7 +8,7 @@ const config: KnipConfig = {
       entry: ["tools/scripts/mutation-record.mjs"],
       project: ["tools/**/*.mjs"],
     },
-    "runtimes/book-extension": {
+    "runtimes/chrome": {
       entry: ["src/{worker,content,options,popup}.ts"],
       project: ["src/**/*.ts"],
     },

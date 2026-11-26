@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["core/vault", "runtimes/book-extension/tls"]
+members = ["core/vault", "runtimes/chrome/tls"]
 
 [workspace.lints.clippy]
 cognitive_complexity = "deny"

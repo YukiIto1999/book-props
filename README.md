@@ -31,6 +31,7 @@ Each release also attaches `main.js` and `manifest.json` for Obsidian, and `book
 2. Under **Chromeとの接続**, select **接続を始める**. The plugin creates a connection folder named after your vault under `Book Props` in your home folder.
 3. In the extension's connection settings, select **接続用フォルダを選ぶ**, choose that folder, and allow the browser to edit it.
 4. Open a book on a supported store. The extension shows your ownership status, and its popup records purchases and wishes in your vault.
+5. If the extension says that the folder permission has expired, which can happen after you close its settings or restart the browser, select **今後も自動で接続する** in its settings and allow access again. Choosing the option to allow on every visit keeps it connected from then on.
 
 Use the commands **書籍を登録・編集**, **本棚を開く**, and **本・版を管理** to work with your books in Obsidian.
 

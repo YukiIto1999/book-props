@@ -90,5 +90,6 @@ This extension works with the Book Props plugin for desktop Obsidian on the same
 2. Create a folder such as "Books" in the vault. In Settings > Book Props, enter "Books" in 書籍フォルダ and press 適用, then press 接続を始める.
 3. In this extension, open 接続設定・対応サイト from the popup, press 接続用フォルダを選ぶ, choose the folder shown in Obsidian (<home>/Book Props/<vault name>), and allow editing.
 4. Open https://books.rakuten.co.jp/rb/11753651/. The popup shows 未所有. Press 欲しい本に追加; after reloading, the page shows 欲しいに登録済み.
+If the extension later says that the folder permission has expired (接続用フォルダの許可が切れています), press 今後も自動で接続する in its settings and allow access.
 The interface is in Japanese.
 ```

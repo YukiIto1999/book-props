@@ -42,6 +42,31 @@ Chromeの拡張と表示、およびそれを動かすホストには、標準�
 既存の公式Web Clipperは記事や単語の取り込みに使い続ける。
 書籍用の照合と登録を既存のClipper設定へ組み込まず、その取り込み経路も変更しない。
 
+### コードの配置と分担
+
+業務の規則は Rust の [`core/vault`](../core/vault) に集める。商品と本・版の照合、保存する変更の計画と購入の再送の判定、本・版の管理と版の移動、本棚の検索・絞り込み・並べ替え、JSON の書き出しと取り込みの検証がここにある。`core` は時計、乱数、ファイルや通信の入出力を持たず、現在時刻は要求に含めて受け取る。同じ規則を TypeScript 側に複製しない。
+
+Obsidian プラグイン（[`runtimes/obsidian`](../runtimes/obsidian)）は、保存形式（本ページの YAML、ISO 8601 の時刻、購入の `inputHash`）、Vault のファイル操作、Chrome との接続、画面、日本語の照合順序を持つ。本棚の並べ替えでは、プラグインが日本語の照合で決めた順位を `core` に渡し、`core` はその順位で本を並べる。
+
+`core` との境目はプラグインの `src/core/` に一つだけ置き、ここだけが Wasm を読み込む。要求は JSON の文字列で渡し、結果は Rust の型から生成した TypeScript の型の値で受け取る。要求まで型付きの値で渡す方式は、2,000冊・各3版の蔵書で中央値が約1.8倍遅かったため採らない。本棚を開いている間は、本の一覧を `core` に保持したまま問い合わせる。問い合わせのたびに一覧を渡すと1回あたり中央値約53ミリ秒かかり、保持すると0.6〜0.9ミリ秒だった。
+
+プラグインの `src/` は次の層に分ける。読み込みの向きは[依存の検査](../tests/arch/medium/typescript/dependencies.test.mjs)が確かめる。
+
+| 場所        | 役目                                                                                      | 読み込めるもの                                                   |
+| ----------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `main.ts`   | プラグインを組み立てる                                                                    | すべての層                                                       |
+| `core/`     | Wasm の `core` を起動し、呼び出し口を渡す                                                 | `core/`                                                          |
+| `catalog/`  | 業務操作を進める。保存形式と、自分が宣言する口（`ports.ts`）を通して Vault を読み書きする | `shared/`、`catalog/`、`adapters/note-format/`。`core/` は型だけ |
+| `adapters/` | 保存形式、Vault のファイル、Chrome との接続、書誌の取得、版の移動の控えなど外部との接点   | `shared/`、`adapters/`。`core/` と `catalog/ports.ts` は型だけ   |
+| `views/`    | `catalog` と `core` が決めた結果を画面に表示し、操作を受ける                              | `shared/`、`views/`、`catalog/`。`core/` と `adapters/` は型だけ |
+| `shared/`   | 層をまたいで使う小さな値の扱い                                                            | `shared/`                                                        |
+
+`obsidian` パッケージは `main.ts`、`adapters/`、`views/` だけが、`yaml` は `adapters/note-format/` だけが使う。Node の組み込みモジュールは、ファイル、接続、書誌の取得を担う決まった `adapters/` のファイルだけが使う。
+
+Chrome 拡張（[`runtimes/chrome`](../runtimes/chrome)）の `src/` では、`composition/` が service worker、商品ページ、ポップアップ、設定画面の入口として他の層を組み立てる。`adapters/` は `chrome.*` と DOM で `extension/` の口を実装し、`views/` は表示を担う。拡張の判断を持つ `extension/` は他の層を読み込まず、`extension/` と `views/` は `chrome.*` を使わない。この向きも同じ依存の検査が確かめる。
+
+パッケージの間では、両方の runtime が公開契約の [`contracts/book-vault`](../contracts/book-vault) と商品ページの抽出の [`libs/book-products`](../libs/book-products) だけを使う。
+
 ## Obsidianへの組み込み
 
 [標準のruntime一覧](https://github.com/YukiIto1999/architecture-standard/blob/main/structure/runtimes/README.md#構成)に、Obsidianのような外部アプリのプラグインホストはない。既存の区分に当てはめず、どの規律を適用するかを[標準の例外管理](https://github.com/YukiIto1999/architecture-standard/blob/main/README.md#標準の単一性と例外の管理)に従って記録する。[埋め込みsurface](https://github.com/YukiIto1999/architecture-standard/blob/main/structure/surfaces/embedded/layout.md#組み立てと起動)が定める子プロセスまたはネイティブライブラリを使っても、このホスト区分の判断は残る。
@@ -241,15 +266,15 @@ Obsidian 1.13.7の一時Vaultで、2024年にアーカイブした本がファ�
 
 ## 検証
 
-[ルートのNxタスク](../project.json)を、ローカル、CI、フックで共用する。`verify` は整形、lint、型、依存境界、RustとWasmを通る業務・保存、Chrome拡張の購入結果の再確認を検査する。`verify:push` では成果物を作り、隔離したSecret ServiceとTLSの実結合を加える。どちらも外部バックエンドや書店への通信を前提にしない。
+検証の入口は[ルートのNxタスク](../project.json)で、手元、CI、フックが同じタスクを起動する。`pnpm verify`（`verify`）は整形、lint、型、依存の境界、RustとWasmを通る業務・保存、Chrome拡張の購入結果の再確認を検査し、commit の前に手元で、push と PR では [CI](../.github/workflows/ci.yml) で走らせる。`pnpm verify:push`（`verify-push`）は `verify` に成果物の生成と、接続用フォルダとTLSの実結合を加え、push の前に [`.githooks/pre-push`](../.githooks/pre-push) が、版の公開では [Release ワークフロー](../.github/workflows/release.yml)が起動する。どちらも外部バックエンドや書店への通信を前提にしない。全量回帰と mutation の分析は `pnpm verify:full` で別に起動し、commit や push の条件にしない。
+
+入口ごとの所要時間の目標と上限は [`tools/verification-time.json`](../tools/verification-time.json) にだけ置き、pre-push フック、CI、全量回帰と分析のスクリプトが同じ値を読む。目標は構成を見直す目安で、超えても走行は止めない。上限は終わらない走行を止める値で、測った環境、余裕の量と理由を同じファイルに記す。
 
 ブラウザやObsidianでの利用手順は[要件の受入条件](requirements.md#受入条件)で確認する。型検査・成果物生成・Nodeの実結合だけで、実アプリの受入に代えない。
 
 Rustのlintは認知的複雑さが15を超える関数を拒否する。
 
-### 新構成の実装と検証の入口
-
-Rustの蔵書判断は [`core/vault`](../core/vault) に置く。Obsidianは [`runtimes/obsidian`](../runtimes/obsidian) から `main.js` と `manifest.json` を、Chromeは [`runtimes/chrome`](../runtimes/chrome) からManifest V3拡張を組み立てる。接続の要求・応答は [`contracts/book-vault/wire.ts`](../contracts/book-vault/wire.ts) の検証付き契約に従う。
+### 実アプリでの観測
 
 現行の手動導入、再ペアリング、切り戻しは[導入と運用](installation.md)を参照する。以下は実アプリで観測した結果を示す。
 

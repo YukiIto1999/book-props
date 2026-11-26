@@ -10,7 +10,7 @@ import { Connection, scopeOf } from "../../src/connection.ts";
 import { LocalMoveCopies } from "../../src/local-move-copies.ts";
 import { createHost } from "../../src/tls-identity.ts";
 import { evaluate, initSync } from "../../dist/wasm/book_props_vault.js";
-import { extension, post, prove, readCard } from "./connection-support.mjs";
+import { post, prove, readCard } from "./connection-support.mjs";
 
 const product = {
   title: "Design Handbook",
@@ -44,14 +44,14 @@ await test("each Vault book folder keeps its own stable opaque scope", async () 
   assert.notEqual(scopeOf(vault, "Books/Archive"), scope);
   assert.notEqual(scopeOf(join(tmpdir(), "Other Vault"), "Books"), scope);
   await assert.rejects(
-    Connection.start(createHost(), extension, 0, "Books", undefined, async () => ({
+    Connection.start(createHost(), 0, "Books", undefined, async () => ({
       kind: "unavailable",
     })),
     { message: "接続設定が不正です。" },
   );
 });
 
-await test("only the paired extension can save a purchase through a trusted TLS endpoint", async (context) => {
+await test("only the extension that proved the folder can save a purchase through a trusted TLS endpoint", async (context) => {
   const folder = await mkdtemp(join(tmpdir(), "shelf-"));
   context.after(async () => await rm(folder, { recursive: true, force: true }));
   const profile = await mkdtemp(join(tmpdir(), "book-props-profile-"));
@@ -69,7 +69,7 @@ await test("only the paired extension can save a purchase through a trusted TLS 
   };
   const scope = scopeOf(folder, "Books");
   const host = createHost();
-  const connection = await Connection.start(host, extension, 0, scope, grant, dispatch);
+  const connection = await Connection.start(host, 0, scope, grant, dispatch);
   context.after(() => connection.stop());
   const card = await readCard(grant);
   const { anchor } = card;
@@ -113,6 +113,12 @@ await test("only the paired extension can save a purchase through a trusted TLS 
     payload: { kind: "connected" },
     protocol: "TLSv1.3",
   });
+  // The session belongs to the extension that paired; another extension cannot reuse its token.
+  const otherExtension = { ...options, origin: `chrome-extension://${"p".repeat(32)}` };
+  assert.equal(
+    (await post(connection, anchor, { action: "status" }, otherExtension)).payload.kind,
+    "unauthorized",
+  );
   assert.equal(
     (await post(connection, anchor, { action: "status", path: "outside.md" }, options)).payload
       .kind,
@@ -135,7 +141,6 @@ await test("only the paired extension can save a purchase through a trusted TLS 
   const restoredGrant = await ConnectionGrant.open(grant.id, grant.name, profile);
   const restored = await Connection.start(
     host,
-    extension,
     connection.listeningPort,
     scope,
     restoredGrant,

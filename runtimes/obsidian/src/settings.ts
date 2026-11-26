@@ -10,9 +10,8 @@ import {
 type SettingsHost = Plugin & {
   readonly folder: string;
   readonly connectionDirectory: string | undefined;
-  readonly extensionId: string;
   selectFolder(folder: string): Promise<boolean>;
-  configureConnection(extension: string): Promise<true | string>;
+  startConnection(): Promise<true | string>;
   revoke(): Promise<boolean>;
 };
 
@@ -54,21 +53,6 @@ export class Settings extends PluginSettingTab {
 
   private renderConnection(): void {
     this.containerEl.createEl("h3", { text: "Chromeとの接続" });
-    let extension!: TextComponent;
-    new Setting(this.containerEl)
-      .setName("Chrome拡張ID")
-      .setDesc("chrome://extensions の Book Props のIDを入力します。")
-      .addText((field) => {
-        extension = field.setValue(this.books.extensionId);
-      })
-      .addButton((button) =>
-        button.setButtonText("接続設定を適用").onClick(async () => {
-          button.setDisabled(true);
-          const applied = await this.books.configureConnection(extension.getValue());
-          new Notice(applied === true ? "接続設定を適用しました。" : applied);
-          this.display();
-        }),
-      );
     this.pairingSection = this.containerEl.createDiv();
     this.refreshPairing();
   }
@@ -83,7 +67,26 @@ export class Settings extends PluginSettingTab {
     section.empty();
     const directory = this.books.connectionDirectory;
     if (directory) this.renderPairing(section, directory);
-    else section.createEl("p", { text: "接続を受け付けていません。" });
+    else this.renderStart(section);
+  }
+
+  private renderStart(section: HTMLElement): void {
+    new Setting(section)
+      .setName("接続を始める")
+      .setDesc(
+        "ホームの「Book Props」フォルダの下に接続用フォルダを作り、Chrome 拡張からの接続を受け付けます。",
+      )
+      .addButton((button) =>
+        button
+          .setButtonText("接続を始める")
+          .setCta()
+          .onClick(async () => {
+            button.setDisabled(true);
+            const started = await this.books.startConnection();
+            new Notice(started === true ? "Chrome からの接続を受け付けています。" : started);
+            this.refreshPairing();
+          }),
+      );
   }
 
   private renderPairing(section: HTMLElement, directory: string): void {

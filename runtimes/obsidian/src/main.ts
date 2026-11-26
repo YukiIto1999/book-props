@@ -4,7 +4,7 @@ import type { Request, Response } from "@book-props/vault-contract";
 import { Catalog, type Result } from "./catalog.ts";
 import { decodeConfiguration, type Configuration } from "./configuration.ts";
 import type { ConnectionGrant } from "./connection-grant.ts";
-import { Connection, extensionIdPattern } from "./connection.ts";
+import { Connection } from "./connection.ts";
 import { LibraryTools } from "./library-tools.ts";
 import { addNoteTemplates } from "./note-templates.ts";
 import { Registration } from "./registration.ts";
@@ -32,16 +32,12 @@ export default class BookProps extends Plugin {
       await this.saveData(next);
       this.config = next;
     },
-    listen: (host, extensionId, port, scope, grant) =>
-      this.listen(host, extensionId, port, scope, grant),
+    listen: (host, port, scope, grant) => this.listen(host, port, scope, grant),
     unloaded: () => this.unloaded,
   });
   private changing = false;
   private unloaded = false;
 
-  get extensionId(): string {
-    return this.config.extensionId ?? "";
-  }
   get connectionDirectory(): string | undefined {
     return this.link.directory;
   }
@@ -161,14 +157,13 @@ export default class BookProps extends Plugin {
     }
   }
 
-  async configureConnection(extensionId: string): Promise<true | string> {
-    extensionId = extensionId.trim();
-    if (this.changing || !this.catalog || !extensionIdPattern.test(extensionId))
-      return "拡張 ID と書籍フォルダを確認してください。";
-    if (this.link.running && extensionId === this.extensionId) return true;
+  async startConnection(): Promise<true | string> {
+    if (!this.catalog) return "先に書籍フォルダを設定してください。";
+    if (this.changing) return "設定を変更中です。少し待ってからもう一度押してください。";
+    if (this.link.running) return true;
     this.changing = true;
     try {
-      return await this.link.connect(extensionId);
+      return await this.link.connect();
     } finally {
       this.changing = false;
     }
@@ -182,14 +177,13 @@ export default class BookProps extends Plugin {
 
   private listen(
     host: string,
-    extensionId: string,
     port: number,
     scope: string,
     grant: ConnectionGrant,
   ): Promise<Connection> {
     const catalog = this.catalog;
     if (!catalog) throw new Error("書籍フォルダを確認できません。");
-    return Connection.start(host, extensionId, port, scope, grant, (request, signal) =>
+    return Connection.start(host, port, scope, grant, (request, signal) =>
       this.dispatch(catalog, request, signal),
     );
   }

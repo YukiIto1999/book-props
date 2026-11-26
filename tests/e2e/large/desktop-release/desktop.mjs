@@ -8,7 +8,13 @@ import { checkRestart, checkVaultIsolation } from "./check-pairing.mjs";
 import { installChrome, reloadExtension, waitForInstalledChrome } from "./install-chrome.mjs";
 import { pairLegacy } from "./legacy-pairing.mjs";
 import { ObsidianFixture, selectFolder } from "./obsidian.mjs";
-import { applyConnection, configure, pairWith, text } from "./pair-evidence.mjs";
+import {
+  applyConnection,
+  configureLegacy,
+  legacyConnection,
+  pairWith,
+  text,
+} from "./pair-evidence.mjs";
 import { timeout, until } from "./wait.mjs";
 
 const migration = process.argv.includes("--migrate");
@@ -73,7 +79,7 @@ async function openOptions() {
   await options?.close();
   options = await chrome.newPage();
   await options.goto(`${prefix}options.html`);
-  await text(options, "#extension-id", extensionId);
+  await options.waitForSelector("#status", { timeout });
 }
 
 async function productPage() {
@@ -160,8 +166,13 @@ try {
   process.stdout.write(`Obsidian enabled Book Props through Community plugins (${safety})\n`);
   await startChrome();
   const settings = await obsidian.settings();
-  await configure(settings, extensionId);
-  await applyConnection(settings, join(evidence, "setup-original.png"));
+  if (migration) {
+    await configureLegacy(settings, extensionId);
+    await applyConnection(settings, join(evidence, "setup-original.png"), legacyConnection);
+  } else {
+    await selectFolder(settings, "Books");
+    await applyConnection(settings, join(evidence, "setup-original.png"));
+  }
   const legacyOrigin = migration
     ? await pairLegacy({ settings, options, chrome, root, timeout })
     : undefined;
@@ -217,7 +228,7 @@ try {
     await reloadExtension(chrome, extensionId, version);
     await openOptions();
     const updated = await obsidian.settings();
-    await updated.locator("button::-p-text(接続設定を適用)").setTimeout(timeout).wait();
+    await updated.locator("button::-p-text(接続を始める)").setTimeout(timeout).wait();
     await selectFolder(updated, "Other Books");
     await applyConnection(updated, join(evidence, "setup-other-folder.png"));
     await pairWith(updated, options, chrome, evidence);
@@ -275,7 +286,6 @@ try {
       obsidian,
       options,
       chrome,
-      extensionId,
       page,
       popup,
       notes,

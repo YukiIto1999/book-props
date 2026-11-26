@@ -13,8 +13,7 @@ import {
 } from "@book-props/vault-contract";
 import { createWebSocketStream, WebSocket } from "ws";
 
-export const extension = "abcdefghijklmnopabcdefghijklmnop";
-const origin = `chrome-extension://${extension}`;
+const origin = `chrome-extension://${"abcdefghijklmnop".repeat(2)}`;
 
 export async function post(connection, anchor, input, options = {}) {
   const target = new URL(connection.address);

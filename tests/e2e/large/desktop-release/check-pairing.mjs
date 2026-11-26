@@ -4,10 +4,9 @@ import { join } from "node:path";
 import process from "node:process";
 import { activatePlugin } from "./activate-obsidian.mjs";
 import { restartWorker } from "./install-chrome.mjs";
-import { ObsidianFixture } from "./obsidian.mjs";
+import { ObsidianFixture, selectFolder } from "./obsidian.mjs";
 import {
   applyConnection,
-  configure,
   paired,
   pairWith,
   remember,
@@ -48,7 +47,6 @@ export async function checkVaultIsolation({
   bundle,
   obsidian,
   options,
-  extensionId,
   chrome,
   page,
   popup,
@@ -65,7 +63,7 @@ export async function checkVaultIsolation({
     await second.start();
     await activatePlugin(await second.vaultPage());
     const settings = await second.settings();
-    await configure(settings, extensionId);
+    await selectFolder(settings, "Books");
     await applyConnection(settings, join(evidence, "setup-second-vault.png"));
     await pairWith(settings, options, chrome, evidence);
 

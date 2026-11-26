@@ -116,8 +116,9 @@ function date(value?: string): string | undefined {
 
 function titleEvidence(input: string): { title: string; label?: string } {
   const token = "改訂新版|増補改訂版|改訂版|増補版|新版|初版|第[０-９0-9]+版";
-  const leading = new RegExp(`^(${token})[\\s　]+`, "u").exec(input);
-  const trailing = new RegExp(`(?:[\\s　]+|[（(])(${token})[）)]?$`, "u").exec(input);
+  // \s also matches the ideographic space U+3000
+  const leading = new RegExp(`^(${token})\\s+`, "u").exec(input);
+  const trailing = new RegExp(`(?:\\s+|[（(])(${token})[）)]?$`, "u").exec(input);
   const label = leading?.[1] ?? trailing?.[1];
   return {
     title: leading

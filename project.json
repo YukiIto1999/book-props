@@ -18,6 +18,11 @@
       "dependsOn": ["prepare-wasm", "prepare-browser-wasm"],
       "cache": true
     },
+    "obsidian-review": {
+      "command": "node tools/obsidian-review/node_modules/eslint/bin/eslint.js --config tools/obsidian-review/eslint.config.mjs --quiet .",
+      "dependsOn": ["prepare-wasm", "prepare-browser-wasm"],
+      "cache": true
+    },
     "architecture": {
       "command": "node --test tests/arch/medium/typescript/*.test.mjs",
       "dependsOn": ["prepare-wasm"],
@@ -83,6 +88,7 @@
         "format",
         "lint",
         "types",
+        "obsidian-review",
         "architecture",
         "test-rust",
         "test-obsidian",

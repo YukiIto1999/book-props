@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Book Props",
-  "description": "Check book editions in your connected Obsidian Vault.",
+  "description": "Obsidian の蔵書の記録と照らして、書店の商品ページで本の所持と購入希望を表示します。",
   "version": "0.4.0",
   "permissions": ["storage", "contextMenus"],
   "background": { "service_worker": "worker.js", "type": "module" },

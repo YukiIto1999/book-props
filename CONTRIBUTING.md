@@ -27,63 +27,68 @@ devenv shell -- pnpm verify
 
 以下は GitHub リポジトリの所有者が初回公開前に行う。
 
-1. **Settings → Rules → Rulesets → New tag ruleset** で、対象 `v*`、状態 **Active** のルールセットを二つ作る。
+1. **Settings → Rules → Rulesets → New tag ruleset** で、対象 `*.*.*`、状態 **Active** のルールセットを二つ作る。版タグは `0.5.0` のように `v` を付けない。Obsidian は版と同じ名前のタグの Release から `main.js` と `manifest.json` を取得するためである。`v*` を対象にした既存のルールセットは、`*.*.*` が `v0.4.0` までのタグも含むので、新しいルールセットに置き換えてよい。
    一つは **Restrict creations** だけを有効にし、Bypass list はこのリポジトリの管理者だけに絞る。
    もう一つは **Restrict updates** と **Restrict deletions** を有効にし、Bypass list は空にする。
    こうすると公開前でも、作成済みタグの指すコミットを差し替えられない。
 2. **Settings → Environments** で `release` を作る。
-   **Selected branches and tags** を選び、**Tag** に `v*` を追加する。
+   **Selected branches and tags** を選び、**Tag** に `*.*.*` を追加する。
    Branch のルールは追加しない。
    版タグの push を公開の承認とするので、単独運用では Required reviewers を追加しない。
    ビルド証明の発行を版タグに限定する設定であり、環境にシークレットは置かない。
 3. **Settings → General → Releases** で **Enable release immutability** を有効にする。
-   公開済みの ZIP とタグが固定され、GitHub が版タグ・コミット・添付ファイルを結び付ける Release の証明を生成する。
+   公開済みの添付ファイルとタグが固定され、GitHub が版タグ・コミット・添付ファイルを結び付ける Release の証明を生成する。
 
 署名鍵や公開用シークレットの登録は不要。
 
 ### 公開前に試す
 
-既定ブランチから [Release ワークフロー](.github/workflows/release.yml)を手動実行すると、ZIP の作成、脆弱性検査、Windows・Linux での受け入れまで確認できる。
+既定ブランチから [Release ワークフロー](.github/workflows/release.yml)を手動実行すると、添付ファイルの作成、脆弱性検査、Windows・Linux での受け入れまで確認できる。
 両 OS では同じ ZIP を展開し、一時 Vault と新しい Chrome プロファイルで、証明書を登録せずにペアリング、再接続、購入希望と購入の記録を試す。Windows では、公開済みの v0.1.0 で結果不明の購入を作り、同じ場所に更新して、元の書籍フォルダでだけ再照会できることも確認する。
 結果は走行ログとスクリーンショットで確認できる。
 手動実行ではビルドの証明を発行せず、公開もしない。
 
 手元で同じ梱包と検査を行う場合は、依存を導入した対象コミットで次を実行する。
-`v0.4.0` はルートと両方のコンポーネントに共通する版に置き換える。
+`0.5.0` はルートと両方のコンポーネントに共通する版に置き換える。
 どのコマンドも失敗したら、次へ進まない。
 
 ```sh
 devenv shell -- pnpm verify:push
 mkdir -p work
-devenv --profile release shell -- pnpm package:release v0.4.0 work/package-v0.4.0
-(cd work/package-v0.4.0 && sha256sum --check SHA256SUMS)
-devenv --profile release shell -- python3 tools/scripts/audit-release.py work/package-v0.4.0/book-props-v0.4.0.zip
+devenv --profile release shell -- pnpm package:release 0.5.0 work/package-0.5.0
+(cd work/package-0.5.0 && sha256sum --check SHA256SUMS)
+devenv --profile release shell -- python3 tools/scripts/audit-release.py work/package-0.5.0/book-props-0.5.0.zip
 ```
 
 Rust を更新する場合は、[`devenv.nix`](devenv.nix) の `rustRevision` と、同じリビジョンの Rust リポジトリ直下にある `COPYRIGHT`・`LICENSE-APACHE`・`LICENSE-MIT` の写しを一緒に更新する。
 写しは [`tools/release/rust/`](tools/release/rust/) のリビジョン名のディレクトリに置き、旧リビジョンの写しは残さない。
 
-ZIP に入っている `obsidian/` と `chrome/` を導入に使う。
-ライセンスと依存の目録は ZIP に同梱されるが、プラグインや拡張のフォルダには置かない。
+Release には次を添付する。どれも同じビルドから作り、SBOM は ZIP を対象にする。
+
+- `book-props-<版>.zip`：手動導入用。`obsidian/` と `chrome/`、ライセンスと依存の目録を含む。
+- `main.js` と `manifest.json`：Obsidian のコミュニティプラグインとして取得されるファイル。ZIP の `obsidian/` と同じバイト列である。
+- `book-props-chrome-<版>.zip`：Chrome Web Store に提出する拡張。直下に `manifest.json` があり、ZIP の `chrome/` とライセンスの目録を含む。
+- `THIRD-PARTY-NOTICES.txt`：同梱した依存のライセンス。
+
 Vault、接続設定、資格情報は配布物に入れない。
 
 ### 版タグと公開
 
 公開するコードが既定ブランチに入っていることを確認し、そのコミットに注釈付きタグを付ける。
-`v0.4.0` はルートと両方のコンポーネントに共通する版に置き換える。
+`0.5.0` はルートと両方のコンポーネントに共通する版に置き換える。
 タグを push する直前に Immutable Releases が有効であることを確認する。
 Actions の標準トークンでは公開前にこの設定を照会できないため、リポジトリの管理権限がある GitHub CLI で確認する。
 
 ```bash
 read -r -p 'Source のコミット SHA: ' source
 test "$(gh api repos/YukiIto1999/book-props/immutable-releases --jq .enabled)" = true &&
-  git tag -a v0.4.0 "$source" -m 'Book Props v0.4.0' &&
-  git push origin refs/tags/v0.4.0
+  git tag -a 0.5.0 "$source" -m 'Book Props 0.5.0' &&
+  git push origin refs/tags/0.5.0
 ```
 
-タグで起動した走行が ZIP を一度だけ梱包し、SBOM と既知の脆弱性を検査する。
-同じ ZIP が Windows と Linux の受け入れに合格した場合だけ、GitHub Actions が ZIP と SPDX SBOM の署名付きビルド証明を発行し、成果物のハッシュ、ワークフロー、版タグ、コミットを照合する。
-検証済みの ZIP、SBOM、`SHA256SUMS` を下書きへ添付し、GitHub 側のハッシュが一致した場合だけ Release を公開する。
+タグで起動した走行が添付ファイルを一度だけ梱包し、SBOM と既知の脆弱性を検査する。
+同じ ZIP が Windows と Linux の受け入れに合格した場合だけ、GitHub Actions が各添付ファイルと SPDX SBOM の署名付きビルド証明を発行し、成果物のハッシュ、ワークフロー、版タグ、コミットを照合する。
+検証済みの添付ファイル、SBOM、`SHA256SUMS` を下書きへ添付し、GitHub 側のハッシュが一致した場合だけ Release を公開する。
 公開済みのタグや成果物は上書きしない。
 一時的な障害なら、公開済みでないことを確認し、元のタグの走行で **Re-run all jobs** を選ぶ。
 **Re-run failed jobs** では、現在の試行で ZIP が作られず、脆弱性検査やビルド証明の前提を満たさないことがある。

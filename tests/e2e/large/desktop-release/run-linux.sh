@@ -3,12 +3,12 @@ set -euo pipefail
 
 : "${RUNNER_TEMP:?}" "${TAG:?}" "${ZIP_HASH:?}"
 [[ ${GITHUB_ACTIONS-} == true ]]
-[[ $TAG =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+[[ $TAG =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
 [[ $ZIP_HASH =~ ^[0-9a-f]{64}$ ]]
 assets="$RUNNER_TEMP/assets"
 filename="book-props-$TAG.zip"
 expected="$ZIP_HASH  $filename"
-[[ $(cat "$assets/SHA256SUMS") == "$expected" ]]
+grep -Fqx -- "$expected" "$assets/SHA256SUMS"
 (cd "$assets" && printf '%s\n' "$expected" | sha256sum --check --strict -)
 
 root="$RUNNER_TEMP/book-props-desktop"

@@ -23,6 +23,7 @@ BUNDLES = {
     ),
 }
 NOTICE_NAME = re.compile(r"^(licen[cs]e|notice|copying|copyright)([-_.]|$)", re.IGNORECASE)
+VERSION = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)")
 
 
 def inspect_json(*command):
@@ -154,7 +155,7 @@ def rust_notices():
 
 def bundle_inputs(version):
     files = {"LICENSE": ROOT / "LICENSE"}
-    manifests = [ROOT / "package.json"]
+    manifests = [ROOT / "package.json", ROOT / "manifest.json", ROOT / "runtimes" / "book-extension" / "manifest.json"]
     for name, (runtime, members, generated) in BUNDLES.items():
         source = ROOT / "runtimes" / runtime
         dist = source / "dist"
@@ -169,7 +170,7 @@ def bundle_inputs(version):
                 f"Unexpected contents of {dist.relative_to(ROOT)}:"
                 f" missing {sorted(expected - actual)}, extra {sorted(actual - expected)}"
             )
-        manifests.extend((source / "manifest.json", dist / "manifest.json"))
+        manifests.append(dist / "manifest.json")
         files.update({f"{name}/{member}": dist / member for member in members})
     for path in manifests:
         actual = json.loads(path.read_text())["version"]
@@ -181,41 +182,63 @@ def bundle_inputs(version):
     return files
 
 
-def pack(tag, output):
-    if not re.fullmatch(r"v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", tag):
-        raise SystemExit("Expected a version tag such as v0.1.0")
-    inputs = bundle_inputs(tag[1:])
+def write_zip(path, contents):
+    with ZipFile(path, "x") as archive:
+        for name, data in sorted(contents.items()):
+            entry = ZipInfo(name)
+            entry.create_system = 3
+            entry.external_attr = 0o100644 << 16
+            archive.writestr(entry, data, compress_type=ZIP_DEFLATED, compresslevel=9)
+
+
+def release_assets(version, contents):
+    """The combined ZIP for manual installs, plus the files each store takes from the same bytes."""
+    shared = {name: contents[name] for name in ("LICENSE", "THIRD-PARTY-NOTICES.txt")}
+    chrome = {name.removeprefix("chrome/"): data for name, data in contents.items() if name.startswith("chrome/")}
+    return {
+        f"book-props-{version}.zip": contents,
+        f"book-props-chrome-{version}.zip": chrome | shared,
+        "main.js": contents["obsidian/main.js"],
+        "manifest.json": contents["obsidian/manifest.json"],
+        "THIRD-PARTY-NOTICES.txt": contents["THIRD-PARTY-NOTICES.txt"],
+    }
+
+
+def pack(version, output):
+    if not VERSION.fullmatch(version):
+        raise SystemExit("Expected a version such as 0.5.0")
+    inputs = bundle_inputs(version)
     npm = npm_packages()
     sysroot, sysroot_entries = sysroot_packages()
     rust = wasm_packages() | sysroot
     inputs.update({
-        f"release-metadata/npm/{index}/node_modules/{name}/package.json": npm[(name, version)] / "package.json"
-        for index, (name, version) in enumerate(sorted(npm))
+        f"release-metadata/npm/{index}/node_modules/{name}/package.json": npm[(name, package_version)] / "package.json"
+        for index, (name, package_version) in enumerate(sorted(npm))
     })
     contents = {name: path.read_bytes() for name, path in inputs.items()}
     contents["release-metadata/rust/Cargo.lock"] = cargo_inventory(rust, sysroot_entries).encode()
     contents["THIRD-PARTY-NOTICES.txt"] = (notices(npm, rust) + "\n" + rust_notices()).encode()
     output.mkdir()
     try:
-        path = output / f"book-props-{tag}.zip"
-        with ZipFile(path, "x") as archive:
-            for name, data in sorted(contents.items()):
-                entry = ZipInfo(name)
-                entry.create_system = 3
-                entry.external_attr = 0o100644 << 16
-                archive.writestr(entry, data, compress_type=ZIP_DEFLATED, compresslevel=9)
-        with path.open("rb") as artifact:
-            digest = hashlib.file_digest(artifact, "sha256").hexdigest()
-        (output / "SHA256SUMS").write_text(f"{digest}  {path.name}\n", encoding="ascii")
+        sums = []
+        for name, asset in sorted(release_assets(version, contents).items()):
+            path = output / name
+            if isinstance(asset, dict):
+                write_zip(path, asset)
+            else:
+                path.write_bytes(asset)
+            with path.open("rb") as artifact:
+                sums.append(f"{hashlib.file_digest(artifact, 'sha256').hexdigest()}  {name}\n")
+        (output / "SHA256SUMS").write_text("".join(sums), encoding="ascii")
     except BaseException:
         shutil.rmtree(output)
         raise
-    print(path)
+    print(output)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Package the verified Chrome and Obsidian builds as one release ZIP.")
-    parser.add_argument("tag")
+    parser = argparse.ArgumentParser(description="Package the verified Chrome and Obsidian builds as release assets.")
+    parser.add_argument("version", help="Release version such as 0.5.0, also the tag name")
     parser.add_argument("output", type=Path, help="New output directory")
     arguments = parser.parse_args()
-    pack(arguments.tag, arguments.output.resolve())
+    pack(arguments.version, arguments.output.resolve())

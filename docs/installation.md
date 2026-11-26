@@ -10,7 +10,7 @@ v0.1.0 から切り替える場合は[更新と切り戻し](#更新と切り戻
 
 ## 成果物を用意する
 
-[GitHub Releases](https://github.com/YukiIto1999/book-props/releases/latest) の **Assets** から `book-props-v<版>.zip` をダウンロードする。
+[GitHub Releases](https://github.com/YukiIto1999/book-props/releases/latest) の **Assets** から `book-props-<版>.zip` をダウンロードする（0.4.0 までは `book-props-v<版>.zip`）。
 GitHub が自動で添付する `Source code (zip)` は導入用ではない。
 ZIP を展開する。Windows ではエクスプローラーの「すべて展開」を使える。ZIP の取得と展開に GitHub アカウント、GitHub CLI、PowerShell は不要。
 配布物を手元で検証したい場合は、展開前に[任意の検証手順](#任意配布物の検証)を使う。
@@ -60,10 +60,10 @@ ZIP の SHA-256 を確認する場合は、同じ Release から `SHA256SUMS` �
 ハッシュが一致しなければ、その ZIP は展開しない。
 
 ```powershell
-$zip = 'book-props-v0.4.0.zip'
+$zip = 'book-props-0.5.0.zip'
 $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip -ErrorAction Stop).Hash.ToLowerInvariant()
-$expected = (Get-Content -Raw -LiteralPath '.\SHA256SUMS' -ErrorAction Stop).Trim()
-if ($expected -cne "$hash  $zip") { throw 'ダウンロードした ZIP の SHA-256 が一致しません。' }
+$listed = Get-Content -LiteralPath '.\SHA256SUMS' -ErrorAction Stop
+if ($listed -cnotcontains "$hash  $zip") { throw 'ダウンロードした ZIP の SHA-256 が一致しません。' }
 'SHA-256 が一致しました。'
 ```
 
@@ -73,7 +73,7 @@ if ($expected -cne "$hash  $zip") { throw 'ダウンロードした ZIP の SHA-
 
 ```powershell
 & {
-  $tag = 'v0.4.0'
+  $tag = '0.5.0'
   $zip = "book-props-$tag.zip"
   Get-Command gh -CommandType Application -ErrorAction Stop | Out-Null
   gh release verify-asset $tag $zip --repo YukiIto1999/book-props
@@ -83,4 +83,6 @@ if ($expected -cne "$hash  $zip") { throw 'ダウンロードした ZIP の SHA-
 }
 ```
 
-Linux で SHA-256 だけを確認する場合は、ZIP と `SHA256SUMS` を置いたフォルダで `sha256sum --check SHA256SUMS` を実行する。
+0.4.0 までの Release では、タグとファイル名の版に `v` が付く（例：`v0.4.0`、`book-props-v0.4.0.zip`）。
+
+Linux で SHA-256 だけを確認する場合は、ダウンロードした添付ファイルと `SHA256SUMS` を置いたフォルダで `sha256sum --check --ignore-missing SHA256SUMS` を実行する。

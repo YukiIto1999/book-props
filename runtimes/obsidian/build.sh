@@ -18,7 +18,7 @@ case "$mode" in
     ;;
   plugin)
     esbuild src/main.ts --bundle --format=cjs --platform=node --target=es2022 --external:obsidian --loader:.wasm=binary --minify --outfile="$out/main.js"
-    cp manifest.json "$out/manifest.json"
+    cp ../../manifest.json "$out/manifest.json"
     ;;
   *)
     printf 'Usage: bash build.sh wasm|plugin\n' >&2

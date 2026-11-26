@@ -2,7 +2,7 @@ name: Release
 
 on:
   push:
-    tags: ["v*"]
+    tags: ["[0-9]+.[0-9]+.[0-9]+"]
   workflow_dispatch:
 
 permissions:
@@ -49,23 +49,24 @@ jobs:
       - name: Verify and build both components
         run: devenv shell -- pnpm verify:push
 
-      - name: Package and audit the ZIP
+      - name: Package and audit the release assets
         id: package
         env:
           TAG: ${{ steps.source.outputs.tag }}
         run: |
           devenv --profile release shell -- pnpm package:release "$TAG" "$RUNNER_TEMP/assets"
           devenv --profile release shell -- python3 tools/scripts/audit-release.py "$RUNNER_TEMP/assets/book-props-$TAG.zip"
-          read -r digest _ < "$RUNNER_TEMP/assets/SHA256SUMS"
+          digest=$(awk -v name="book-props-$TAG.zip" '$2 == name { print $1 }' "$RUNNER_TEMP/assets/SHA256SUMS")
           printf 'zip_hash=%s\nbuild_attempt=%s\n' "$digest" "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
           (
             cd "$RUNNER_TEMP/assets"
             printf 'hashes<<ASSET_HASHES\n'
-            sha256sum -- SHA256SUMS "book-props-$TAG.spdx.json" "book-props-$TAG.zip"
+            sha256sum -- SHA256SUMS "book-props-$TAG.spdx.json" "book-props-$TAG.zip" \
+              "book-props-chrome-$TAG.zip" main.js manifest.json THIRD-PARTY-NOTICES.txt
             printf 'ASSET_HASHES\n'
           ) >> "$GITHUB_OUTPUT"
 
-      - name: Upload the audited ZIP and SPDX
+      - name: Upload the audited assets and SPDX
         id: upload
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -96,7 +97,7 @@ jobs:
       - name: Install the locked acceptance tools
         run: corepack pnpm --filter @book-props/desktop-acceptance... install --frozen-lockfile --ignore-scripts
 
-      - name: Download the audited ZIP and SPDX
+      - name: Download the audited assets and SPDX
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           artifact-ids: ${{ needs.package.outputs.artifact }}
@@ -158,7 +159,7 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - name: Download the audited ZIP and SPDX
+      - name: Download the audited assets and SPDX
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           artifact-ids: ${{ needs.package.outputs.artifact }}
@@ -176,13 +177,17 @@ jobs:
           cd "$RUNNER_TEMP/assets"
           printf '%s\n' "$ASSET_HASHES" | sha256sum --check --strict -
 
-      - name: Attest the ZIP and SPDX with GitHub Actions
+      - name: Attest the release assets and SPDX with GitHub Actions
         id: provenance
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: |
             ${{ runner.temp }}/assets/book-props-${{ needs.package.outputs.tag }}.zip
             ${{ runner.temp }}/assets/book-props-${{ needs.package.outputs.tag }}.spdx.json
+            ${{ runner.temp }}/assets/book-props-chrome-${{ needs.package.outputs.tag }}.zip
+            ${{ runner.temp }}/assets/main.js
+            ${{ runner.temp }}/assets/manifest.json
+            ${{ runner.temp }}/assets/THIRD-PARTY-NOTICES.txt
 
       - name: Verify the build attestation before publication
         shell: bash
@@ -193,7 +198,8 @@ jobs:
           COMMIT: ${{ needs.package.outputs.commit }}
         run: |
           cd "$RUNNER_TEMP/assets"
-          for asset in "book-props-$TAG.zip" "book-props-$TAG.spdx.json"; do
+          for asset in "book-props-$TAG.zip" "book-props-$TAG.spdx.json" "book-props-chrome-$TAG.zip" \
+            main.js manifest.json THIRD-PARTY-NOTICES.txt; do
             gh attestation verify "$asset" --bundle "$BUNDLE" --repo "$GITHUB_REPOSITORY" \
               --cert-identity "$GITHUB_SERVER_URL/$GITHUB_WORKFLOW_REF" \
               --source-ref "$GITHUB_REF" --source-digest "$COMMIT" --deny-self-hosted-runners \
@@ -245,8 +251,8 @@ jobs:
           gh api --paginate --slurp "repos/$GH_REPO/releases?per_page=100" |
             jq -e --arg tag "$TAG" 'flatten | all(.tag_name != $tag)' > /dev/null
           releases="repos/$GH_REPO/releases"
-          printf -v install_notes "## Installation\n\nDownload \`book-props-%s.zip\` from **Assets** and follow the [Windows and Linux installation guide (Japanese)](%s/%s/blob/%s/docs/installation.md). No certificate installation or GitHub CLI is required.\n" \
-            "$TAG" "$GITHUB_SERVER_URL" "$GH_REPO" "$COMMIT"
+          printf -v install_notes "## Installation\n\nDownload \`book-props-%s.zip\` from **Assets** and follow the [Windows and Linux installation guide (Japanese)](%s/%s/blob/%s/docs/installation.md). No certificate installation or GitHub CLI is required.\n\n\`main.js\` and \`manifest.json\` are the Obsidian plugin files, and \`book-props-chrome-%s.zip\` is the Chrome extension package for the Chrome Web Store. They hold the same files as the ZIP.\n" \
+            "$TAG" "$GITHUB_SERVER_URL" "$GH_REPO" "$COMMIT" "$TAG"
           draft=$(gh api --method POST "$releases" \
             -f tag_name="$TAG" -f target_commitish="$COMMIT" -f name="$TAG" -f body="$install_notes" \
             -F draft=true -F generate_release_notes=true)
@@ -254,7 +260,8 @@ jobs:
           upload_url=$(jq -er '.upload_url | strings' <<< "$draft")
           test "$upload_url" = "https://uploads.github.com/$releases/$draft_id/assets{?name,label}"
           upload_url=${upload_url%%\{*}
-          assets=(SHA256SUMS "book-props-$TAG.spdx.json" "book-props-$TAG.zip")
+          assets=(SHA256SUMS "book-props-$TAG.spdx.json" "book-props-$TAG.zip" "book-props-chrome-$TAG.zip" \
+            main.js manifest.json THIRD-PARTY-NOTICES.txt)
           for asset in "${assets[@]}"; do
             gh api --method POST "$upload_url?name=$asset" \
               -H 'Content-Type: application/octet-stream' --input "$asset" --silent

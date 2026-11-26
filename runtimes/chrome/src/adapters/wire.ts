@@ -6,8 +6,13 @@ import type { PopupAction } from "../extension/popup.ts";
 // Messages exchanged between the extension's contexts over chrome.runtime and chrome.tabs messaging.
 export type PopupMessage = { kind: "inspect" | PopupAction };
 export type OptionsMessage = { kind: "status" | "disconnect" } | { kind: "pair"; grantId: string };
-export type PageMessage = { kind: "check"; product: Product };
-export type TabMessage = { kind: "product" } | { kind: "show"; url: string; reply: Reply };
+// A content script asks for consent with `consent` before it reads its page.
+export type PageMessage = { kind: "check"; product: Product } | { kind: "consent" };
+// `consent` only says that consent changed; the page asks again rather than trusting an order of notices.
+export type TabMessage =
+  | { kind: "product" }
+  | { kind: "show"; url: string; reply: Reply }
+  | { kind: "consent" };
 
 // Reads one field of a runtime message or stored record without trusting its shape.
 export function messageField(message: unknown, key: string): unknown {
@@ -16,7 +21,13 @@ export function messageField(message: unknown, key: string): unknown {
 
 export function decodeResponse(value: unknown, fallback: Response): Reply {
   const kind = messageField(value, "kind");
-  if (kind === "forgotten" || kind === "scopeMismatch" || kind === "manualCheck") return { kind };
+  if (
+    kind === "forgotten" ||
+    kind === "scopeMismatch" ||
+    kind === "manualCheck" ||
+    kind === "consentRequired"
+  )
+    return { kind };
   const parsed = response.safeParse(value);
   return parsed.success ? parsed.data : fallback;
 }
@@ -36,8 +47,14 @@ export function decodeConnectionStatus(value: unknown): ConnectionStatus {
   const state = messageField(value, "state");
   return {
     configured: typeof configured === "string" ? configured : undefined,
-    state: state === "paired" || state === "unpaired" ? state : "unknown",
+    state:
+      state === "paired" || state === "unpaired" || state === "consentRequired" ? state : "unknown",
   };
+}
+
+/** The worker's answer to whether the user consented; anything else counts as no consent. */
+export function decodeConsent(answer: unknown): boolean {
+  return messageField(answer, "given") === true;
 }
 
 export function decodePageAnswer(answer: unknown): PageAnswer {

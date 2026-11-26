@@ -9,6 +9,7 @@ import { installChrome, reloadExtension, waitForInstalledChrome } from "./instal
 import { pairLegacy } from "./legacy-pairing.mjs";
 import { ObsidianFixture, selectFolder } from "./obsidian.mjs";
 import {
+  agreeOnOpenedOptions,
   applyConnection,
   configureLegacy,
   legacyConnection,
@@ -61,10 +62,13 @@ async function startChrome() {
       "--force-renderer-accessibility",
     ],
   });
+  const installing = !extensionId;
   if (extensionId) await waitForInstalledChrome(chrome, extensionId);
-  else extensionId = await installChrome(chrome, extensionDirectory);
+  else extensionId = await installChrome(chrome, extensionDirectory, !migration);
   prefix = `chrome-extension://${extensionId}/`;
-  await openOptions();
+  // The v0.1.0 release installed for the migration has no disclosure; the update below shows it.
+  if (installing && !migration) options = await agreeOnOpenedOptions(chrome, prefix, evidence);
+  else await openOptions();
   process.stdout.write(`${await chrome.version()}\n`);
 }
 
@@ -226,7 +230,7 @@ try {
     await obsidian.start();
     const { version } = JSON.parse(await readFile(join(bundle, "chrome", "manifest.json"), "utf8"));
     await reloadExtension(chrome, extensionId, version);
-    await openOptions();
+    options = await agreeOnOpenedOptions(chrome, prefix, evidence);
     const updated = await obsidian.settings();
     await updated.locator("button::-p-text(接続を始める)").setTimeout(timeout).wait();
     await selectFolder(updated, "Other Books");

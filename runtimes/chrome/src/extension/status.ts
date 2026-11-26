@@ -15,6 +15,11 @@ export function statusLabel(reply: Reply, manual: boolean): string {
     return manual
       ? "読めない書籍記録があります。「Obsidianで記録を確認」から開いて修正してください。"
       : "読めない書籍記録があります。拡張からObsidianで確認してください。";
+  // Without consent the page was never read, so there is nothing to tell on the page itself.
+  if (reply.kind === "consentRequired")
+    return manual
+      ? "使い始めるには、データの扱いへの同意が必要です。「接続設定・対応サイト」を開き、説明を読んで同意してください。"
+      : "";
   if (!manual) return "確認できません";
   switch (reply.kind) {
     case "saved":

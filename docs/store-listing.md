@@ -56,7 +56,12 @@ Obsidian で管理している蔵書と照らして、書店の商品ページ�
 
 使うには、同じパソコンのデスクトップ版 Obsidian に Book Props プラグインを入れ、プラグインの設定で「接続を始める」を押してから、この拡張の接続設定で Obsidian が作った接続用フォルダを選びます。
 
-本の情報は、同じパソコンの Obsidian にだけ送ります。開発者や第三者には送りません。利用状況の送信や広告はありません。
+【データの扱い】
+・読み取るページ：上の四つのサイトの商品ページだけです。ほかのページ、閲覧履歴、フォームの入力、サイトのアカウント情報は読み取りません。
+・読み取る内容：ページのアドレスと、本の書名、著者、ISBN、版の表記、出版社、発行日、表紙画像のアドレスです。ページのアドレスは、対応する商品ページかを見分けるために拡張の中だけで使います。
+・送り先：書誌は、同じパソコンで動く Obsidian の Book Props プラグインにだけ、パソコンの中で完結する接続で送ります。開発者や第三者には送りません。利用状況の送信や広告はありません。
+・使い道：その本を持っているか、欲しい本に登録してあるかを表示するためと、ポップアップで選んだときに購入や購入希望を Vault に記録するためです。
+・同意：拡張を入れると設定画面が開き、この内容を示します。「同意して使い始める」を押すまで、拡張は商品ページを読み取らず、Obsidian にも接続しません。同意は設定画面の「同意を取り消す」でいつでも取り消せます。
 ```
 
 ### 画像
@@ -74,11 +79,11 @@ Obsidian で管理している蔵書と照らして、書店の商品ページ�
 | 項目 | 入力 |
 | --- | --- |
 | 単一用途の説明 | 対応する書店の商品ページで、利用者の Obsidian Vault にある蔵書の記録と照らして、その本の所持と購入希望を表示し、利用者が選んだときに記録する。 |
-| `storage` の理由 | 結果をまだ確認できていない購入の記録、Obsidian との期限付きセッション、この拡張の識別子を、拡張専用の保存領域に置くため。 |
+| `storage` の理由 | データの扱いへの利用者の同意の記録（同意した説明の版と日時）、結果をまだ確認できていない購入の記録、Obsidian との期限付きセッション、この拡張の識別子を、拡張専用の保存領域に置くため。 |
 | `contextMenus` の理由 | 商品ページの右クリックメニューから、所持と購入希望を確かめ直すため。 |
-| ホストへのアクセスの理由 | 対応する四つの書店の商品ページから、書名、著者、ISBN などの書誌を読み取るため。ほかのサイトでは動かない。 |
+| ホストへのアクセスの理由 | 利用者が拡張の設定画面で同意した後に、対応する四つの書店の商品ページから、ページのアドレスと、書名、著者、ISBN などの書誌を読み取るため。ほかのサイトでは動かない。 |
 | リモートコード | 使用していない。WebAssembly はパッケージに同梱している。 |
-| 収集するデータ | 「ウェブサイトのコンテンツ」（商品ページの書誌）。同じパソコンの Obsidian にだけ送り、開発者には送らない。 |
+| 収集するデータ | 「ウェブサイトのコンテンツ」（商品ページの書誌）と「ウェブ履歴」（ページのアドレス）。書誌は同じパソコンの Obsidian にだけ送り、開発者には送らない。ページのアドレスは対応ページかの判定に拡張の中で使うだけで、拡張の外へは送らない。端末の中だけで扱うデータも開示の対象になり、URL も利用者データに含まれるため（User Data FAQ の 3 と 4）、両方を申告する。 |
 | 開示への同意 | 第三者への販売、目的外の利用、信用評価への利用をしないことに同意する。 |
 | プライバシーポリシー | `https://github.com/YukiIto1999/book-props/blob/main/PRIVACY.md` |
 
@@ -90,8 +95,9 @@ Obsidian で管理している蔵書と照らして、書店の商品ページ�
 This extension works with the Book Props plugin for desktop Obsidian on the same computer.
 1. Install Obsidian 1.13 or later. Download book-props-<version>.zip from https://github.com/YukiIto1999/book-props/releases/latest and put obsidian/main.js and obsidian/manifest.json into <vault>/.obsidian/plugins/book-props/. Enable the plugin under Settings > Community plugins.
 2. Create a folder such as "Books" in the vault. In Settings > Book Props, enter "Books" in 書籍フォルダ and press 適用, then press 接続を始める.
-3. In this extension, open 接続設定・対応サイト from the popup, press 接続用フォルダを選ぶ, choose the folder shown in Obsidian (<home>/Book Props/<vault name>), and allow editing.
-4. Open https://books.rakuten.co.jp/rb/11753651/. The popup shows 未所有. Press 欲しい本に追加; after reloading, the page shows 欲しいに登録済み.
+3. When the extension is installed, its settings page (接続設定) opens with a disclosure of the data it reads, where it sends it, and why. Press 同意して使い始める. Until then the extension reads no pages, does not connect to Obsidian, and its popup only points to this disclosure. The same page offers 同意を取り消す to withdraw consent.
+4. On the same settings page (also reachable from 接続設定・対応サイト in the popup), press 接続用フォルダを選ぶ, choose the folder shown in Obsidian (<home>/Book Props/<vault name>), and allow editing.
+5. Open https://books.rakuten.co.jp/rb/11753651/. The popup shows 未所有. Press 欲しい本に追加; after reloading, the page shows 欲しいに登録済み.
 If the extension later says that the folder permission has expired (接続用フォルダの許可が切れています), press 今後も自動で接続する in its settings and allow access.
 The interface is in Japanese.
 ```

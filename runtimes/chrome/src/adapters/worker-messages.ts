@@ -51,6 +51,9 @@ async function receive(
 ): Promise<unknown> {
   const kind = messageField(message, "kind");
   if (sender.id !== chrome.runtime.id || typeof kind !== "string") return unavailable;
+  // A content script asks before it reads anything, even on a page that may navigate within itself to a product.
+  if (kind === "consent" && sender.tab && sender.frameId === 0)
+    return { given: await operations.consented() };
   if (isProductPage(sender)) return productPageRequest(operations, kind, message);
   if (sender.url === chrome.runtime.getURL("options.html"))
     return optionsRequest(operations, kind, message);

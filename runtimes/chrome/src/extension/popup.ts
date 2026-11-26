@@ -14,6 +14,7 @@ export type PopupRequests = {
 type PopupControls = {
   canPurchase: boolean;
   canWish: boolean;
+  canOpen: boolean;
   wishLabel: string;
   openLabel: string;
   pending: boolean;
@@ -50,16 +51,19 @@ export class Popup {
       return;
     }
     const { reply } = state;
+    // Before consent the worker read nothing, so no action is offered and the popup only points to the disclosure.
+    const agreed = reply.kind !== "consentRequired";
     this.wanted = reply.kind === "observed" && reply.wanted;
     const canSend = state.hasBook && reply.kind === "observed";
     this.view.render({
       canPurchase: canSend && !state.pending,
       canWish: canSend,
+      canOpen: agreed,
       wishLabel: this.wanted ? "購入希望を解除" : "欲しい本に追加",
       openLabel: reply.kind === "unreadable" ? "Obsidianで記録を確認" : "Obsidianで開く",
-      pending: state.pending,
+      pending: agreed && state.pending,
     });
-    this.view.say(message ?? (await this.stateText(state)));
+    this.view.say(agreed ? (message ?? (await this.stateText(state))) : statusLabel(reply, true));
   };
 
   act = async (action: PopupAction): Promise<void> => {

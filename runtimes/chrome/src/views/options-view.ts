@@ -1,20 +1,31 @@
 import type { OptionsView } from "../extension/options.ts";
 import { required } from "./elements.ts";
 
-type OptionsHandlers = Record<"pair" | "allow" | "disconnect", () => void>;
+type OptionsHandlers = Record<"agree" | "withdraw" | "pair" | "allow" | "disconnect", () => void>;
 type Site = { name: string; url: string };
 
-/** The settings page's pairing controls, status line, and list of supported sites. */
+/** The settings page's disclosure, pairing controls, status line, and list of supported sites. */
 export function optionsView(): OptionsView & {
   bind(handlers: OptionsHandlers): void;
   listSites(sites: readonly Site[]): void;
 } {
+  const consent = required("#consent", HTMLElement);
+  const agree = required("#agree", HTMLButtonElement);
+  const setup = required("#setup", HTMLElement);
+  const withdraw = required("#withdraw", HTMLButtonElement);
   const pair = required("#pair", HTMLButtonElement);
   const allow = required("#allow", HTMLButtonElement);
   const disconnect = required("#disconnect", HTMLButtonElement);
   const status = required("#status", HTMLElement);
   const list = required("#sites", HTMLUListElement);
   return {
+    disclose(shown) {
+      consent.hidden = !shown;
+      setup.hidden = shown;
+    },
+    agreeing(busy) {
+      agree.disabled = busy;
+    },
     say(text) {
       status.textContent = text;
     },
@@ -28,6 +39,8 @@ export function optionsView(): OptionsView & {
       allow.disabled = busy;
     },
     bind(handlers) {
+      agree.addEventListener("click", handlers.agree);
+      withdraw.addEventListener("click", handlers.withdraw);
       pair.addEventListener("click", handlers.pair);
       allow.addEventListener("click", handlers.allow);
       disconnect.addEventListener("click", handlers.disconnect);

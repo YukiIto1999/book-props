@@ -1,6 +1,6 @@
 import { extractProduct } from "@book-props/book-products";
 import { product } from "@book-props/vault-contract";
-import type { ProductPage } from "../extension/page-watch.ts";
+import type { PageChanges, ProductPage } from "../extension/page-watch.ts";
 
 // Parts of supported product pages that are redrawn when the shown book changes.
 const productParts =
@@ -16,8 +16,8 @@ export const productPage: ProductPage = {
   },
 };
 
-/** Calls `changed` when the page navigates within itself or redraws its product details. */
-export function watchProductPage(changed: () => void): void {
+/** Calls `changed` when the page navigates within itself or redraws its product details, until stopped. */
+export const watchProductPage: PageChanges = (changed) => {
   let lastUrl = "";
   const watch = new MutationObserver((events) => {
     const changedProduct = events.some(
@@ -31,4 +31,9 @@ export function watchProductPage(changed: () => void): void {
   watch.observe(document.body, { childList: true, characterData: true, subtree: true });
   window.addEventListener("popstate", changed);
   window.addEventListener("pageshow", changed);
-}
+  return () => {
+    watch.disconnect();
+    window.removeEventListener("popstate", changed);
+    window.removeEventListener("pageshow", changed);
+  };
+};

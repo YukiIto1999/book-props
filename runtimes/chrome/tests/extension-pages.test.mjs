@@ -4,6 +4,7 @@ import { Options } from "../src/extension/options.ts";
 import { PageWatch } from "../src/extension/page-watch.ts";
 import { Popup } from "../src/extension/popup.ts";
 import { statusLabel } from "../src/extension/status.ts";
+import { agreed, optionsView } from "./page-stubs.mjs";
 
 const observed = { kind: "observed", ownership: "sameEdition", wanted: false };
 
@@ -35,11 +36,14 @@ void test("a product page shows an answer only while it still shows the page tha
   const page = { href: first, url: () => page.href, product: () => ({ title: "本" }) };
   const answer = Promise.withResolvers();
   const shown = [];
-  const watch = new PageWatch(page, () => answer.promise, {
-    show: (text) => shown.push(text),
-    clear: () => {},
-  });
-  watch.schedule();
+  const watch = new PageWatch(
+    page,
+    () => answer.promise,
+    { show: (text) => shown.push(text), clear: () => {} },
+    () => () => {},
+    async () => true,
+  );
+  await watch.refresh();
   t.mock.timers.tick(375);
   page.href = "https://www.amazon.co.jp/dp/4000000001";
   answer.resolve(observed);
@@ -65,9 +69,12 @@ void test("the opening status check does not overwrite a pairing the user starte
       select: async () => ({ kind: "selected", grantId: "id" }),
       restore: async () => "granted",
     },
-    { say: (text) => said.push(text), offerAllow: () => {}, pairing: () => {}, allowing: () => {} },
+    agreed(),
+    optionsView(said),
   );
   const opening = options.open();
+  // Let the opening check reach the worker before the user starts pairing.
+  await new Promise((resolve) => setImmediate(resolve));
   await options.pair();
   const paired = said.at(-1);
   status.resolve({ configured: undefined, state: "unknown" });

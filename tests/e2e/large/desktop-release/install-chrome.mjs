@@ -11,6 +11,7 @@ const detail = `${manager} >>> extensions-detail-view`;
 const checking = "接続を確認しています…";
 const script = (id) => `chrome-extension://${id}/worker.js`;
 const card = (id) => `${manager} >>> extensions-item#${id}`;
+const optionsPage = (id) => `chrome-extension://${id}/options.html`;
 
 function text(page, selector, expected) {
   return page
@@ -74,8 +75,11 @@ async function runningWorker(chrome, page, id) {
   return { cdp, versionId, target };
 }
 
-/** Installs the unpacked folder through Chrome's UI and verifies its persisted installation. */
-export async function installChrome(chrome, extensionDirectory) {
+/**
+ * Installs the unpacked folder through Chrome's UI and verifies its persisted installation.
+ * `disclosure` waits for the settings page the extension opens by itself on install.
+ */
+export async function installChrome(chrome, extensionDirectory, disclosure = false) {
   const page = await extensionsPage(chrome);
   await page
     .locator(`${manager} >>> extensions-toolbar >>> #loadUnpacked`)
@@ -91,6 +95,11 @@ export async function installChrome(chrome, extensionDirectory) {
     .map((item) => item.id)
     .wait();
   assert.match(id, /^[a-p]{32}$/);
+  // A fresh install opens the extension's disclosure in a new tab, which takes the focus.
+  if (disclosure) {
+    await chrome.waitForTarget((item) => item.url() === optionsPage(id), { timeout });
+    await page.bringToFront();
+  }
   await text(page, `${card(id)} >>> #name`, "Book Props");
   await text(page, `${card(id)} >>> #extension-id`, `ID: ${id}`);
   await page

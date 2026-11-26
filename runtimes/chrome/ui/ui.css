@@ -50,6 +50,19 @@ form {
 #status {
   margin-block: 8px;
 }
+.disclosure {
+  border: 2px solid currentColor;
+  border-radius: 8px;
+  padding: 4px 16px 12px;
+  margin-block: 12px 20px;
+}
+.disclosure dt {
+  font-weight: 700;
+  margin-top: 8px;
+}
+.disclosure dd {
+  margin-inline-start: 0;
+}
 [hidden] {
   display: none;
 }

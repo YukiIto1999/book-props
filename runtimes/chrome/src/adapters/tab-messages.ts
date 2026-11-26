@@ -34,4 +34,13 @@ export const pageTabs: PageTabs = {
       topFrame,
     );
   },
+  // Tabs without a content script reject the message, which only means there is nobody to tell.
+  async consentChanged() {
+    const tabs = await chrome.tabs.query({});
+    await Promise.allSettled(
+      tabs.flatMap(({ id }) =>
+        id ? [chrome.tabs.sendMessage(id, { kind: "consent" } satisfies TabMessage, topFrame)] : [],
+      ),
+    );
+  },
 };

@@ -29,9 +29,10 @@ Each release also attaches `main.js` and `manifest.json` for Obsidian, and `book
 
 1. In Obsidian, open **Settings → Book Props** and set the books folder of your vault.
 2. Under **Chromeとの接続**, select **接続を始める**. The plugin creates a connection folder named after your vault under `Book Props` in your home folder.
-3. In the extension's connection settings, select **接続用フォルダを選ぶ**, choose that folder, and allow the browser to edit it.
-4. Open a book on a supported store. The extension shows your ownership status, and its popup records purchases and wishes in your vault.
-5. If the extension says that the folder permission has expired, which can happen after you close its settings or restart the browser, select **今後も自動で接続する** in its settings and allow access again. Choosing the option to allow on every visit keeps it connected from then on.
+3. When you install the extension, it opens its connection settings with a notice of the data it reads and where it sends it. Read it and select **同意して使い始める**. Until you agree, the extension reads no pages and does not connect to Obsidian. You can withdraw with **同意を取り消す** on the same page.
+4. In the extension's connection settings, select **接続用フォルダを選ぶ**, choose that folder, and allow the browser to edit it.
+5. Open a book on a supported store. The extension shows your ownership status, and its popup records purchases and wishes in your vault.
+6. If the extension says that the folder permission has expired, which can happen after you close its settings or restart the browser, select **今後も自動で接続する** in its settings and allow access again. Choosing the option to allow on every visit keeps it connected from then on.
 
 Use the commands **書籍を登録・編集**, **本棚を開く**, and **本・版を管理** to work with your books in Obsidian.
 
@@ -42,7 +43,7 @@ Use the commands **書籍を登録・編集**, **本棚を開く**, and **本・
 - **Connection to the browser extension.** The plugin listens only on `127.0.0.1` and accepts the extension on the same computer. Book data travels inside TLS 1.3. Book Props has no server of its own.
 - **Files outside the vault.** The connection folder `~/Book Props/<vault name>/` holds the local address, an opaque identifier of the books folder, the current TLS trust anchor, and one-time pairing proofs. It holds no books, keys, or session tokens, and is deleted when you unpair or change the books folder. Moving an edition between books keeps a recovery copy of the moved edition in `%LOCALAPPDATA%\BookProps\edition-moves\` on Windows or `$XDG_DATA_HOME/BookProps/edition-moves/` on Linux (`~/.local/share` when unset).
 - **External program.** On Windows, the plugin runs the built-in Windows PowerShell to check that only your account can write to the connection folder.
-- **Browser extension.** On supported product pages, the extension reads the title, authors, ISBN, edition label, publisher, publication date, and cover image address, and sends them only to Obsidian on the same computer. See the [privacy policy](PRIVACY.md).
+- **Browser extension.** After you agree in its settings, the extension reads the page address and the book's title, authors, ISBN, edition label, publisher, publication date, and cover image address on supported product pages. The page address stays inside the extension; the book details go only to Obsidian on the same computer. See the [privacy policy](PRIVACY.md).
 
 Book Props has no telemetry, ads, accounts, or payments.
 

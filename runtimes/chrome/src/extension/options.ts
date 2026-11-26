@@ -1,3 +1,4 @@
+import type { Consent } from "./consent.ts";
 import type { ConnectionStatus, Reply } from "./outcomes.ts";
 import { statusLabel } from "./status.ts";
 
@@ -19,7 +20,12 @@ export type OptionsRequests = {
   pair(grantId: string): Promise<Reply>;
   disconnect(): Promise<Reply>;
 };
+/** The user's agreement to the disclosure, which the settings page shows and records. */
+export type ConsentChoice = Pick<Consent, "given" | "agree" | "withdraw">;
 export type OptionsView = {
+  /** Shows the disclosure in place of the pairing controls, or the pairing controls once the user agreed. */
+  disclose(shown: boolean): void;
+  agreeing(busy: boolean): void;
   say(text: string): void;
   offerAllow(shown: boolean): void;
   pairing(busy: boolean): void;
@@ -30,6 +36,7 @@ const pairingLabel = {
   paired: "ペアリング済みです。",
   unpaired: "ペアリングされていません。",
   unknown: "接続を確認できません。Obsidian を開いてください。",
+  consentRequired: "データの扱いへの同意が取り消されています。",
   dormant:
     "接続用フォルダの許可が切れています。「今後も自動で接続する」を押して許可してください。毎回許可する選択肢が出たらそれを選ぶと、以後は自動で接続します。",
 } as const;
@@ -40,21 +47,57 @@ const folderProblem = {
   failed: "接続用フォルダの読み込みに失敗しました。",
 } as const;
 
-/** Decides what the settings page says about the pairing, and runs pairing, re-allowing and disconnecting. */
+/** Shows the disclosure until the user agrees, then decides what the settings page says about the pairing, and runs pairing, re-allowing and disconnecting. */
 export class Options {
   private readonly requests: OptionsRequests;
   private readonly folder: ConnectionFolder;
+  private readonly consent: ConsentChoice;
   private readonly view: OptionsView;
   // Pairing or disconnecting replaces the opening status check, whose answer would then be stale.
   private changed = false;
+  // What the page shows: undefined before the first answer, then whether the user agreed.
+  private agreed: boolean | undefined;
 
-  constructor(requests: OptionsRequests, folder: ConnectionFolder, view: OptionsView) {
+  constructor(
+    requests: OptionsRequests,
+    folder: ConnectionFolder,
+    consent: ConsentChoice,
+    view: OptionsView,
+  ) {
     this.requests = requests;
     this.folder = folder;
+    this.consent = consent;
     this.view = view;
   }
 
+  /** Shows the disclosure or the pairing; runs again whenever consent may have changed, here or in another page. */
   open = async (): Promise<void> => {
+    const given = await this.consent.given().catch(() => false);
+    if (given === this.agreed) return;
+    this.agreed = given;
+    this.view.disclose(!given);
+    if (given) await this.check();
+    else this.changed = false;
+  };
+
+  agree = async (): Promise<void> => {
+    this.view.agreeing(true);
+    try {
+      await this.consent.agree().catch(() => undefined);
+      await this.open();
+    } finally {
+      this.view.agreeing(false);
+    }
+  };
+
+  /** Removes the agreement; pages stop reading, and the pairing stays for when the user agrees again. */
+  withdraw = async (): Promise<void> => {
+    await this.consent.withdraw().catch(() => undefined);
+    await this.open();
+  };
+
+  private async check(): Promise<void> {
+    if (this.changed) return;
     this.view.say("接続を確認しています…");
     let current: ConnectionStatus;
     try {
@@ -64,7 +107,7 @@ export class Options {
       return;
     }
     await this.describe(current);
-  };
+  }
 
   /** The browser keeps the folder handle, but a one-time grant ends when the browser restarts, the extension reloads, or its last page closes. */
   private async describe(current: ConnectionStatus): Promise<void> {

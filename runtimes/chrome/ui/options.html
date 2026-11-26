@@ -7,16 +7,66 @@
   <body class="options">
     <main>
       <h1>Book Props – 接続設定</h1>
-      <p>
-        Obsidian の Book Props 設定で書籍フォルダを指定し、「接続を始める」を押します。
-        続けて、Obsidian が表示する接続用フォルダをここで選んでください。
-      </p>
-      <div class="controls">
-        <button id="pair" type="button">接続用フォルダを選ぶ</button>
-        <button id="allow" type="button" hidden>今後も自動で接続する</button>
-        <button id="disconnect" type="button">このブラウザの接続を解除</button>
-      </div>
-      <p id="status" role="status"></p>
+      <section id="consent" class="disclosure" aria-labelledby="consent-title" hidden>
+        <h2 id="consent-title">使い始める前に：Book Props が扱うデータ</h2>
+        <p>
+          同意するまで、拡張は商品ページを読み取らず、Obsidian
+          にも接続しません。内容を確認してから同意してください。
+        </p>
+        <dl>
+          <dt>読み取るページ</dt>
+          <dd>
+            Amazon.co.jp、楽天ブックス、バリューブックス、BOOKOFF
+            オンラインの商品ページだけです。ほかのページ、閲覧履歴、フォームの入力、これらのサイトのアカウント情報は読み取りません。
+          </dd>
+          <dt>読み取る内容</dt>
+          <dd>
+            ページのアドレスと、その本の書名、著者、ISBN、版の表記、出版社、発行日、表紙画像のアドレスです。ページのアドレスは、対応する商品ページかを見分けるために拡張の中で使い、外へは送りません。
+          </dd>
+          <dt>送り先</dt>
+          <dd>
+            同じパソコンで動く Obsidian の Book Props
+            プラグインだけに、パソコンの中で完結する接続で送ります。開発者にも第三者にも送りません。
+          </dd>
+          <dt>使い道</dt>
+          <dd>
+            その本を持っているか、欲しい本に登録してあるかを Vault
+            の記録と照らして表示するためと、ポップアップで選んだときに購入や購入希望を Vault
+            に記録するためです。
+          </dd>
+          <dt>同意の取り消し</dt>
+          <dd>
+            この画面の「同意を取り消す」でいつでも取り消せます。取り消すと、開いているページでもすぐに読み取りをやめます。
+          </dd>
+        </dl>
+        <button id="agree" type="button">同意して使い始める</button>
+        <p>
+          詳しくは<a
+            href="https://github.com/YukiIto1999/book-props/blob/main/PRIVACY.md"
+            target="_blank"
+            rel="noopener noreferrer"
+            >プライバシーポリシー</a
+          >をご覧ください。
+        </p>
+      </section>
+      <section id="setup" hidden>
+        <p>
+          Obsidian の Book Props 設定で書籍フォルダを指定し、「接続を始める」を押します。
+          続けて、Obsidian が表示する接続用フォルダをここで選んでください。
+        </p>
+        <div class="controls">
+          <button id="pair" type="button">接続用フォルダを選ぶ</button>
+          <button id="allow" type="button" hidden>今後も自動で接続する</button>
+          <button id="disconnect" type="button">このブラウザの接続を解除</button>
+        </div>
+        <p id="status" role="status"></p>
+        <h2>データの扱い</h2>
+        <p>
+          商品ページの読み取りに同意しています。取り消すと、拡張は商品ページの読み取りと Obsidian
+          への接続をやめます。ペアリングは残るため、もう一度同意すればそのまま使えます。
+        </p>
+        <button id="withdraw" type="button">同意を取り消す</button>
+      </section>
       <h2>対応サイト</h2>
       <ul id="sites"></ul>
     </main>

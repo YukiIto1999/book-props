@@ -24,6 +24,26 @@ export async function text(page, selector, expected) {
   }
 }
 
+/**
+ * Takes the settings page the extension opened by itself, checks that it shows only the data
+ * disclosure, agrees, and returns the page once the pairing controls appear.
+ */
+export async function agreeOnOpenedOptions(chrome, prefix, evidence) {
+  const opened = await chrome.waitForTarget((item) => item.url() === `${prefix}options.html`, {
+    timeout,
+  });
+  const options = await opened.asPage();
+  await options.bringToFront();
+  await options.waitForSelector("#consent", { visible: true, timeout });
+  await text(options, "#consent-title", "使い始める前に：Book Props が扱うデータ");
+  assert.equal(await options.$eval("#setup", (section) => section.hidden), true);
+  await options.screenshot({ path: join(evidence, "00-disclosure.png") });
+  await options.locator("#agree").click();
+  await options.waitForSelector("#pair", { visible: true, timeout });
+  assert.equal(await options.$eval("#consent", (section) => section.hidden), true);
+  return options;
+}
+
 /** v0.4.0 までの設定画面での接続設定 */
 export const legacyConnection = {
   button: "接続設定を適用",

@@ -16,7 +16,7 @@ export function popupView(): PopupView & { bind(handlers: PopupHandlers): void }
       purchase.disabled = !controls.canPurchase;
       wish.disabled = !controls.canWish;
       wish.textContent = controls.wishLabel;
-      open.disabled = false;
+      open.disabled = !controls.canOpen;
       open.textContent = controls.openLabel;
       reconcile.hidden = forget.hidden = !controls.pending;
       reconcile.disabled = forget.disabled = !controls.pending;

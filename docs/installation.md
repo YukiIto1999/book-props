@@ -60,7 +60,7 @@ ZIP の SHA-256 を確認する場合は、同じ Release から `SHA256SUMS` �
 ハッシュが一致しなければ、その ZIP は展開しない。
 
 ```powershell
-$zip = 'book-props-v0.3.0.zip'
+$zip = 'book-props-v0.4.0.zip'
 $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip -ErrorAction Stop).Hash.ToLowerInvariant()
 $expected = (Get-Content -Raw -LiteralPath '.\SHA256SUMS' -ErrorAction Stop).Trim()
 if ($expected -cne "$hash  $zip") { throw 'ダウンロードした ZIP の SHA-256 が一致しません。' }
@@ -73,7 +73,7 @@ if ($expected -cne "$hash  $zip") { throw 'ダウンロードした ZIP の SHA-
 
 ```powershell
 & {
-  $tag = 'v0.3.0'
+  $tag = 'v0.4.0'
   $zip = "book-props-$tag.zip"
   Get-Command gh -CommandType Application -ErrorAction Stop | Out-Null
   gh release verify-asset $tag $zip --repo YukiIto1999/book-props

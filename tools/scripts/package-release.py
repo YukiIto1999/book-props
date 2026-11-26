@@ -15,7 +15,10 @@ BUNDLES = {
     "obsidian": ("obsidian", ("main.js", "manifest.json"), "wasm"),
     "chrome": (
         "book-extension",
-        ("content.js", "manifest.json", "options.html", "options.js", "popup.html", "popup.js", "ui.css", "vault_tls_bg.wasm", "worker.js"),
+        (
+            "content.js", "icon-128.png", "icon-16.png", "icon-32.png", "icon-48.png", "manifest.json",
+            "options.html", "options.js", "popup.html", "popup.js", "ui.css", "vault_tls_bg.wasm", "worker.js",
+        ),
         "tls",
     ),
 }

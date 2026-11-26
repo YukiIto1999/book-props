@@ -22,6 +22,7 @@
     pkgs.oxfmt
     pkgs.oxlint
     pkgs.python3
+    pkgs.resvg
     pkgs.wasm-bindgen-cli
   ];
 

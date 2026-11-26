@@ -1,12 +1,32 @@
 import { execFile } from "node:child_process";
 import { randomUUID, timingSafeEqual } from "node:crypto";
-import { lstat, mkdir, open, realpath, rename, rm, rmdir, writeFile } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  open,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  rmdir,
+  writeFile,
+} from "node:fs/promises";
 import { homedir } from "node:os";
-import { isAbsolute, join, relative, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import { promisify } from "node:util";
-import { connectionFile, pairingProofFile, type ConnectionCard } from "@book-props/vault-contract";
+import {
+  connectionFile,
+  decodeConnectionCard,
+  pairingProofFile,
+  type ConnectionCard,
+} from "@book-props/vault-contract";
 
 const grantIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const rootName = "Book Props";
+const fallbackName = "Vault";
+const maxNameLength = 100;
+// Windows で別の階層、代替データストリーム、末尾の切り詰めになる文字の拒否
+const unsafeName = /[\\/:*?"<>|\p{Cc}]|[. ]$/u;
 const run = promisify(execFile);
 const guardWindows = String.raw`
 $ErrorActionPreference = 'Stop'
@@ -15,19 +35,24 @@ $allowed = @($user.Value, 'S-1-5-18', 'S-1-5-32-544')
 function Rights([string]$Names) {
   [int][Security.AccessControl.FileSystemRights]$Names
 }
-$stage = 'parent-read'
-try {
-$parent = [IO.DirectoryInfo]::new($env:BOOK_PROPS_HOME).GetAccessControl()
 $writeDirectory = Rights 'Write, DeleteSubdirectoriesAndFiles, ChangePermissions, TakeOwnership'
-foreach ($ace in $parent.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
-  if ($ace.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly) { continue }
-  if ($ace.AccessControlType -ne 'Allow' -or $ace.IdentityReference.Value -in $allowed) { continue }
-  $blocked = $writeDirectory -band [int]$ace.FileSystemRights
-  if ($blocked) {
-    "parent-writer:$blocked"
-    exit 1
+function Assert-NoOtherWriter([string]$Path, [string]$Label) {
+  $acl = [IO.DirectoryInfo]::new($Path).GetAccessControl()
+  foreach ($ace in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
+    if ($ace.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly) { continue }
+    if ($ace.AccessControlType -ne 'Allow' -or $ace.IdentityReference.Value -in $allowed) { continue }
+    $blocked = $writeDirectory -band [int]$ace.FileSystemRights
+    if ($blocked) {
+      "$Label-writer:$blocked"
+      exit 1
+    }
   }
 }
+$stage = 'parent-read'
+try {
+Assert-NoOtherWriter $env:BOOK_PROPS_HOME 'parent'
+$stage = 'root-read'
+Assert-NoOtherWriter $env:BOOK_PROPS_ROOT 'root'
 'parent-accepted'
 $directory = [IO.DirectoryInfo]::new($env:BOOK_PROPS_GRANT)
 if ($env:BOOK_PROPS_NEW -eq 'yes') {
@@ -51,46 +76,145 @@ foreach ($ace in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityI
 }
 `;
 
-export async function openVaultGrant(vaultPath: string, id?: string): Promise<ConnectionGrant> {
+/** 保存済みの接続の識別子と接続用フォルダ名の組 */
+export type GrantLocation = Readonly<{ id: string; name: string }>;
+
+function folderName(name: string): boolean {
+  return name.length > 0 && name.length <= maxNameLength && !unsafeName.test(name);
+}
+
+async function homeOf(profile: string): Promise<string> {
+  const home = await realpath(profile);
+  if (!isAbsolute(home)) throw new Error("接続フォルダの場所を確定できません。");
+  return home;
+}
+
+/**
+ * Vault の外にある接続用フォルダの取得
+ * @param vaultPath - Vault の絶対パス
+ * @param saved - 再利用する保存済みの接続用フォルダ、新規作成ならなし
+ * @param profile - 接続用フォルダの親の `Book Props` を置くホーム
+ * @returns 保存済みならその接続情報を持つフォルダ、新規作成なら Vault 名のフォルダ
+ * @throws 接続用フォルダが Vault の中にある場合、または {@link ConnectionGrant.open} が拒否した場合
+ */
+export async function vaultGrant(
+  vaultPath: string,
+  saved?: GrantLocation,
+  profile = homedir(),
+): Promise<ConnectionGrant> {
   const vault = await realpath(vaultPath);
-  const grant = await ConnectionGrant.open(id);
+  const grant = saved
+    ? await ConnectionGrant.open(saved.id, saved.name, profile)
+    : await ConnectionGrant.create(basename(vault), profile);
   const path = relative(vault, grant.directory);
   if (path === "" || (!isAbsolute(path) && path !== ".." && !path.startsWith(`..${sep}`))) {
-    if (!id) await grant.clear();
+    if (!saved) await grant.clear();
     throw new Error("接続用フォルダはVaultの外に置く必要があります。");
   }
   return grant;
 }
 
+/**
+ * v0.3.0 までのホーム直下の接続用フォルダの削除
+ * @param id - 旧形式で保存した接続の識別子
+ * @param profile - 旧形式の接続用フォルダがあるホーム
+ */
+export async function removeLegacyGrant(id: string, profile = homedir()): Promise<void> {
+  if (!grantIdPattern.test(id)) return;
+  const directory = join(await homeOf(profile), `${rootName} ${id}`);
+  for (const name of [connectionFile, pairingProofFile])
+    await rm(join(directory, name), { force: true });
+  await rmdir(directory).catch(() => undefined);
+}
+
+/** ホームの `Book Props` の下で一つの Vault の接続を受け付けるフォルダ */
 export class ConnectionGrant {
   private constructor(
     readonly id: string,
+    readonly name: string,
     readonly directory: string,
   ) {}
-  static async open(grantId?: string, profile = homedir()): Promise<ConnectionGrant> {
-    const id = grantId ?? randomUUID();
-    if (!grantIdPattern.test(id)) throw new Error("接続フォルダの識別子が不正です。");
-    const home = await realpath(profile);
-    if (!isAbsolute(home)) throw new Error("接続フォルダの場所を確定できません。");
-    const directory = join(home, `Book Props ${id}`);
-    const existing = grantId !== undefined;
-    if (!existing) await mkdir(directory, { mode: 0o700 });
+
+  /**
+   * Vault 名の接続用フォルダの新規作成
+   * @param label - フォルダ名の元にする Vault 名
+   * @param profile - 接続用フォルダの親の `Book Props` を置くホーム
+   * @returns 新しい識別子を持つ接続情報の未公開のフォルダ
+   * @throws 同じ名前のフォルダが埋まっている場合、またはアクセス権を保護できない場合
+   */
+  static async create(label: string, profile = homedir()): Promise<ConnectionGrant> {
+    const home = await homeOf(profile);
+    const root = join(home, rootName);
+    await mkdir(root, { mode: 0o700 }).catch((error: unknown) => {
+      if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error;
+    });
+    const base = folderName(label) ? label : fallbackName;
+    for (let copy = 1; copy < 100; copy++) {
+      const name = copy === 1 ? base : `${base} (${copy})`;
+      if (!folderName(name)) break;
+      const made = await mkdir(join(root, name), { mode: 0o700 }).then(
+        () => true,
+        (error: unknown) => {
+          if (error instanceof Error && "code" in error && error.code === "EEXIST") return false;
+          throw error;
+        },
+      );
+      if (made) return ConnectionGrant.check(home, randomUUID(), name, true);
+    }
+    throw new Error("接続用フォルダの名前を決められません。");
+  }
+
+  /**
+   * 保存済みの接続用フォルダの再利用
+   * @param id - 保存済みの接続の識別子
+   * @param name - 保存済みの接続用フォルダ名
+   * @param profile - 接続用フォルダの親の `Book Props` を置くホーム
+   * @returns 同じ識別子の接続情報を持つフォルダ
+   * @throws 名前が `Book Props` 直下の一階層でない場合、または接続情報が別の接続のものか読めない場合
+   */
+  static async open(id: string, name: string, profile = homedir()): Promise<ConnectionGrant> {
+    if (!grantIdPattern.test(id) || !folderName(name))
+      throw new Error("接続用フォルダの記録が不正です。");
+    const grant = await ConnectionGrant.check(await homeOf(profile), id, name, false);
+    const card = await readFile(join(grant.directory, connectionFile), "utf8").then(
+      decodeConnectionCard,
+      () => undefined,
+    );
+    if (card?.grantId !== id) throw new Error("接続用フォルダは別の接続に使われています。");
+    return grant;
+  }
+
+  private static async check(
+    home: string,
+    id: string,
+    name: string,
+    created: boolean,
+  ): Promise<ConnectionGrant> {
+    const root = join(home, rootName);
+    const directory = join(root, name);
     try {
-      if (!(await lstat(directory)).isDirectory() || (await realpath(directory)) !== directory)
+      if (
+        dirname(directory) !== root ||
+        !(await lstat(root)).isDirectory() ||
+        (await realpath(root)) !== root ||
+        !(await lstat(directory)).isDirectory() ||
+        (await realpath(directory)) !== directory
+      )
         throw new Error("接続フォルダを確認できません。");
       if (process.platform === "win32") {
-        const root = process.env.SystemRoot;
-        if (!root || !/^[A-Za-z]:\\/.test(home) || !/^[A-Za-z]:\\/.test(root))
+        const system = process.env.SystemRoot;
+        if (!system || !/^[A-Za-z]:\\/.test(home) || !/^[A-Za-z]:\\/.test(system))
           throw new Error("端末内の接続フォルダを確認できません。");
         await run(
-          join(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
+          join(system, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
           ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", guardWindows],
           {
             env: {
               ...process.env,
               BOOK_PROPS_HOME: home,
+              BOOK_PROPS_ROOT: root,
               BOOK_PROPS_GRANT: directory,
-              BOOK_PROPS_NEW: existing ? "no" : "yes",
+              BOOK_PROPS_NEW: created ? "yes" : "no",
             },
             timeout: 5_000,
             windowsHide: true,
@@ -102,7 +226,7 @@ export class ConnectionGrant {
             typeof output === "string" ? output.trim().split(/\r?\n/).pop() : undefined;
           const reason =
             observed &&
-            /^(?:parent-writer:\d+|(?:parent-read|grant-protect|grant-read):[A-Za-z]+Exception|parent-accepted)$/.test(
+            /^(?:(?:parent|root)-writer:\d+|(?:parent-read|root-read|grant-protect|grant-read):[A-Za-z]+Exception|parent-accepted)$/.test(
               observed,
             )
               ? observed
@@ -111,20 +235,31 @@ export class ConnectionGrant {
         });
       } else {
         const parent = await lstat(home);
+        const top = await lstat(root);
         const child = await lstat(directory);
         if (
           parent.uid !== process.getuid?.() ||
           parent.mode & 0o022 ||
-          child.mode & 0o077 ||
-          child.uid !== parent.uid
+          top.uid !== parent.uid ||
+          top.mode & 0o022 ||
+          child.uid !== parent.uid ||
+          child.mode & 0o077
         )
           throw new Error("接続フォルダのアクセス権を確認できません。");
       }
-      return new ConnectionGrant(id, directory);
+      return new ConnectionGrant(id, name, directory);
     } catch (error) {
-      if (!existing) await rmdir(directory).catch(() => undefined);
+      if (created) await rmdir(directory).catch(() => undefined);
       throw error;
     }
+  }
+
+  /**
+   * 同じフォルダで識別子だけを新しくした接続
+   * @returns 旧識別子を照合に使うブラウザが自動では接続しない、接続情報の未公開の接続
+   */
+  renew(): ConnectionGrant {
+    return new ConnectionGrant(randomUUID(), this.name, this.directory);
   }
 
   async publish(card: Omit<ConnectionCard, "version" | "grantId">): Promise<void> {
@@ -156,12 +291,11 @@ export class ConnectionGrant {
     return true;
   }
 
+  /** 接続用フォルダと、空になった `Book Props` の削除 */
   async clear(): Promise<void> {
-    await Promise.all(
-      [connectionFile, pairingProofFile].map((name) =>
-        rm(join(this.directory, name), { force: true }),
-      ),
-    );
+    for (const name of [connectionFile, pairingProofFile])
+      await rm(join(this.directory, name), { force: true });
     await rmdir(this.directory).catch(() => undefined);
+    await rmdir(dirname(this.directory)).catch(() => undefined);
   }
 }

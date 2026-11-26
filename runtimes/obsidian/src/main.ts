@@ -94,7 +94,7 @@ export default class BookProps extends Plugin {
         this.changing = true;
         void this.link.restore().finally(() => {
           this.changing = false;
-          settings.refreshPairing();
+          settings.update();
         });
       }
       void this.catalog?.maintain();

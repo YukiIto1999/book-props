@@ -66,6 +66,35 @@ void test("an answer about consent that a withdrawal overtook does not restart r
   assert.deepEqual(log, []);
 });
 
+void test("a page restored from the back-forward cache asks again before it reads", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let agreed = true;
+  const { log, watch } = recordedPage(async () => agreed);
+  await watch.refresh();
+  t.mock.timers.tick(375);
+  await settle();
+  assert.ok(log.includes("product"));
+
+  // The user leaves, withdraws consent elsewhere, and comes back; the cached page heard nothing meanwhile.
+  log.length = 0;
+  watch.suspend();
+  agreed = false;
+  watch.schedule();
+  await watch.refresh();
+  t.mock.timers.tick(375);
+  await settle();
+  assert.deepEqual(watch.describe(), {});
+  assert.deepEqual(log, ["unwatch", "clear"]);
+
+  // Coming back with consent still given reads the page again.
+  agreed = true;
+  watch.suspend();
+  await watch.refresh();
+  t.mock.timers.tick(375);
+  await settle();
+  assert.ok(log.includes("product"));
+});
+
 void test("the worker refuses every page and Vault operation until consent, then serves them", async () => {
   install({}, {});
   const consent = storedConsent();

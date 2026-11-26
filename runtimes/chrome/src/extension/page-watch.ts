@@ -57,6 +57,12 @@ export class PageWatch {
     if (ticket === this.asked) this.follow(given);
   };
 
+  /** Stops reading while the page is hidden, and drops any answer still on its way, until `refresh` asks again. */
+  suspend = (): void => {
+    this.asked++;
+    this.follow(false);
+  };
+
   private follow(given: boolean): void {
     if (given === this.reading) return;
     this.reading = given;

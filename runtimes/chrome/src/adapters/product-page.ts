@@ -30,10 +30,19 @@ export const watchProductPage: PageChanges = (changed) => {
   });
   watch.observe(document.body, { childList: true, characterData: true, subtree: true });
   window.addEventListener("popstate", changed);
-  window.addEventListener("pageshow", changed);
   return () => {
     watch.disconnect();
     window.removeEventListener("popstate", changed);
-    window.removeEventListener("pageshow", changed);
   };
 };
+
+/**
+ * Calls `hidden` whenever the page is left and `restored` when the back-forward cache brings it back.
+ * A cached page misses the worker's notices, so it must not keep acting on what it knew before.
+ */
+export function followPageLifecycle(hidden: () => void, restored: () => void): void {
+  window.addEventListener("pagehide", hidden);
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted) restored();
+  });
+}

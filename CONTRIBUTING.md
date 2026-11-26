@@ -27,7 +27,7 @@ devenv shell -- pnpm verify
 
 以下は GitHub リポジトリの所有者が初回公開前に行う。
 
-1. **Settings → Rules → Rulesets → New tag ruleset** で、対象 `*.*.*`、状態 **Active** のルールセットを二つ作る。版タグは `0.5.0` のように `v` を付けない。Obsidian は版と同じ名前のタグの Release から `main.js` と `manifest.json` を取得するためである。`v*` を対象にした既存のルールセットは、`*.*.*` が `v0.4.0` までのタグも含むので、新しいルールセットに置き換えてよい。
+1. **Settings → Rules → Rulesets → New tag ruleset** で、対象 `*.*.*`、状態 **Active** のルールセットを二つ作る。Obsidian は版と同じ名前のタグの Release から `main.js` と `manifest.json` を取得するので、版タグには `v` を付けない。`*.*.*` は、0.4.0 までの `v0.4.0` のようなタグも対象に含む。
    一つは **Restrict creations** だけを有効にし、Bypass list はこのリポジトリの管理者だけに絞る。
    もう一つは **Restrict updates** と **Restrict deletions** を有効にし、Bypass list は空にする。
    こうすると公開前でも、作成済みタグの指すコミットを差し替えられない。

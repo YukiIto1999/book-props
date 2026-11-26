@@ -1,4 +1,4 @@
-use book_props_vault::evaluate;
+use book_props_vault::{CatalogRequest, inspect, normalize_isbns};
 use serde_json::{Value, json};
 
 fn catalog() -> Value {
@@ -11,9 +11,27 @@ fn catalog() -> Value {
 }
 
 fn request(action: &str, evidence: Value, books: Value) -> Value {
-    let input = json!({ "action": action, "product": evidence, "books": books });
-    serde_json::from_str(&evaluate(&input.to_string()).expect("evaluate catalog"))
-        .expect("decode result")
+    let input: CatalogRequest =
+        serde_json::from_value(json!({ "action": action, "product": evidence, "books": books }))
+            .expect("decode catalog request");
+    serde_json::to_value(inspect(&input)).expect("encode outcome")
+}
+
+#[test]
+fn isbns_are_canonical_isbn13_without_duplicates_or_name_the_first_invalid_input() {
+    let isbns = |values: &[&str]| {
+        let values: Vec<String> = values.iter().map(|value| (*value).to_owned()).collect();
+        serde_json::to_value(normalize_isbns(&values)).expect("encode isbns")
+    };
+    assert_eq!(
+        isbns(&["0-13-110362-8", "978-0131103627", " 080442957X "]),
+        json!({"kind":"valid", "values":["9780131103627", "9780804429573"]})
+    );
+    assert_eq!(isbns(&[]), json!({"kind":"valid", "values":[]}));
+    assert_eq!(
+        isbns(&["9780306406157", "9780306406158", "x"]),
+        json!({"kind":"invalid", "input":"9780306406158"})
+    );
 }
 
 #[test]

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { initSync, evaluate } from "../dist/wasm/book_props_vault.js";
+import { initSync, inspect, normalizeIsbns } from "../dist/wasm/book_props_vault.js";
 import { Catalog } from "../src/catalog.ts";
 import { createBookNote } from "../src/book-note.ts";
 
@@ -73,7 +73,7 @@ function scope(initial, moveCopies = memoryCopies()) {
     },
     canUpdate: () => true,
   };
-  return { files, notes, catalog: new Catalog(files, evaluate) };
+  return { files, notes, catalog: new Catalog(files, { inspect, normalizeIsbns }) };
 }
 
 export { product, first, key, row, original, scope };

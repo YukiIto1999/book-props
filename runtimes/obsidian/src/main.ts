@@ -12,7 +12,7 @@ import { Settings } from "./settings.ts";
 import { Shelf } from "./shelf.ts";
 import { VaultConnection } from "./vault-connection.ts";
 import { VaultFiles } from "./vault-files.ts";
-import { startCatalogCore } from "./wasm.ts";
+import { startCatalogCore, type CatalogCore } from "./wasm.ts";
 
 type OpenRequest = Extract<Request, { action: "open" }>;
 
@@ -22,7 +22,7 @@ export default class BookProps extends Plugin {
   private readonly clientId = crypto.randomUUID();
   private readonly fileVersions = new WeakMap<TAbstractFile, number>();
   private fileSequence = 0;
-  private evaluate?: (json: string) => string;
+  private core?: CatalogCore;
   private config: Configuration = {};
   private readonly link = new VaultConnection({
     vaultPath: () => this.vaultPath(),
@@ -51,14 +51,14 @@ export default class BookProps extends Plugin {
   };
 
   override async onload(): Promise<void> {
-    this.evaluate = startCatalogCore();
+    this.core = startCatalogCore();
     const saved: unknown = await this.loadData();
     this.config = decodeConfiguration(saved);
     this.registerEvent(this.app.vault.on("modify", (file) => this.fileVersions.delete(file)));
     const { folder } = this.config;
     if (folder && normalizePath(folder) === folder) {
       this.folder = folder;
-      this.catalog = new Catalog(new VaultFiles(this.app, folder, this.fileVersion), this.evaluate);
+      this.catalog = new Catalog(new VaultFiles(this.app, folder, this.fileVersion), this.core);
     }
     const settings = new Settings(this.app, this);
     this.addSettingTab(settings);
@@ -112,7 +112,7 @@ export default class BookProps extends Plugin {
   async selectFolder(proposed: string): Promise<boolean> {
     const folder = proposed.trim();
     if (
-      !this.evaluate ||
+      !this.core ||
       !folder ||
       normalizePath(folder) !== folder ||
       !(this.app.vault.getAbstractFileByPath(folder) instanceof TFolder)
@@ -131,7 +131,7 @@ export default class BookProps extends Plugin {
       if (this.unloaded) return false;
       this.config = next;
       this.folder = folder;
-      this.catalog = new Catalog(new VaultFiles(this.app, folder, this.fileVersion), this.evaluate);
+      this.catalog = new Catalog(new VaultFiles(this.app, folder, this.fileVersion), this.core);
       await this.link.release(grant, saved);
       return true;
     } finally {

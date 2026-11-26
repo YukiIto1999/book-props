@@ -1,7 +1,7 @@
 import type { Product as WireProduct } from "@book-props/vault-contract";
 import { writeBookUpdate, type BookRecord } from "./book-note.ts";
 import { manageBooks, type Management, type ManagementResult } from "./book-management.ts";
-import { catalogInput, decodeOutcome, type Decision, type Ownership } from "./catalog-core.ts";
+import { catalogRequest } from "./catalog-core.ts";
 import { importNotes, pruneReceipts, type ImportResult } from "./catalog-maintenance.ts";
 import {
   assertUnchanged,
@@ -24,6 +24,9 @@ import { readCatalog, readEntries, readEntry, readFailure, readStable } from "./
 import { settledShelf } from "./edition-move.ts";
 import { missingMoveCopies, type MoveCopies } from "./edition-recovery.ts";
 import { decodePortableLibrary, encodePortableLibrary } from "./portable-library.ts";
+import type { Action, CatalogCore, IsbnList, Outcome } from "./wasm.ts";
+
+export type { Action, Outcome } from "./wasm.ts";
 
 /** 拡張から届く書誌と同じ形に、登録画面で扱う購入の記録を加えたもの。 */
 export type Product = Readonly<
@@ -32,21 +35,6 @@ export type Product = Readonly<
     purchasedFrom?: string;
   }
 >;
-export type Action =
-  | "inspect"
-  | "purchase"
-  | "recordOwnership"
-  | "setWish"
-  | "clearWish"
-  | "cancelOwnership";
-export type Outcome = Readonly<{
-  ownership: Ownership;
-  wanted: boolean;
-  bookId: string | null;
-  editionId: string | null;
-  decision: Decision;
-  isbns: string[];
-}>;
 export type PurchaseKey = Readonly<{ clientId: string; requestId: string; issuedAt: number }>;
 export type Selection = Readonly<{ bookId: string; editionId?: string }>;
 export type Operation = Readonly<{
@@ -77,11 +65,11 @@ export class Catalog {
   private accepting = true;
 
   private readonly files: BookFiles;
-  private readonly evaluate: (json: string) => string;
+  private readonly core: CatalogCore;
 
-  constructor(files: BookFiles, evaluate: (json: string) => string) {
+  constructor(files: BookFiles, core: CatalogCore) {
     this.files = files;
-    this.evaluate = evaluate;
+    this.core = core;
   }
 
   async entries(): Promise<StoredBook[]> {
@@ -101,7 +89,8 @@ export class Catalog {
   }
 
   private report(operation: Operation, entries: readonly StoredBook[]): Outcome {
-    return decodeOutcome(this.evaluate(catalogInput(operation, entries)));
+    // 要求はJSONの文字列で渡す。本ごとに項目を変換して境界を越えるより、一度の解析のほうが速い。
+    return this.core.inspect(JSON.stringify(catalogRequest(operation, entries)));
   }
 
   async preview(operation: Operation): Promise<Result> {
@@ -114,11 +103,8 @@ export class Catalog {
     }
   }
 
-  normalizeIsbns(isbns: readonly string[]): { values: string[] } | { invalid: string } {
-    if (!isbns.length) return { values: [] };
-    const product = { isbns: [...isbns] };
-    const { decision, isbns: values } = this.report({ action: "inspect", product }, []);
-    return decision.kind === "invalidIsbn" ? { invalid: decision.input } : { values };
+  normalizeIsbns(isbns: readonly string[]): IsbnList {
+    return this.core.normalizeIsbns([...isbns]);
   }
 
   async reconcile(operation: Operation, signal?: AbortSignal): Promise<Result> {

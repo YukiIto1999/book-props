@@ -1,0 +1,391 @@
+//! Matching a product to a stored book and edition, and deciding the state change.
+
+use crate::identity::{
+    canonical_isbns, distinct_editions, normalized, normalized_title, same_authors, same_label,
+};
+use crate::model::{
+    Action, Book, CatalogRequest, Decision, Edition, EditionPatch, Outcome, Ownership, Product,
+    Selection,
+};
+
+/// Evaluates catalog evidence and decides the state change without performing Vault I/O.
+#[must_use]
+pub fn inspect(request: &CatalogRequest) -> Outcome {
+    let isbns = match canonical_isbns(&request.product.isbns) {
+        Ok(isbns) => isbns,
+        Err(input) => {
+            return Outcome::undetermined(Decision::InvalidIsbn {
+                input: input.to_owned(),
+            });
+        }
+    };
+    let inspect_only = request.action == Action::Inspect;
+    let book = match locate_book(
+        &request.books,
+        &request.product,
+        &isbns,
+        request.selection.as_ref(),
+        inspect_only,
+    ) {
+        Ok(book) => book,
+        Err(reason) => return Outcome::undetermined(reason),
+    };
+    let Some(book) = book else {
+        return unknown_book(request, isbns);
+    };
+    if book.archived_at.is_some() {
+        return Outcome::undetermined(Decision::ConflictingEvidence);
+    }
+    let label = request
+        .product
+        .label
+        .as_deref()
+        .map(normalized)
+        .filter(|value| !value.is_empty());
+    Evidence {
+        request,
+        book,
+        isbns,
+        label,
+        inspect_only,
+    }
+    .outcome()
+}
+
+fn locate_book<'a>(
+    books: &'a [Book],
+    product: &Product,
+    isbns: &[String],
+    selection: Option<&Selection>,
+    inspect_only: bool,
+) -> Result<Option<&'a Book>, Decision> {
+    let title = normalized_title(&product.title);
+    let named = !title.is_empty()
+        && product
+            .authors
+            .iter()
+            .any(|author| !normalized(author).is_empty());
+    if selection.is_none() && !named && isbns.is_empty() {
+        return Err(Decision::InsufficientEvidence);
+    }
+    let visible_books = || {
+        books
+            .iter()
+            .filter(|book| !inspect_only || book.archived_at.is_none())
+    };
+    let mut exact = visible_books().filter(|book| {
+        book.editions
+            .iter()
+            .any(|edition| edition.isbns.iter().any(|isbn| isbns.contains(isbn)))
+    });
+    if let Some(selection) = selection {
+        if exact.any(|book| book.id != selection.book_id) {
+            return Err(Decision::ConflictingEvidence);
+        }
+        if selection.book_id == "new" {
+            return Ok(None);
+        }
+        return visible_books()
+            .find(|book| book.id == selection.book_id)
+            .map(Some)
+            .ok_or(Decision::ConflictingEvidence);
+    }
+    let named_books = || {
+        visible_books().filter(|book| {
+            named
+                && normalized_title(&book.title) == title
+                && same_authors(&book.authors, &product.authors)
+        })
+    };
+    if let Some(book) = exact.next() {
+        let mut names = named_books();
+        let different_book = names
+            .next()
+            .is_some_and(|first| first.id != book.id && !names.any(|other| other.id == book.id));
+        if exact.next().is_some() || different_book {
+            return Err(Decision::ConflictingEvidence);
+        }
+        return Ok(Some(book));
+    }
+    let mut matches = named_books();
+    let first = matches.next();
+    if let Some(first) = first
+        && let Some(second) = matches.next()
+    {
+        let book_ids = [first, second]
+            .into_iter()
+            .chain(matches)
+            .map(|book| book.id.clone())
+            .collect();
+        return Err(Decision::ChooseBook { book_ids });
+    }
+    Ok(first)
+}
+
+/// The outcome when no stored book is the product.
+fn unknown_book(request: &CatalogRequest, isbns: Vec<String>) -> Outcome {
+    let decision = match request.action {
+        Action::Inspect | Action::ClearWish | Action::CancelOwnership => Decision::None,
+        _ if request.product.title.trim().is_empty() => Decision::InsufficientEvidence,
+        Action::SetWish => Decision::CreateBook {
+            wanted: true,
+            record_edition: false,
+        },
+        Action::Purchase | Action::RecordOwnership => Decision::CreateBook {
+            wanted: false,
+            record_edition: true,
+        },
+    };
+    Outcome {
+        ownership: Ownership::Unowned,
+        isbns,
+        ..Outcome::undetermined(decision)
+    }
+}
+
+/// The edition evidence cannot settle on one edition.
+struct Ambiguous;
+
+/// What the product says about one active stored book.
+struct Evidence<'a> {
+    request: &'a CatalogRequest,
+    book: &'a Book,
+    isbns: Vec<String>,
+    label: Option<String>,
+    inspect_only: bool,
+}
+
+impl<'a> Evidence<'a> {
+    fn outcome(self) -> Outcome {
+        let book = self.book;
+        let action = self.request.action;
+        let wish_action = matches!(action, Action::SetWish | Action::ClearWish);
+        let selected = self
+            .request
+            .selection
+            .as_ref()
+            .filter(|_| !wish_action)
+            .and_then(|selection| selection.edition_id.as_deref());
+        let Ok(edition) = self.edition(selected) else {
+            return self.undetermined(wish_action);
+        };
+        let active: Vec<_> = book
+            .editions
+            .iter()
+            .filter(|edition| edition.archived_at.is_none())
+            .collect();
+        let label = self.label.as_deref();
+        let ownership = ownership(edition, &active, selected == Some("new"), label);
+        let decision = if selected == Some("new")
+            && matches!(action, Action::Purchase | Action::RecordOwnership)
+        {
+            Decision::AddEdition {
+                wanted_before: book.wanted,
+                wanted_after: action == Action::RecordOwnership && book.wanted,
+            }
+        } else {
+            decision(self.request, book, edition, &active, label, &self.isbns)
+        };
+        Outcome {
+            ownership,
+            wanted: book.wanted,
+            book_id: Some(book.id.clone()),
+            edition_id: edition.map(|edition| edition.id.clone()),
+            decision,
+            isbns: self.isbns,
+        }
+    }
+
+    fn visible(&self, edition: &Edition) -> bool {
+        !self.inspect_only || edition.archived_at.is_none()
+    }
+
+    fn has_isbn(&self, edition: &Edition) -> bool {
+        edition.isbns.iter().any(|isbn| self.isbns.contains(isbn))
+    }
+
+    fn has_label(&self, edition: &Edition) -> bool {
+        self.label.as_ref().is_some_and(|candidate| {
+            edition
+                .label
+                .as_deref()
+                .is_some_and(|stored| same_label(candidate, &normalized(stored)))
+        })
+    }
+
+    /// The edition the evidence names; `None` when it names no stored edition.
+    fn edition(&self, selected: Option<&str>) -> Result<Option<&'a Edition>, Ambiguous> {
+        let mut known = self.book.editions.iter().filter(|edition| {
+            self.visible(edition) && (self.has_isbn(edition) || self.has_label(edition))
+        });
+        match selected {
+            Some("new") if known.next().is_none() => Ok(None),
+            Some("new") => Err(Ambiguous),
+            Some(id) => self.chosen(id).map(Some),
+            None => {
+                let first = known.next();
+                if known.next().is_some()
+                    || first.is_some_and(|edition| edition.archived_at.is_some())
+                {
+                    return Err(Ambiguous);
+                }
+                Ok(first)
+            }
+        }
+    }
+
+    /// The edition the user chose, unless an ISBN points at another one.
+    fn chosen(&self, id: &str) -> Result<&'a Edition, Ambiguous> {
+        if self
+            .book
+            .editions
+            .iter()
+            .any(|edition| self.visible(edition) && self.has_isbn(edition) && edition.id != id)
+        {
+            return Err(Ambiguous);
+        }
+        self.book
+            .editions
+            .iter()
+            .find(|edition| edition.id == id && edition.archived_at.is_none())
+            .ok_or(Ambiguous)
+    }
+
+    fn undetermined(&self, wish_action: bool) -> Outcome {
+        let plan = if wish_action {
+            decision(self.request, self.book, None, &[], None, &self.isbns)
+        } else {
+            Decision::ConflictingEvidence
+        };
+        Outcome {
+            wanted: self.book.wanted,
+            book_id: Some(self.book.id.clone()),
+            ..Outcome::undetermined(plan)
+        }
+    }
+}
+
+fn ownership(
+    edition: Option<&Edition>,
+    active: &[&Edition],
+    new_selected: bool,
+    label: Option<&str>,
+) -> Ownership {
+    let other_owned = active.iter().any(|edition| edition.owned);
+    match (edition, other_owned) {
+        (Some(known), _) if known.owned => Ownership::SameEdition,
+        (_, false) => Ownership::Unowned,
+        (Some(_), true) => Ownership::OtherEdition,
+        (None, true) if new_selected || new_revision(active, label) => Ownership::OtherEdition,
+        (None, true) => Ownership::UnknownEdition,
+    }
+}
+
+fn new_revision(editions: &[&Edition], label: Option<&str>) -> bool {
+    editions.is_empty()
+        || label.is_some_and(|candidate| {
+            editions.iter().all(|edition| {
+                edition
+                    .label
+                    .as_deref()
+                    .is_some_and(|label| distinct_editions(candidate, &normalized(label)))
+            })
+        })
+}
+
+fn decision(
+    request: &CatalogRequest,
+    book: &Book,
+    edition: Option<&Edition>,
+    editions: &[&Edition],
+    label: Option<&str>,
+    isbns: &[String],
+) -> Decision {
+    let action = request.action;
+    let after = match action {
+        Action::Inspect => return Decision::None,
+        Action::Purchase | Action::ClearWish => false,
+        Action::SetWish => true,
+        Action::RecordOwnership | Action::CancelOwnership => book.wanted,
+    };
+    if matches!(action, Action::SetWish | Action::ClearWish) {
+        return Decision::Update {
+            wanted_before: book.wanted,
+            wanted_after: after,
+            owned_before: None,
+            owned_after: None,
+            edition_patch: None,
+        };
+    }
+    if let Some(edition) = edition {
+        return Decision::Update {
+            wanted_before: book.wanted,
+            wanted_after: after,
+            owned_before: Some(edition.owned),
+            owned_after: Some(action != Action::CancelOwnership),
+            edition_patch: if matches!(action, Action::Purchase | Action::RecordOwnership) {
+                edition_patch(edition, &request.product, isbns)
+            } else {
+                None
+            },
+        };
+    }
+    if action != Action::CancelOwnership && new_revision(editions, label) {
+        return Decision::AddEdition {
+            wanted_before: book.wanted,
+            wanted_after: after,
+        };
+    }
+    Decision::ChooseEdition {
+        edition_ids: editions.iter().map(|edition| edition.id.clone()).collect(),
+    }
+}
+
+/// The source value, trimmed, when the stored value is blank.
+fn fill(old: Option<&str>, source: Option<&str>) -> Option<String> {
+    old.filter(|value| !value.trim().is_empty())
+        .is_none()
+        .then_some(source)
+        .flatten()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+}
+
+fn edition_patch(old: &Edition, source: &Product, isbns: &[String]) -> Option<Box<EditionPatch>> {
+    let (stored, found) = (&old.details, &source.details);
+    let patch = EditionPatch {
+        isbns: isbns
+            .iter()
+            .filter(|isbn| !old.isbns.contains(isbn))
+            .cloned()
+            .collect(),
+        label: fill(old.label.as_deref(), source.label.as_deref()),
+        publisher: fill(stored.publisher.as_deref(), found.publisher.as_deref()),
+        published_on: fill(
+            stored.published_on.as_deref(),
+            found.published_on.as_deref(),
+        ),
+        cover: fill(stored.cover.as_deref(), found.cover.as_deref()),
+        purchased_on: fill(
+            stored.purchased_on.as_deref(),
+            found.purchased_on.as_deref(),
+        ),
+        purchased_from: fill(
+            stored.purchased_from.as_deref(),
+            found.purchased_from.as_deref(),
+        ),
+    };
+    (!patch.isbns.is_empty()
+        || [
+            &patch.label,
+            &patch.publisher,
+            &patch.published_on,
+            &patch.cover,
+            &patch.purchased_on,
+            &patch.purchased_from,
+        ]
+        .into_iter()
+        .any(Option::is_some))
+    .then(|| Box::new(patch))
+}

@@ -150,7 +150,7 @@ async function findCandidates(
   if (method === "title")
     return { kind: "found", candidates: await searchNdl("title", needle, signal) };
   const normalized = catalog.normalizeIsbns([needle]);
-  if ("invalid" in normalized) return { kind: "invalidIsbn" };
+  if (normalized.kind === "invalid") return { kind: "invalidIsbn" };
   // 一つの入力は正規化した一つのISBNになるので、ない場合は確認数字の誤りと同じく扱う。
   const [isbn] = normalized.values;
   if (isbn === undefined) return { kind: "invalidIsbn" };

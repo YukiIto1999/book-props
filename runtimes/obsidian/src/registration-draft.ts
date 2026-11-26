@@ -39,7 +39,7 @@ function listedValues(text: string): string[] {
 
 function readIsbns(catalog: IsbnReader, isbns: readonly string[] | undefined): string[] {
   const normalized = catalog.normalizeIsbns(isbns ?? []);
-  return "invalid" in normalized ? [] : normalized.values;
+  return normalized.kind === "invalid" ? [] : normalized.values;
 }
 
 /**

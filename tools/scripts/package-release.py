@@ -94,13 +94,13 @@ def sysroot_packages():
     libdir = subprocess.check_output(
         ("rustc", "--print", "target-libdir", "--target", "wasm32-unknown-unknown"), text=True,
     ).strip()
-    base = {"alloc", "compiler_builtins", "core", "dlmalloc", "panic_abort", "std"}
-    expected = {"obsidian": base, "chrome": base | {"hashbrown"}}
+    # Both bundles link std's hashbrown: the TLS client and serde-wasm-bindgen's string cache use it.
+    expected = {"alloc", "compiler_builtins", "core", "dlmalloc", "hashbrown", "panic_abort", "std"}
     for name, (_, generated) in BUNDLES.items():
         link_map = (ROOT / "runtimes" / name / "dist" / generated / "link.map").read_text()
         linked = set(re.findall(re.escape(libdir) + r"/lib(\w+)-[0-9a-f]+\.rlib\(", link_map))
-        if linked != expected[name]:
-            raise SystemExit(f"Review linked Rust libraries ({name}): expected {sorted(expected[name])}, found {sorted(linked)}")
+        if linked != expected:
+            raise SystemExit(f"Review linked Rust libraries ({name}): expected {sorted(expected)}, found {sorted(linked)}")
     library = Path(os.environ["BOOK_PROPS_RUST_LIBRARY"])
     packages = {}
     entries = {}

@@ -83,8 +83,8 @@ export class EditionEditor extends Modal {
               .map((part) => part.trim())
               .filter(Boolean),
           );
-          if ("invalid" in normalized) {
-            status.setText(`ISBNの確認数字を確認してください: ${normalized.invalid}`);
+          if (normalized.kind === "invalid") {
+            status.setText(`ISBNの確認数字を確認してください: ${normalized.input}`);
             return;
           }
           const invalidDate = normalizeDates(metadata, this.baseline);

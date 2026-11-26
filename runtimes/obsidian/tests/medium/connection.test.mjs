@@ -9,7 +9,7 @@ import { ConnectionGrant } from "../../src/connection-grant.ts";
 import { Connection, scopeOf } from "../../src/connection.ts";
 import { LocalMoveCopies } from "../../src/local-move-copies.ts";
 import { createHost } from "../../src/tls-identity.ts";
-import { evaluate, initSync } from "../../dist/wasm/book_props_vault.js";
+import { initSync, inspect, normalizeIsbns } from "../../dist/wasm/book_props_vault.js";
 import { post, prove, readCard } from "./connection-support.mjs";
 
 const product = {
@@ -59,7 +59,7 @@ await test("only the extension that proved the folder can save a purchase throug
   const grant = await ConnectionGrant.create("Reading Vault", profile);
   assert.equal(grant.directory, join(await realpath(profile), "Book Props", "Reading Vault"));
   const files = bookFiles(folder);
-  const catalog = new Catalog(files, evaluate);
+  const catalog = new Catalog(files, { inspect, normalizeIsbns });
   // Only purchases reach the Vault; any other request arriving here fails the test.
   const dispatch = async (input, signal) => {
     assert.equal(input.action, "purchase");

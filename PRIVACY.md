@@ -18,7 +18,7 @@ Book Props sends no data to the developer or to any other party. It has no analy
 
 ### What is stored on your computer
 
-- In the browser: the handle of the connection folder you chose, a session token that expires, and records of purchases whose result is not yet confirmed. They stay in the extension's own storage.
+- In the browser: the handle of the connection folder you chose, a random identifier for this installation, a session token that expires, and records of purchases whose result is not yet confirmed. They stay in the extension's own storage.
 - In your home folder: the connection folder `Book Props/<vault name>`, which holds the local address, an opaque identifier, a TLS trust anchor, and one-time pairing proofs, but no book data.
 - In your vault: the book notes you create.
 
@@ -44,15 +44,15 @@ Report questions or concerns as an issue at <https://github.com/YukiIto1999/book
 
 読み取った情報は、同じ端末の Obsidian の Book Props プラグインにだけ、`127.0.0.1` への TLS 1.3 で保護した接続で送る。プラグインは Vault のノートと照らし合わせ、利用者が選んだときに購入や購入希望をその Vault に記録する。
 
-Book Props は、開発者にも第三者にもデータを送らない。利用状況の分析、送信、広告、アカウントはない。
+Book Props は、開発者にも第三者にもデータを送らない。利用状況の分析や送信、広告、アカウントの登録はない。
 
 ### 端末に保存するもの
 
-- ブラウザ：選んだ接続用フォルダのハンドル、期限付きのセッショントークン、結果をまだ確認できていない購入の記録。拡張専用の保存領域に置く。
+- ブラウザ：選んだ接続用フォルダのハンドル、この拡張を見分けるための無作為な識別子、期限付きのセッショントークン、結果をまだ確認できていない購入の記録。いずれも拡張専用の保存領域に置く。
 - ホームフォルダ：接続用フォルダ `Book Props/<Vault 名>`。端末内の接続先、不透明な識別子、TLS の信頼アンカー、一度だけ使うペアリングの検証値を置き、本のデータは置かない。
 - Vault：利用者が作る本のノート。
 
-消すときは、拡張の「このブラウザの接続を解除」と、Obsidian のプラグイン設定の「ペアリングを解除」を押してから、拡張とプラグインを削除する。本のノートは通常の Markdown として残る。
+これらを消すときは、拡張の「このブラウザの接続を解除」と、Obsidian のプラグイン設定の「ペアリングを解除」を押してから、拡張とプラグインを削除する。本のノートは通常の Markdown として残る。
 
 ### 他のサービスへの要求
 
@@ -60,4 +60,4 @@ Obsidian プラグインで書誌を探すと、入力した ISBN か書名を�
 
 ### 問い合わせ
 
-質問や懸念は <https://github.com/YukiIto1999/book-props/issues> に Issue として報告する。
+質問や懸念は <https://github.com/YukiIto1999/book-props/issues> の Issue で受け付ける。

@@ -19,6 +19,7 @@ import type {
   StoredBook,
 } from "./catalog.ts";
 import { isOptionKey } from "./option-keys.ts";
+import { optionalField } from "./optional-field.ts";
 import {
   draftProduct,
   inputLabels,
@@ -179,7 +180,7 @@ class RegistrationForm {
 
   private operation(): Operation {
     const product = draftProduct(this.details, this.values, this.context.catalog);
-    return { action: this.action, product, selection: this.selection };
+    return { action: this.action, product, ...optionalField("selection", this.selection) };
   }
 
   /** Starts a check of the current draft; the returned test fails once the modal closes or a newer change or check begins. */
@@ -277,11 +278,11 @@ class RegistrationForm {
     const { catalog, clientId, signal } = this.context;
     const current = this.claim();
     button.setDisabled(true);
-    const purchase =
+    const purchaseKey =
       this.action === "purchase"
-        ? { clientId, requestId: crypto.randomUUID(), issuedAt: Date.now() }
-        : undefined;
-    const execution = await catalog.execute({ ...this.operation(), purchase }, signal);
+        ? { purchase: { clientId, requestId: crypto.randomUUID(), issuedAt: Date.now() } }
+        : {};
+    const execution = await catalog.execute({ ...this.operation(), ...purchaseKey }, signal);
     const message = resultMessage(execution);
     if (execution.kind === "saved" || execution.kind === "replayed") {
       new Notice(message);
@@ -310,7 +311,7 @@ export class Registration extends Modal {
     super(app);
   }
 
-  onOpen(): void {
+  override onOpen(): void {
     this.setTitle("書籍の登録・編集");
     const context = {
       catalog: this.catalog,
@@ -321,7 +322,7 @@ export class Registration extends Modal {
     new RegistrationForm(this.contentEl, context, this.initial, this.intent).mount();
   }
 
-  onClose(): void {
+  override onClose(): void {
     this.lookup.abort();
   }
 }

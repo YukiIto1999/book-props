@@ -1,6 +1,7 @@
 import { Modal, type App } from "obsidian";
 import type { BookRecord, EditionRecord } from "./book-note.ts";
 import type { Catalog } from "./catalog.ts";
+import { optionalField } from "./optional-field.ts";
 import { markSelectedTags, mountFilterControls, mountTagBar } from "./shelf-controls.ts";
 import {
   collator,
@@ -115,9 +116,15 @@ export function selectBooks<T extends ShelfEntry>(entries: readonly T[], filter:
     filter,
     tokens: filter.text.normalize("NFKC").split(/\s+/).filter(Boolean),
     tags: filter.tags.map(tagKey),
-    author: filter.author === undefined ? undefined : fold(filter.author),
-    publisher: filter.publisher === undefined ? undefined : fold(filter.publisher),
-    range: filter.range?.from || filter.range?.through ? filter.range : undefined,
+    ...optionalField("author", filter.author === undefined ? undefined : fold(filter.author)),
+    ...optionalField(
+      "publisher",
+      filter.publisher === undefined ? undefined : fold(filter.publisher),
+    ),
+    ...optionalField(
+      "range",
+      filter.range?.from || filter.range?.through ? filter.range : undefined,
+    ),
   };
   const keyed = entries
     .filter(({ book }) => matchesCriteria(book, criteria))
@@ -173,7 +180,7 @@ export class Shelf extends Modal {
     this.catalog = catalog;
   }
 
-  async onOpen(): Promise<void> {
+  override async onOpen(): Promise<void> {
     this.setTitle("本棚");
     const loading = this.contentEl.createEl("p", { text: "読み込み中…", attr: { role: "status" } });
     const snapshot = await this.catalog.shelf().catch(() => undefined);
@@ -188,7 +195,7 @@ export class Shelf extends Modal {
     this.mount(snapshot.entries);
   }
 
-  onClose(): void {
+  override onClose(): void {
     this.contentEl.empty();
   }
 

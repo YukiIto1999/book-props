@@ -57,7 +57,7 @@ function decode(body: Buffer) {
 export class Connection {
   private pairing = false;
   private stopped = false;
-  private session?: Credentials;
+  private session: Credentials | undefined;
   private sessionLifetime = new AbortController();
   private readonly listener: Server;
   private readonly sockets = new WebSocketServer({

@@ -24,7 +24,7 @@ export class Settings extends PluginSettingTab {
     super(app, books);
   }
 
-  getSettingDefinitions(): SettingDefinitionItem[] {
+  override getSettingDefinitions(): SettingDefinitionItem[] {
     const directory = this.books.connectionDirectory;
     return [
       this.folder(),

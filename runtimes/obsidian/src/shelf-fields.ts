@@ -23,15 +23,16 @@ type StandardKey =
 type CustomKey = `custom:${string}`;
 export type FieldKey = StandardKey | CustomKey;
 export type Bounds = { key: FieldKey; from: string; through: string };
+/** 著者・出版社・範囲の絞り込みは、変更で`undefined`を書いて解除する。 */
 export type ShelfFilter = Readonly<{
   text: string;
   ownership: "any" | "owned" | "unowned";
   wish: "any" | "wanted" | "unwanted";
   reading: "any" | "unset" | ReadingStatus;
   tags: readonly string[];
-  author?: string;
-  publisher?: string;
-  range?: Bounds;
+  author?: string | undefined;
+  publisher?: string | undefined;
+  range?: Bounds | undefined;
   sort: FieldKey;
   descending: boolean;
 }>;
@@ -84,7 +85,8 @@ export function currentEditions(book: BookRecord): EditionRecord[] {
 export function calendarDate(value: string): string | undefined {
   const parts = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/.exec(value.normalize("NFKC").trim());
   if (!parts) return undefined;
-  const day = `${parts[1]}-${parts[2].padStart(2, "0")}-${parts[3].padStart(2, "0")}`;
+  const [, year = "", month = "", date = ""] = parts;
+  const day = `${year}-${month.padStart(2, "0")}-${date.padStart(2, "0")}`;
   const time = new Date(`${day}T00:00:00.000Z`);
   return Number.isFinite(time.getTime()) && time.toISOString().startsWith(day) ? day : undefined;
 }

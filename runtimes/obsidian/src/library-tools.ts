@@ -23,7 +23,7 @@ export class LibraryTools extends Modal {
     super(app);
   }
 
-  async onOpen(): Promise<void> {
+  override async onOpen(): Promise<void> {
     this.setTitle("本・版の管理");
     await this.render();
   }

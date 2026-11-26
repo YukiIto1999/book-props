@@ -4,7 +4,11 @@ import { response, type Response } from "@book-props/vault-contract";
 export type Reply = Response | { kind: "forgotten" | "scopeMismatch" | "manualCheck" };
 export type PageState = { supported: boolean; hasBook: boolean; pending: boolean; reply: Reply };
 // "unknown" means the plugin could not be reached, which says nothing about the pairing.
-export type ConnectionStatus = { configured?: string; state: "paired" | "unpaired" | "unknown" };
+// `configured` is always reported; undefined means no connection has been set up.
+export type ConnectionStatus = {
+  configured: string | undefined;
+  state: "paired" | "unpaired" | "unknown";
+};
 
 // Reads one field of a runtime message or stored record without trusting its shape.
 export function messageField(message: unknown, key: string): unknown {

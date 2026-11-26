@@ -3,6 +3,7 @@ import type { CustomField, EditionRecord } from "./book-note.ts";
 import type { Catalog, StoredBook } from "./catalog.ts";
 import { actionMessage, validDate } from "./management-ui.ts";
 import { isOptionKey } from "./option-keys.ts";
+import { optionalField } from "./optional-field.ts";
 import { calendarDate } from "./shelf-fields.ts";
 
 const editionFields = [
@@ -50,7 +51,7 @@ export class EditionEditor extends Modal {
     super(app);
   }
 
-  onOpen(): void {
+  override onOpen(): void {
     this.setTitle(this.baseline ? "版を編集" : "版を追加");
     let isbn = this.baseline?.isbns.join("、") ?? "";
     let owned = this.baseline?.owned ?? false;
@@ -104,7 +105,7 @@ export class EditionEditor extends Modal {
             id: this.baseline?.id ?? crypto.randomUUID(),
             isbns: normalized.values,
             owned,
-            archivedAt: this.baseline?.archivedAt,
+            ...optionalField("archivedAt", this.baseline?.archivedAt),
           };
           button.setDisabled(true);
           const bookId = this.target.book.id;
@@ -127,13 +128,15 @@ export class EditionEditor extends Modal {
     for (const [key, label] of editionFields) {
       const stored = this.baseline?.[key];
       const day = isDateField(key) && stored ? calendarDate(stored) : undefined;
-      metadata[key] = stored;
+      if (stored !== undefined) metadata[key] = stored;
       new Setting(this.contentEl).setName(label).addText((field) => {
         field.inputEl.setAttribute("aria-label", label);
         if (isDateField(key) && (day || !stored)) field.inputEl.type = "date";
         if (key === "cover") field.inputEl.type = "url";
         field.setValue(day ?? stored ?? "").onChange((value) => {
-          metadata[key] = value.trim() || undefined;
+          const entered = value.trim();
+          if (entered) metadata[key] = entered;
+          else delete metadata[key];
         });
       });
     }
@@ -161,7 +164,7 @@ export class FieldEditor extends Modal {
     super(app);
   }
 
-  onOpen(): void {
+  override onOpen(): void {
     this.setTitle("独自項目");
     let name = this.baseline?.name ?? "";
     const draft: FieldDraft = {
@@ -218,7 +221,7 @@ export class FieldEditor extends Modal {
           const outcome = await this.catalog.manage({
             action: "updateCustomField",
             bookId: this.bookId,
-            baseline: this.baseline,
+            ...optionalField("baseline", this.baseline),
             value: field,
           });
           status.setText(actionMessage[outcome]);

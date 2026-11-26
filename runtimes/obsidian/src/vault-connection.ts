@@ -3,6 +3,7 @@ import type { Configuration, GrantRecord } from "./configuration.ts";
 import { removeLegacyGrant, vaultGrant, type ConnectionGrant } from "./connection-grant.ts";
 import { connectionSetupError, establish } from "./connection-setup.ts";
 import { scopeOf, type Connection } from "./connection.ts";
+import { optionalField } from "./optional-field.ts";
 import { createHost } from "./tls-identity.ts";
 
 type Owner = Readonly<{
@@ -22,7 +23,7 @@ type Owner = Readonly<{
 
 /** 一つの Vault で拡張からの要求を受け付ける接続 */
 export class VaultConnection {
-  private connection?: Connection;
+  private connection: Connection | undefined;
 
   constructor(private readonly owner: Owner) {}
 
@@ -82,8 +83,8 @@ export class VaultConnection {
       const started = await establish({
         vault,
         scope,
-        saved: previous.grant,
-        running: this.take(),
+        ...optionalField("saved", previous.grant),
+        ...optionalField("running", this.take()),
         start: (grant) => owner.listen(host, previous.port ?? 0, scope, grant),
         save: async (grant, connection) => {
           if (owner.unloaded()) throw new Error("Book Props が無効になりました。");

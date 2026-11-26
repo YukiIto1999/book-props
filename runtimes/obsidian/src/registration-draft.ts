@@ -1,4 +1,5 @@
 import type { Catalog, Product } from "./catalog.ts";
+import { optionalField } from "./optional-field.ts";
 
 export type ProductInput = "title" | "authors" | "isbns" | "label" | "publisher";
 type DraftValues = Record<ProductInput, string>;
@@ -74,8 +75,10 @@ export function draftProduct(details: Product, values: DraftValues, catalog: Isb
     title: values.title.trim(),
     authors: listedValues(values.authors),
     isbns: listedValues(values.isbns),
-    label: values.label.trim() || undefined,
-    publisher: values.publisher.trim() || undefined,
+    ...optionalField("label", values.label.trim() || undefined),
+    ...optionalField("publisher", values.publisher.trim() || undefined),
   };
-  return namesSource(details, entered, catalog) ? { ...details, ...entered } : entered;
+  // 画面の入力欄にある項目は、空欄でも取得した書誌の値を引き継がない。
+  const { label: _label, publisher: _publisher, ...hidden } = details;
+  return namesSource(details, entered, catalog) ? { ...hidden, ...entered } : entered;
 }

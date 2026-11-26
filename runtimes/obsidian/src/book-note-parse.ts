@@ -11,6 +11,7 @@ import type {
   PendingMove,
 } from "./book-note.ts";
 import { isJsonObject } from "./json-object.ts";
+import { optionalField } from "./optional-field.ts";
 
 /** 読み取った本と、書き換えに使うYAMLのノード。 */
 export type ParsedNote = Readonly<{
@@ -36,7 +37,8 @@ const instant = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 function frontmatter(raw: string): Frontmatter {
   const start = /^\uFEFF?---[ \t]*(\r?\n)/.exec(raw);
   if (!start) return unreadable("本ページの先頭にYAMLがありません。");
-  const offset = start[0].length;
+  const [opening, lineBreak = "\n"] = start;
+  const offset = opening.length;
   const remaining = raw.slice(offset);
   const close = /^---[ \t]*(?:\r?\n|$)/m.exec(remaining);
   if (!close) return unreadable("本ページのYAMLが閉じられていません。");
@@ -44,7 +46,7 @@ function frontmatter(raw: string): Frontmatter {
     offset,
     end: offset + close.index,
     source: remaining.slice(0, close.index),
-    lineBreak: start[1],
+    lineBreak,
   };
 }
 
@@ -98,13 +100,13 @@ function readEdition(node: unknown): EditionRecord {
     id: readId(edition.get("id", true), "版"),
     owned: flag(edition.get("owned", true), "版の所持"),
     isbns,
-    label: optionalText(edition, "label"),
-    publisher: optionalText(edition, "publisher"),
-    publishedOn: optionalText(edition, "published-on"),
-    cover: optionalText(edition, "cover"),
-    purchasedOn: optionalText(edition, "purchased-on"),
-    purchasedFrom: optionalText(edition, "purchased-from"),
-    archivedAt: optionalText(edition, "archived-at"),
+    ...optionalField("label", optionalText(edition, "label")),
+    ...optionalField("publisher", optionalText(edition, "publisher")),
+    ...optionalField("publishedOn", optionalText(edition, "published-on")),
+    ...optionalField("cover", optionalText(edition, "cover")),
+    ...optionalField("purchasedOn", optionalText(edition, "purchased-on")),
+    ...optionalField("purchasedFrom", optionalText(edition, "purchased-from")),
+    ...optionalField("archivedAt", optionalText(edition, "archived-at")),
   };
 }
 
@@ -167,7 +169,7 @@ function readMove(encoded: string | undefined, bookId: string): PendingMove | un
     return unreadable("版の移動記録を読めません。");
   if (backup !== undefined && readEditionBackup(backup).edition.id !== editionId)
     return unreadable("移動中の版の控えが移動記録と一致しません。");
-  return { editionId, destinationId, digest: signature, backup };
+  return { editionId, destinationId, digest: signature, ...optionalField("backup", backup) };
 }
 
 function readEditions(editions: YAMLSeq): EditionRecord[] {
@@ -232,12 +234,12 @@ function readBook(
     authors: texts(root, "book-authors"),
     tags,
     wanted: flag(root.get("book-wanted", true), "購入希望"),
-    readingStatus,
-    finishedOn: optionalText(root, "book-finished-on"),
-    archivedAt: optionalText(managed, "archived-at"),
+    ...optionalField("readingStatus", readingStatus),
+    ...optionalField("finishedOn", optionalText(root, "book-finished-on")),
+    ...optionalField("archivedAt", optionalText(managed, "archived-at")),
     editions: ownedEditions,
     appliedPurchases,
-    pendingMove: readMove(optionalText(managed, "pending-move"), bookId),
+    ...optionalField("pendingMove", readMove(optionalText(managed, "pending-move"), bookId)),
     customFields,
   };
 }

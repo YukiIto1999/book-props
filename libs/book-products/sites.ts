@@ -56,6 +56,13 @@ function direct(element: Element | null): string | undefined {
   );
 }
 
+// An absent value leaves no key, matching the exact-optional fields consumers decode.
+function optionalField<K extends string, V>(key: K, value: V | undefined): { [P in K]?: V } {
+  const entry: { [P in K]?: V } = {};
+  if (value !== undefined) entry[key] = value;
+  return entry;
+}
+
 // Reads one field of parsed JSON-LD without trusting its shape.
 function property(source: unknown, key: string): unknown {
   return typeof source === "object" && source !== null ? Reflect.get(source, key) : undefined;
@@ -107,7 +114,10 @@ function httpsImage(value: unknown, base: string): string | undefined {
 function date(value?: string): string | undefined {
   if (!value) return undefined;
   const numeric = /^(\d{4})[年/.-](\d{1,2})[月/.-](\d{1,2})(?:日|$)/.exec(value);
-  if (numeric) return `${numeric[1]}-${numeric[2].padStart(2, "0")}-${numeric[3].padStart(2, "0")}`;
+  if (numeric) {
+    const [, year = "", month = "", day = ""] = numeric;
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  }
   const english = /^[A-Za-z]+ \d{1,2}, \d{4}$/.test(value) ? new Date(value + " UTC") : undefined;
   return english && Number.isFinite(english.getTime())
     ? english.toISOString().slice(0, 10)
@@ -119,14 +129,13 @@ function titleEvidence(input: string): { title: string; label?: string } {
   // \s also matches the ideographic space U+3000
   const leading = new RegExp(`^(${token})\\s+`, "u").exec(input);
   const trailing = new RegExp(`(?:\\s+|[（(])(${token})[）)]?$`, "u").exec(input);
-  const label = leading?.[1] ?? trailing?.[1];
   return {
     title: leading
       ? input.slice(leading[0].length).trim()
       : trailing
         ? input.slice(0, trailing.index).trim()
         : input,
-    label,
+    ...optionalField("label", leading?.[1] ?? trailing?.[1]),
   };
 }
 
@@ -163,9 +172,12 @@ function amazon(doc: Document, url: string): ProductEvidence | undefined {
     ...titleEvidence(title),
     authors,
     isbns,
-    publisher: field("publisher"),
-    publishedOn: date(field("publication_date")),
-    cover: httpsImage(doc.querySelector("#imgBlkFront,#landingImage")?.getAttribute("src"), url),
+    ...optionalField("publisher", field("publisher")),
+    ...optionalField("publishedOn", date(field("publication_date"))),
+    ...optionalField(
+      "cover",
+      httpsImage(doc.querySelector("#imgBlkFront,#landingImage")?.getAttribute("src"), url),
+    ),
   };
 }
 
@@ -189,9 +201,12 @@ function rakuten(doc: Document, url: string): ProductEvidence | undefined {
     isbns,
     authors,
     // 楽天は出版社を「発行元」と表示する商品がある。「発売元」は販売を担う別の会社なので使わない。
-    publisher: fields.get("出版社") ?? fields.get("発行元"),
-    publishedOn: date(fields.get("発売日")),
-    cover: httpsImage(doc.querySelector('meta[property="og:image"]')?.getAttribute("content"), url),
+    ...optionalField("publisher", fields.get("出版社") ?? fields.get("発行元")),
+    ...optionalField("publishedOn", date(fields.get("発売日"))),
+    ...optionalField(
+      "cover",
+      httpsImage(doc.querySelector('meta[property="og:image"]')?.getAttribute("content"), url),
+    ),
   };
 }
 
@@ -242,9 +257,9 @@ function bookFromSchema(
     ...titleEvidence(title),
     authors: names(property(item, "author")),
     isbns: isbnFields(property(item, "isbn"), property(item, "gtin13")),
-    publisher: names(property(item, "publisher") ?? property(item, "brand"))[0],
-    publishedOn: date(releaseText(doc, site)),
-    cover: httpsImage(property(item, "image"), url),
+    ...optionalField("publisher", names(property(item, "publisher") ?? property(item, "brand"))[0]),
+    ...optionalField("publishedOn", date(releaseText(doc, site))),
+    ...optionalField("cover", httpsImage(property(item, "image"), url)),
   };
 }
 

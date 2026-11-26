@@ -113,12 +113,13 @@ function appendFlowRows(
   values: readonly Row[],
 ): Edit {
   const [start, end] = editableRange(sequence);
-  const [suffix] = header.source.slice(end).split(/\r?\n/, 1);
+  const [suffix = ""] = header.source.slice(end).split(/\r?\n/, 1);
   const keyLine = header.source.slice(lineStart(header.source, start), start);
   const key = /^( +)(editions|applied-purchases|isbns|custom-fields):([ \t]*)$/.exec(keyLine);
   if (sequence.items.length === 0 && suffix.trim() === "" && key?.[2] === field) {
-    const rows = blockRows(values, `${key[1]}  `, header.lineBreak);
-    return { start: start - key[3].length, end, text: header.lineBreak + rows };
+    const [, indent = "", , spacing = ""] = key;
+    const rows = blockRows(values, `${indent}  `, header.lineBreak);
+    return { start: start - spacing.length, end, text: header.lineBreak + rows };
   }
   const items = values
     .map((value) => stringify(value, { collectionStyle: "flow", lineWidth: 0 }).trimEnd())

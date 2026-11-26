@@ -203,16 +203,17 @@ export function insertTransferredEdition(raw: string, edition: Capture): string 
   return saved;
 }
 
-function editionIndex(book: BookRecord, editionId: string): number {
+function editionAt(book: BookRecord, editionId: string): { index: number; edition: EditionRecord } {
   const index = book.editions.findIndex(({ id }) => id === editionId);
-  if (index < 0) throw new BookNoteError("conflict", "対象の版がありません。");
-  return index;
+  const edition = book.editions[index];
+  if (!edition) throw new BookNoteError("conflict", "対象の版がありません。");
+  return { index, edition };
 }
 
 export function removeEdition(raw: string, editionId: string): string {
   const { header, editions, book } = parseNote(raw);
   const saved = spliceNote(raw, header, [
-    dropEditionRow(header, editions, editionIndex(book, editionId)),
+    dropEditionRow(header, editions, editionAt(book, editionId).index),
   ]);
   const confirmed = parseNote(saved).book;
   const removed =
@@ -228,7 +229,7 @@ export function setArchivedAt(
   at: string | null,
 ): string {
   const { header, managed, editions, book } = parseNote(raw);
-  const index = editionId ? editionIndex(book, editionId) : -1;
+  const index = editionId ? editionAt(book, editionId).index : -1;
   const node = editionId ? map(editions.items[index], "版") : managed;
   const saved = spliceNote(raw, header, fieldEdits(header, node, { "archived-at": at }));
   const confirmed = parseNote(saved).book;
@@ -239,8 +240,8 @@ export function setArchivedAt(
 
 export function editEdition(raw: string, input: EditionRecord): string {
   const { header, editions, book } = parseNote(raw);
-  const index = editionIndex(book, input.id);
-  const previous = storeEdition(book.editions[index]);
+  const { index, edition } = editionAt(book, input.id);
+  const previous = storeEdition(edition);
   const fields: Record<string, Plain> = {};
   for (const [key, value] of Object.entries(storeEdition(input))) {
     if (key === "id" || key === "archived-at") continue;

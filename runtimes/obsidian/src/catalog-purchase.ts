@@ -16,6 +16,7 @@ import type {
   Result,
   StoredBook,
 } from "./catalog.ts";
+import { optionalField } from "./optional-field.ts";
 
 const retryWindow = 24 * 60 * 60 * 1000;
 /** 適用済み購入の記録を、再確認を受け付ける期間を過ぎても残す期間。 */
@@ -47,12 +48,15 @@ export function assertUnchanged(
   }
 }
 
-/** 書き込むと決めた判定と、書き込む本・版・購入の記録。 */
+/**
+ * 書き込むと決めた判定と、書き込む本・版・購入の記録。
+ * `signal`と`hash`は呼び出し元の中断と購入の指紋を各段階へ引き継ぐ値で、ない場合も項目を持つ。
+ */
 export type Write = Readonly<{
   kind: "write";
   operation: Operation;
-  signal?: AbortSignal;
-  hash?: string;
+  signal: AbortSignal | undefined;
+  hash: string | undefined;
   expected: string;
   fresh: readonly StoredBook[];
   versions: ReadonlyMap<string, string>;
@@ -151,12 +155,12 @@ function newEdition(product: Product, isbns: string[], editionId: string): Editi
     id: editionId,
     owned: true,
     isbns,
-    label: product.label || undefined,
-    publisher: product.publisher || undefined,
-    publishedOn: product.publishedOn || undefined,
-    cover: product.cover || undefined,
-    purchasedOn: product.purchasedOn || undefined,
-    purchasedFrom: product.purchasedFrom || undefined,
+    ...optionalField("label", product.label || undefined),
+    ...optionalField("publisher", product.publisher || undefined),
+    ...optionalField("publishedOn", product.publishedOn || undefined),
+    ...optionalField("cover", product.cover || undefined),
+    ...optionalField("purchasedOn", product.purchasedOn || undefined),
+    ...optionalField("purchasedFrom", product.purchasedFrom || undefined),
   };
 }
 
@@ -184,7 +188,24 @@ export function planWrite(basis: Basis): Write {
           editionId,
         }
       : undefined;
-  return { ...basis, kind: "write", target, bookId, newRecord, editionId, receipt };
+  return {
+    ...basis,
+    kind: "write",
+    bookId,
+    ...optionalField("target", target),
+    ...optionalField("newRecord", newRecord),
+    ...optionalField("editionId", editionId),
+    ...optionalField("receipt", receipt),
+  };
+}
+
+/** 書き込む購入希望と、あれば版と購入の記録。 */
+export function bookChange(
+  wanted: boolean,
+  edition: EditionRecord | undefined,
+  receipt: AppliedPurchase | undefined,
+): BookUpdate {
+  return { wanted, ...optionalField("edition", edition), ...optionalField("receipt", receipt) };
 }
 
 export function newBookNote(
@@ -246,5 +267,5 @@ export async function confirmedWrite(
 ): Promise<Result> {
   const saved = readScopedNote(await files.read(path));
   if (!savedAsPlanned(saved, step, change)) return { kind: "unknown" };
-  return { kind: "saved", bookId: step.bookId, editionId: step.editionId };
+  return { kind: "saved", bookId: step.bookId, ...optionalField("editionId", step.editionId) };
 }

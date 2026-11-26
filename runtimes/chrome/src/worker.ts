@@ -22,8 +22,8 @@ function decodePageAnswer(answer: unknown): PageAnswer {
   const extracted = product.safeParse(messageField(answer, "product"));
   const url = messageField(answer, "url");
   return {
-    product: extracted.success ? extracted.data : undefined,
-    url: typeof url === "string" && siteOf(url) ? url : undefined,
+    ...(extracted.success ? { product: extracted.data } : {}),
+    ...(typeof url === "string" && siteOf(url) ? { url } : {}),
   };
 }
 

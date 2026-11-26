@@ -1,6 +1,7 @@
 import type { EditionRecord } from "./book-note.ts";
 import type { Operation, Outcome, StoredBook } from "./catalog.ts";
 import { isJsonObject } from "./json-object.ts";
+import { optionalField } from "./optional-field.ts";
 
 export type Ownership =
   | "sameEdition"
@@ -90,13 +91,13 @@ function decodePatch(value: unknown): EditionPatch | undefined {
   if (value === undefined) return undefined;
   if (!isJsonObject(value)) return invalid();
   return {
-    isbns: value.isbns === undefined ? undefined : texts(value.isbns),
-    label: optionalText(value.label),
-    publisher: optionalText(value.publisher),
-    publishedOn: optionalText(value.publishedOn),
-    cover: optionalText(value.cover),
-    purchasedOn: optionalText(value.purchasedOn),
-    purchasedFrom: optionalText(value.purchasedFrom),
+    ...optionalField("isbns", value.isbns === undefined ? undefined : texts(value.isbns)),
+    ...optionalField("label", optionalText(value.label)),
+    ...optionalField("publisher", optionalText(value.publisher)),
+    ...optionalField("publishedOn", optionalText(value.publishedOn)),
+    ...optionalField("cover", optionalText(value.cover)),
+    ...optionalField("purchasedOn", optionalText(value.purchasedOn)),
+    ...optionalField("purchasedFrom", optionalText(value.purchasedFrom)),
   };
 }
 
@@ -123,9 +124,15 @@ function decodeDecision(value: unknown): Decision {
         kind,
         wantedBefore: flag(value.wantedBefore),
         wantedAfter: flag(value.wantedAfter),
-        ownedBefore: value.ownedBefore === undefined ? undefined : flag(value.ownedBefore),
-        ownedAfter: value.ownedAfter === undefined ? undefined : flag(value.ownedAfter),
-        editionPatch: decodePatch(value.editionPatch),
+        ...optionalField(
+          "ownedBefore",
+          value.ownedBefore === undefined ? undefined : flag(value.ownedBefore),
+        ),
+        ...optionalField(
+          "ownedAfter",
+          value.ownedAfter === undefined ? undefined : flag(value.ownedAfter),
+        ),
+        ...optionalField("editionPatch", decodePatch(value.editionPatch)),
       };
     default:
       return invalid();

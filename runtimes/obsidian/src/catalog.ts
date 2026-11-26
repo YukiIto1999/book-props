@@ -1,9 +1,11 @@
+import type { Product as WireProduct } from "@book-props/vault-contract";
 import { writeBookUpdate, type BookRecord } from "./book-note.ts";
 import { manageBooks, type Management, type ManagementResult } from "./book-management.ts";
 import { catalogInput, decodeOutcome, type Decision, type Ownership } from "./catalog-core.ts";
 import { importNotes, pruneReceipts, type ImportResult } from "./catalog-maintenance.ts";
 import {
   assertUnchanged,
+  bookChange,
   CatalogChanged,
   confirmedWrite,
   hasPendingMove,
@@ -23,17 +25,13 @@ import { settledShelf } from "./edition-move.ts";
 import { missingMoveCopies, type MoveCopies } from "./edition-recovery.ts";
 import { decodePortableLibrary, encodePortableLibrary } from "./portable-library.ts";
 
-export type Product = Readonly<{
-  title?: string;
-  authors?: readonly string[];
-  isbns?: readonly string[];
-  label?: string;
-  publisher?: string;
-  publishedOn?: string;
-  cover?: string;
-  purchasedOn?: string;
-  purchasedFrom?: string;
-}>;
+/** 拡張から届く書誌と同じ形に、登録画面で扱う購入の記録を加えたもの。 */
+export type Product = Readonly<
+  WireProduct & {
+    purchasedOn?: string;
+    purchasedFrom?: string;
+  }
+>;
 export type Action =
   | "inspect"
   | "purchase"
@@ -118,7 +116,8 @@ export class Catalog {
 
   normalizeIsbns(isbns: readonly string[]): { values: string[] } | { invalid: string } {
     if (!isbns.length) return { values: [] };
-    const { decision, isbns: values } = this.report({ action: "inspect", product: { isbns } }, []);
+    const product = { isbns: [...isbns] };
+    const { decision, isbns: values } = this.report({ action: "inspect", product }, []);
     return decision.kind === "invalidIsbn" ? { invalid: decision.input } : { values };
   }
 
@@ -281,7 +280,7 @@ export class Catalog {
     assertUnchanged(step.versions, this.files.versions(), target?.path, target?.path);
     if (decision.kind === "createBook") {
       const raw = newBookNote(step, decision.wanted);
-      progress.change = { wanted: decision.wanted, edition: step.newRecord, receipt: step.receipt };
+      progress.change = bookChange(decision.wanted, step.newRecord, step.receipt);
       progress.started = true;
       return this.files.create(step.bookId, raw);
     }
@@ -313,11 +312,7 @@ export class Catalog {
     const plan = verified.decision;
     if (plan.kind !== "addEdition" && plan.kind !== "update") throw new Refuse("conflict");
     assertUnchanged(step.versions, this.files.versions(), step.target?.path, currentPath);
-    const change = {
-      wanted: plan.wantedAfter,
-      edition: updatedEdition(step, plan, latest),
-      receipt: step.receipt,
-    };
+    const change = bookChange(plan.wantedAfter, updatedEdition(step, plan, latest), step.receipt);
     const written = writeBookUpdate(raw, change);
     progress.change = change;
     progress.started = true;

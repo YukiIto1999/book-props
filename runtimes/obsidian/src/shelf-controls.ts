@@ -90,7 +90,8 @@ function mountRange(parent: HTMLElement, controls: FilterControls): void {
   setting.addDropdown((field) => {
     field.selectEl.setAttribute("aria-label", "範囲指定の項目");
     field.addOption("", "範囲指定なし");
-    for (const key of fields.rangeKinds.keys()) field.addOption(key, fields.labels[key]);
+    // 範囲を指定できる項目には必ず表示名があるが、なければ項目名をそのまま示す。
+    for (const key of fields.rangeKinds.keys()) field.addOption(key, fields.labels[key] ?? key);
     field.onChange((key) => {
       bounds.empty();
       if (isOptionKey(fields.labels, key)) mountBounds(bounds, key, controls);

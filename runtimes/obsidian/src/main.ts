@@ -50,7 +50,7 @@ export default class BookProps extends Plugin {
     return version;
   };
 
-  async onload(): Promise<void> {
+  override async onload(): Promise<void> {
     this.evaluate = startCatalogCore();
     const saved: unknown = await this.loadData();
     this.config = decodeConfiguration(saved);
@@ -123,8 +123,8 @@ export default class BookProps extends Plugin {
     this.changing = true;
     try {
       const previous = this.catalog;
-      const saved = this.config.grant;
-      const next = { ...this.config, folder, grant: undefined };
+      const { grant: saved, ...kept } = this.config;
+      const next = { ...kept, folder };
       await this.saveData(next);
       const grant = this.link.take();
       await previous?.stop();
@@ -143,8 +143,7 @@ export default class BookProps extends Plugin {
     if (this.changing) return false;
     this.changing = true;
     try {
-      const saved = this.config.grant;
-      const next = { ...this.config, grant: undefined };
+      const { grant: saved, ...next } = this.config;
       await this.saveData(next);
       const grant = this.link.take();
       this.config = next;
@@ -254,7 +253,7 @@ export default class BookProps extends Plugin {
     return { kind: execution.kind };
   }
 
-  onunload(): void {
+  override onunload(): void {
     this.unloaded = true;
     this.link.take();
     void this.catalog?.stop();

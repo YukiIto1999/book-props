@@ -4,6 +4,7 @@ import { extractProduct, siteOf } from "@book-props/book-products";
 import { product } from "@book-props/vault-contract";
 import type { Catalog, Product } from "./catalog.ts";
 import { isOptionKey } from "./option-keys.ts";
+import { optionalField } from "./optional-field.ts";
 
 const api = "https://ndlsearch.ndl.go.jp/api/opensearch";
 const ndlCatalogue = "https://ndlsearch.ndl.go.jp/help/api/provider#opac";
@@ -18,7 +19,7 @@ type LookupForm = {
   mode: LookupMode;
   query: string;
   generation: number;
-  pending?: AbortController;
+  pending: AbortController | undefined;
 };
 type LookupView = Readonly<{ status: HTMLElement; results: HTMLElement }>;
 type LookupContext = Readonly<{
@@ -100,16 +101,20 @@ async function searchNdl(
       const value = node.textContent?.trim();
       return value && node.getAttributeNS(xsi, "type") === "dcndl:ISBN" ? [value] : [];
     });
-    const date = /^(\d{4})[./-](\d{1,2})[./-](\d{1,2})$/.exec(attr(dcTerms, "issued") ?? "");
+    const [, year, month = "", day = ""] =
+      /^(\d{4})[./-](\d{1,2})[./-](\d{1,2})$/.exec(attr(dcTerms, "issued") ?? "") ?? [];
     const candidate = product.safeParse({
-      title: attr(dc, "title"),
+      ...optionalField("title", attr(dc, "title")),
       authors,
       isbns,
-      label: attr(ndl, "edition"),
-      publisher: attr(dc, "publisher"),
-      publishedOn: date
-        ? `${date[1]}-${date[2].padStart(2, "0")}-${date[3].padStart(2, "0")}`
-        : undefined,
+      ...optionalField("label", attr(ndl, "edition")),
+      ...optionalField("publisher", attr(dc, "publisher")),
+      ...optionalField(
+        "publishedOn",
+        year === undefined
+          ? undefined
+          : `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`,
+      ),
     });
     return candidate.success && candidate.data.title ? [candidate.data] : [];
   });
@@ -146,7 +151,10 @@ async function findCandidates(
     return { kind: "found", candidates: await searchNdl("title", needle, signal) };
   const normalized = catalog.normalizeIsbns([needle]);
   if ("invalid" in normalized) return { kind: "invalidIsbn" };
-  return { kind: "found", candidates: await searchNdl("isbn", normalized.values[0], signal) };
+  // 一つの入力は正規化した一つのISBNになるので、ない場合は確認数字の誤りと同じく扱う。
+  const [isbn] = normalized.values;
+  if (isbn === undefined) return { kind: "invalidIsbn" };
+  return { kind: "found", candidates: await searchNdl("isbn", isbn, signal) };
 }
 
 function lookupFailed({ status, results }: LookupView, url?: URL): void {
@@ -253,7 +261,7 @@ export function mountBibliography(
   signal: AbortSignal,
   choose: (book: Product) => void,
 ): void {
-  const form: LookupForm = { mode: "isbn", query: "", generation: 0 };
+  const form: LookupForm = { mode: "isbn", query: "", generation: 0, pending: undefined };
   const view: LookupView = {
     status: parent.doc.createElement("p"),
     results: parent.doc.createElement("div"),

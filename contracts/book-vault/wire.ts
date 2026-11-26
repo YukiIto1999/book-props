@@ -16,14 +16,15 @@ const ownership = z.enum([
   "unowned",
   "undetermined",
 ]);
+// An absent field has no key, so the inferred type matches the extension's and the plugin's own records.
 export const product = z.strictObject({
-  title: text.optional(),
-  authors: z.array(text).max(24).optional(),
-  isbns: z.array(z.string().min(1).max(40)).max(12).optional(),
-  label: text.optional(),
-  publisher: text.optional(),
-  publishedOn: text.optional(),
-  cover: pageText.optional(),
+  title: text.exactOptional(),
+  authors: z.array(text).max(24).exactOptional(),
+  isbns: z.array(z.string().min(1).max(40)).max(12).exactOptional(),
+  label: text.exactOptional(),
+  publisher: text.exactOptional(),
+  publishedOn: text.exactOptional(),
+  cover: pageText.exactOptional(),
 });
 const purchaseKey = z.strictObject({
   clientId: id,

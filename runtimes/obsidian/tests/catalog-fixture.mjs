@@ -1,12 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import * as core from "../dist/wasm/book_props_vault.js";
 import { Catalog } from "../src/catalog.ts";
 import { createBookNote } from "../src/book-note.ts";
+import { core } from "./core.mjs";
 
-core.initSync({
-  module: readFileSync(new URL("../dist/wasm/book_props_vault_bg.wasm", import.meta.url)),
-});
 const product = {
   title: "設計入門",
   authors: ["山田 太郎"],

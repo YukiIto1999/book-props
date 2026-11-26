@@ -1,4 +1,5 @@
 import { isMap, isScalar, isSeq, parseDocument, type YAMLMap, type YAMLSeq } from "yaml";
+import { isCanonicalIsbnList } from "./wasm.ts";
 import type { Frontmatter } from "./book-note-edit.ts";
 import { BookNoteError, unreadable } from "./book-note-error.ts";
 import { decodeCustomFields, plainMap, text } from "./book-note-values.ts";
@@ -81,19 +82,10 @@ function texts(record: YAMLMap, field: string): string[] {
   return seq(node, field).items.map((item) => text(item, field));
 }
 
-function validIsbn13(isbn: string): boolean {
-  if (!/^(978|979)[0-9]{10}$/.test(isbn)) return false;
-  let sum = 0;
-  for (let index = 0; index < isbn.length; index++) {
-    sum += Number(isbn.charAt(index)) * (index % 2 === 0 ? 1 : 3);
-  }
-  return sum % 10 === 0;
-}
-
 function readEdition(node: unknown): EditionRecord {
   const edition = map(node, "版");
   const isbns = texts(edition, "isbns");
-  if (!isbns.every(validIsbn13) || new Set(isbns).size !== isbns.length) {
+  if (!isCanonicalIsbnList(isbns)) {
     return unreadable("版のISBNは、重複しないISBN-13の文字列で指定してください。");
   }
   return {

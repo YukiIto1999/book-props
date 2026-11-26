@@ -1,7 +1,13 @@
 import type { Product as WireProduct } from "@book-props/vault-contract";
 import { createBookNote, writeBookUpdate, type BookRecord } from "./book-note.ts";
 import { manageBooks, type Management, type ManagementResult } from "./book-management.ts";
-import { CatalogRules, type Commit, type Stamp } from "./catalog-core.ts";
+import {
+  bookUpdate,
+  CatalogRules,
+  newBookRecord,
+  type Commit,
+  type Stamp,
+} from "./catalog-core.ts";
 import { importNotes, pruneReceipts, type ImportResult } from "./catalog-maintenance.ts";
 import {
   assertUnchanged,
@@ -14,8 +20,7 @@ import {
   type WriteProgress,
 } from "./catalog-purchase.ts";
 import { readCatalog, readEntries, readEntry, readFailure, readStable } from "./catalog-read.ts";
-import { settledShelf } from "./edition-move.ts";
-import { missingMoveCopies, type MoveCopies } from "./edition-recovery.ts";
+import { missingMoveCopies, settledShelf, type MoveCopies } from "./edition-recovery.ts";
 import { optionalField } from "./optional-field.ts";
 import { decodePortableLibrary, encodePortableLibrary } from "./portable-library.ts";
 import type { Action, CatalogCore, IsbnList, Outcome } from "./wasm.ts";
@@ -71,7 +76,7 @@ export class Catalog {
     return (await readCatalog(this.files)).value;
   }
   moveCopiesMissingFrom(entries: readonly StoredBook[]) {
-    return missingMoveCopies(this.files.moveCopies, entries);
+    return missingMoveCopies(this.rules, this.files.moveCopies, entries);
   }
   shelf(): Promise<{ entries: StoredBook[]; moving: boolean }> {
     return this.serial(async () => {
@@ -79,7 +84,7 @@ export class Catalog {
       const versions = this.files.versions();
       const entries = await readEntries(this.files, versions.keys());
       assertUnchanged(versions, this.files.versions());
-      return settledShelf(entries);
+      return settledShelf(this.rules, entries);
     });
   }
 
@@ -127,7 +132,7 @@ export class Catalog {
   }
 
   private get managementContext() {
-    return { files: this.files, entries: () => this.entries(), active: () => this.accepting };
+    return { files: this.files, rules: this.rules, active: () => this.accepting };
   }
 
   exportLibrary(): Promise<string> {
@@ -264,7 +269,7 @@ export class Catalog {
     const { target, plan } = step;
     assertUnchanged(step.versions, this.files.versions(), target?.path, target?.path);
     if (plan.newBook) {
-      const raw = createBookNote(plan.newBook);
+      const raw = createBookNote(newBookRecord(plan.newBook));
       progress.change = plan.change;
       progress.started = true;
       return this.files.create(plan.bookId, raw);
@@ -293,7 +298,7 @@ export class Catalog {
     const verified = this.rules.plan(step.operation, updated, step.hash, step.commit);
     if (verified.kind !== "write" || verified.newBook) throw new Refuse("conflict");
     assertUnchanged(step.versions, this.files.versions(), step.target?.path, currentPath);
-    const written = writeBookUpdate(raw, verified.change);
+    const written = writeBookUpdate(raw, bookUpdate(verified.change));
     progress.change = verified.change;
     progress.started = true;
     return written;

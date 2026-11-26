@@ -16,17 +16,23 @@ fn key(issued_at: Value) -> Value {
 
 fn receipt(input_hash: &str, book_id: &str) -> Value {
     json!({ "requestId": REQUEST, "clientId": CLIENT, "inputHash": input_hash,
-        "appliedAt": "2025-11-25T10:00:00.000Z", "bookId": book_id, "editionId": "first" })
+        "bookId": book_id, "editionId": "first" })
 }
 
 fn book(receipts: Value, pending_move: bool) -> Value {
-    json!({ "id": "book", "title": "設計入門", "authors": ["山田 太郎"], "wanted": true,
+    let mut book = json!({ "id": "book", "title": "設計入門", "authors": ["山田 太郎"],
+        "wanted": true,
         "editions": [
             {"id": "first", "label": "初版", "owned": true, "isbns": ["9780306406157"],
              "details": {"publisher": "技術社"}},
             {"id": "second", "label": "改訂新版", "owned": false, "isbns": ["9780201633610"]}
         ],
-        "appliedPurchases": receipts, "pendingMove": pending_move })
+        "appliedPurchases": receipts });
+    if pending_move {
+        book["pendingMove"] =
+            json!({"editionId": "first", "destinationId": "other", "digest": "0".repeat(64)});
+    }
+    book
 }
 
 fn change(
@@ -192,7 +198,7 @@ fn a_new_purchase_creates_a_book_with_its_edition_and_receipt() {
     let edition = json!({"id": "new-edition", "owned": true, "isbns": ["9780262033848"],
         "publisher": "出版社"});
     let applied = json!({"requestId": REQUEST, "clientId": CLIENT, "inputHash": HASH,
-        "appliedAt": "2025-11-26T00:00:00.000Z", "bookId": "new-book", "editionId": "new-edition"});
+        "appliedAtMs": NOW, "bookId": "new-book", "editionId": "new-edition"});
     assert_eq!(
         planned,
         json!({
@@ -246,19 +252,9 @@ fn buying_a_stored_edition_fills_only_blank_values_and_records_the_receipt() {
 
 #[test]
 fn receipts_expire_seven_days_after_they_were_applied() {
-    let applied = |at: &str| {
-        let mut receipt = receipt(HASH, "book");
-        receipt["appliedAt"] = json!(at);
-        receipt
-    };
     let request: ExpiryRequest = serde_json::from_value(json!({
         "now": NOW,
-        "receipts": [
-            applied("2025-11-19T00:00:00.000Z"),
-            applied("2025-11-18T23:59:59.999Z"),
-            applied("2025-11-18T00:00:00Z"),
-            applied("not a time"),
-        ],
+        "appliedAtMs": [NOW - 7 * DAY, NOW - 7 * DAY - 1, NOW - 8 * DAY, null],
     }))
     .expect("decode expiry request");
     assert_eq!(

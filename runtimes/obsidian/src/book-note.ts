@@ -267,6 +267,7 @@ export function editEdition(raw: string, input: EditionRecord): string {
   return saved;
 }
 
+/** 独自項目を一つ足す、変える、または取り除く。変えてよいかはcoreが本ページの最新の内容で決める。 */
 export function updateCustomField(
   raw: string,
   baseline: CustomField | undefined,
@@ -275,12 +276,6 @@ export function updateCustomField(
   const { header, managed, book } = parseNote(raw);
   const fields = [...(book.customFields ?? [])];
   const index = fields.findIndex(({ name }) => name === baseline?.name);
-  if (baseline && JSON.stringify(fields[index]) !== JSON.stringify(baseline)) {
-    throw new BookNoteError("conflict", "指定した独自項目が変更されています。");
-  }
-  if (input && fields.some(({ name }, position) => position !== index && name === input.name)) {
-    throw new BookNoteError("conflict", "同じ名前の独自項目があります。");
-  }
   const field = input ? decodeCustomField(input) : undefined;
   if (index >= 0) fields.splice(index, 1, ...(field ? [field] : []));
   else if (field) fields.push(field);

@@ -2,6 +2,13 @@
 //!
 //! The serde names are the wire contract: the TypeScript declarations are generated from them.
 
+mod management;
+
+pub use management::{
+    BookStep, BooksRequest, CopiesRequest, CustomField, ManagementCommand, ManagementPlan,
+    ManagementRequest, MissingCopies, MoveBackup, MoveCopy, MoveMarker, MovePlan, MoveRequest,
+    MoveSource, MoveStage, SettledShelf, ShelfBook, StepRequest,
+};
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
@@ -66,19 +73,39 @@ pub struct Book {
     pub(crate) editions: Vec<Edition>,
     /// Purchases already applied to this book, kept to recognise a retried request.
     pub(crate) applied_purchases: Vec<Receipt>,
-    /// An edition move recorded on this book has not settled.
-    pub(crate) pending_move: bool,
+    /// The edition move recorded on this book that has not settled.
+    #[tsify(optional)]
+    pub(crate) pending_move: Option<MoveMarker>,
+    /// Fields the user added to the book; only management needs them.
+    #[serde(default)]
+    pub(crate) custom_fields: Vec<CustomField>,
+}
+
+impl Book {
+    pub(crate) fn edition(&self, id: &str) -> Option<&Edition> {
+        self.editions.iter().find(|edition| edition.id == id)
+    }
+
+    pub(crate) fn has_edition(&self, id: &str) -> bool {
+        self.edition(id).is_some()
+    }
+
+    pub(crate) const fn moving(&self) -> bool {
+        self.pending_move.is_some()
+    }
 }
 
 /// An edition of a stored book.
-#[derive(Deserialize, Tsify)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Tsify)]
 #[serde(rename_all = "camelCase")]
 pub struct Edition {
     pub(crate) id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[tsify(optional)]
     pub(crate) label: Option<String>,
     pub(crate) owned: bool,
     pub(crate) isbns: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[tsify(optional)]
     pub(crate) archived_at: Option<String>,
     #[serde(default)]
@@ -86,17 +113,22 @@ pub struct Edition {
 }
 
 /// Edition facts that only fill gaps; they never identify an edition.
-#[derive(Default, Deserialize, Tsify)]
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
 #[serde(rename_all = "camelCase")]
 pub struct Details {
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[tsify(optional)]
     pub(crate) publisher: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[tsify(optional)]
     pub(crate) published_on: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[tsify(optional)]
     pub(crate) cover: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[tsify(optional)]
     pub(crate) purchased_on: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[tsify(optional)]
     pub(crate) purchased_from: Option<String>,
 }
@@ -218,16 +250,28 @@ pub struct PurchaseKey {
     pub(crate) issued_at: Option<f64>,
 }
 
-/// The record that a purchase request was applied, stored with the book it changed.
-#[derive(Clone, Serialize, Deserialize, Tsify)]
+/// The record that a purchase request was applied, as stored with the book it changed. Recognising
+/// a retried request needs no time, so the stored time stays with the runtime.
+#[derive(Deserialize, Tsify)]
 #[serde(rename_all = "camelCase")]
 pub struct Receipt {
     pub(crate) request_id: String,
     pub(crate) client_id: String,
     /// The runtime's fingerprint of the request contents.
     pub(crate) input_hash: String,
-    /// When the purchase was applied, as an ISO 8601 UTC instant.
-    pub(crate) applied_at: String,
+    pub(crate) book_id: String,
+    pub(crate) edition_id: String,
+}
+
+/// The record to store for a purchase this change applies.
+#[derive(Clone, Serialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct ReceiptWrite {
+    pub(crate) request_id: String,
+    pub(crate) client_id: String,
+    pub(crate) input_hash: String,
+    /// When the purchase was applied, in milliseconds since the epoch: the runtime clock it sent.
+    pub(crate) applied_at_ms: i64,
     pub(crate) book_id: String,
     pub(crate) edition_id: String,
 }
@@ -317,7 +361,7 @@ pub struct NewBook {
     pub(crate) authors: Vec<String>,
     pub(crate) wanted: bool,
     pub(crate) editions: Vec<EditionWrite>,
-    pub(crate) applied_purchases: Vec<Receipt>,
+    pub(crate) applied_purchases: Vec<ReceiptWrite>,
 }
 
 /// The wish, and optionally the edition and receipt, to write to one book.
@@ -330,7 +374,7 @@ pub struct BookWrite {
     pub(crate) edition: Option<EditionWrite>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[tsify(optional)]
-    pub(crate) receipt: Option<Receipt>,
+    pub(crate) receipt: Option<ReceiptWrite>,
 }
 
 /// An edition to add, or the ownership and blank values to write to a stored edition.
@@ -386,11 +430,14 @@ pub enum Reconciliation {
     Unknown,
 }
 
-/// Receipts to check against the retention period.
+/// When each stored receipt was applied, to check against the retention period.
 #[derive(Deserialize, Tsify)]
 #[serde(rename_all = "camelCase")]
 pub struct ExpiryRequest {
-    pub(crate) receipts: Vec<Receipt>,
+    /// Milliseconds since the epoch, in the runtime's order of receipts; `null` when the runtime
+    /// cannot read the stored time.
+    #[tsify(type = "(number | null)[]")]
+    pub(crate) applied_at_ms: Vec<Option<f64>>,
     /// The runtime clock in milliseconds since the epoch.
     pub(crate) now: i64,
 }

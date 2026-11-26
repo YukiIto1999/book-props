@@ -68,6 +68,11 @@ pub(crate) fn canonical_isbns(values: &[String]) -> Result<Vec<String>, &str> {
     Ok(isbns)
 }
 
+/// The ISBNs are already canonical ISBN-13s without duplicates, as a stored edition holds them.
+pub(crate) fn canonical(values: &[String]) -> bool {
+    canonical_isbns(values).is_ok_and(|isbns| isbns == values)
+}
+
 /// ISBN symbols with hyphens and whitespace removed, upper-cased; `None` if not an ISBN shape.
 fn isbn_symbols(text: &str) -> Option<([u8; 13], usize)> {
     let mut bytes = [0; 13];

@@ -1,11 +1,4 @@
-import {
-  change,
-  editionCollision,
-  hasEdition,
-  Stop,
-  type BookContext,
-  type Scope,
-} from "./book-change.ts";
+import { change, Stop, type BookContext, type Scope } from "./book-change.ts";
 import { BookNoteError } from "./book-note-error.ts";
 import {
   editEdition,
@@ -13,12 +6,15 @@ import {
   setArchivedAt,
   updateCustomField,
   writeBookUpdate,
-  type BookRecord,
   type CustomField,
   type EditionRecord,
 } from "./book-note.ts";
-import { cancelMove, moveEdition, recoverMove } from "./edition-move.ts";
+import { decodeCustomField } from "./book-note-values.ts";
+import { recordEdition } from "./catalog-core.ts";
+import { readCatalog } from "./catalog-read.ts";
+import { runMove } from "./edition-move.ts";
 import { restoreMoveCopy } from "./edition-recovery.ts";
+import type { BookStep } from "./wasm.ts";
 
 export type Management =
   | { action: "editEdition"; bookId: string; baseline: EditionRecord; value: EditionRecord }
@@ -29,42 +25,20 @@ export type Management =
   | { action: "restoreMoveCopy"; bookId: string; editionId: string }
   | { action: "recoverMove" | "cancelMove"; bookId: string };
 export type ManagementResult = "saved" | "conflict" | "unavailable" | "pending";
-type Command<A extends Management["action"]> = Extract<Management, { action: A }>;
-type BookChange = Exclude<Management, { action: "recoverMove" | "cancelMove" }>;
+type Step<K extends BookStep["kind"]> = Extract<BookStep, { kind: K }>;
 
-async function addEdition(
-  { context, source, entries }: Scope,
-  { value }: Command<"addEdition">,
-): Promise<ManagementResult> {
-  const clashes = (book: BookRecord) => editionCollision(book, value) || hasEdition(book, value.id);
-  if (source.book.archivedAt || value.archivedAt || entries.some(({ book }) => clashes(book))) {
-    return "conflict";
-  }
-  const path = await change(context, source, (raw, book) => {
-    if (book.archivedAt || book.pendingMove || clashes(book)) throw new Stop("conflict");
-    return writeBookUpdate(raw, { wanted: book.wanted, edition: value });
-  });
+async function addEdition({ context, source }: Scope, step: Step<"addEdition">) {
+  const value = recordEdition(step.edition);
+  const path = await change(context, source, step, (raw, book) =>
+    writeBookUpdate(raw, { wanted: book.wanted, edition: value }),
+  );
   const saved = readScopedNote(await context.files.read(path));
-  return saved && hasEdition(saved, value.id) ? "saved" : "pending";
+  return saved?.editions.some(({ id }) => id === value.id) ? "saved" : "pending";
 }
 
-async function reviseEdition(
-  { context, source, entries }: Scope,
-  { baseline, value }: Command<"editEdition">,
-): Promise<ManagementResult> {
-  const invalid =
-    source.book.archivedAt ||
-    baseline.id !== value.id ||
-    baseline.archivedAt !== value.archivedAt ||
-    entries.some(({ book }) => editionCollision(book, value));
-  if (invalid) return "conflict";
-  const path = await change(context, source, (raw, book) => {
-    const old = book.editions.find(({ id }) => id === value.id);
-    if (book.archivedAt || book.pendingMove || JSON.stringify(old) !== JSON.stringify(baseline)) {
-      throw new Stop("conflict");
-    }
-    return editEdition(raw, value);
-  });
+async function reviseEdition({ context, source }: Scope, step: Step<"editEdition">) {
+  const value = recordEdition(step.edition);
+  const path = await change(context, source, step, (raw) => editEdition(raw, value));
   const saved = readScopedNote(await context.files.read(path));
   const actual = saved?.editions.find(({ id }) => id === value.id);
   return actual && actual.owned === value.owned && actual.publisher === value.publisher
@@ -72,81 +46,61 @@ async function reviseEdition(
     : "pending";
 }
 
-async function changeCustomField(
-  { context, source }: Scope,
-  { baseline, value }: Command<"updateCustomField">,
-): Promise<ManagementResult> {
-  if (source.book.archivedAt || (!baseline && !value)) return "conflict";
-  const path = await change(context, source, (raw, book) => {
-    if (book.archivedAt || book.pendingMove) throw new Stop("conflict");
-    return updateCustomField(raw, baseline, value);
-  });
+async function changeCustomField({ context, source }: Scope, step: Step<"updateCustomField">) {
+  const { baseline, value } = step;
+  const path = await change(context, source, step, (raw) =>
+    updateCustomField(raw, baseline, value),
+  );
   const book = readScopedNote(await context.files.read(path));
   if (book?.id !== source.book.id) return "pending";
   const field = book.customFields?.find(({ name }) => name === (value?.name ?? baseline?.name));
-  return JSON.stringify(field) === JSON.stringify(value) ? "saved" : "pending";
-}
-
-function archiveTarget(
-  book: BookRecord,
-  editionId: string | undefined,
-): Readonly<{ archivedAt?: string }> | undefined {
-  return editionId ? book.editions.find(({ id }) => id === editionId) : book;
+  const expected = value && decodeCustomField(value);
+  return JSON.stringify(field) === JSON.stringify(expected) ? "saved" : "pending";
 }
 
 /** 本または版をアーカイブ、または元に戻す。記録は消さず、アーカイブした時刻だけを書き換える。 */
-async function setArchive(
-  { context, source }: Scope,
-  command: Command<"archive" | "restore">,
-): Promise<ManagementResult> {
-  const { editionId } = command;
-  const old = archiveTarget(source.book, editionId);
-  if (!old || (editionId && source.book.archivedAt)) return "conflict";
-  const at = command.action === "archive" ? (old.archivedAt ?? new Date().toISOString()) : null;
-  const path = await change(context, source, (raw, book) => {
-    const current = archiveTarget(book, editionId);
-    if (
-      !current ||
-      current.archivedAt !== old.archivedAt ||
-      book.pendingMove ||
-      (editionId && book.archivedAt)
-    ) {
-      throw new Stop("conflict");
-    }
-    return setArchivedAt(raw, editionId, at);
-  });
+async function setArchive({ context, source }: Scope, step: Step<"setArchivedAt">) {
+  const { editionId, archivedAt } = step;
+  const path = await change(context, source, step, (raw) =>
+    setArchivedAt(raw, editionId, archivedAt ?? null),
+  );
   const saved = readScopedNote(await context.files.read(path));
-  const target = saved?.id === source.book.id ? archiveTarget(saved, editionId) : undefined;
-  return target && target.archivedAt === (at ?? undefined) ? "saved" : "pending";
+  const target =
+    saved?.id !== source.book.id
+      ? undefined
+      : editionId
+        ? saved.editions.find(({ id }) => id === editionId)
+        : saved;
+  return target && target.archivedAt === archivedAt ? "saved" : "pending";
 }
 
-async function applyChange(scope: Scope, command: BookChange): Promise<ManagementResult> {
-  if (scope.entries.some(({ book }) => book.pendingMove)) return "pending";
-  switch (command.action) {
-    case "move":
-      return moveEdition(scope, command);
-    case "restoreMoveCopy":
-      return restoreMoveCopy(scope, command.editionId);
+/** coreが決めた一つの変更を、操作の対象の本に書く。 */
+async function write(scope: Scope, step: BookStep): Promise<ManagementResult> {
+  switch (step.kind) {
     case "addEdition":
-      return addEdition(scope, command);
+      return addEdition(scope, step);
     case "editEdition":
-      return reviseEdition(scope, command);
+      return reviseEdition(scope, step);
     case "updateCustomField":
-      return changeCustomField(scope, command);
-    case "archive":
-    case "restore":
-      return setArchive(scope, command);
+      return changeCustomField(scope, step);
+    case "setArchivedAt":
+      return setArchive(scope, step);
+    default:
+      throw new Error(`操作の計画に、書けない変更があります: ${step.kind}`);
   }
 }
 
-function dispatch(scope: Scope, command: Management): Promise<ManagementResult> {
-  switch (command.action) {
-    case "recoverMove":
-      return recoverMove(scope);
-    case "cancelMove":
-      return cancelMove(scope);
-    default:
-      return applyChange(scope, command);
+async function dispatch(scope: Scope, command: Management): Promise<ManagementResult> {
+  if (command.action === "restoreMoveCopy") return restoreMoveCopy(scope, command.editionId);
+  const plan = scope.context.rules.manage(command, scope.entries);
+  switch (plan.kind) {
+    case "conflict":
+    case "pending":
+      return plan.kind;
+    case "write":
+      return write(scope, plan.step);
+    case "move":
+      return runMove(scope, command, plan.stages);
   }
 }
 
@@ -162,10 +116,10 @@ export async function manageBooks(
   const progress = { moveStarted: false };
   try {
     if (!context.active()) return "unavailable";
-    const entries = await context.entries();
+    const { value: entries, versions } = await readCatalog(context.files);
     const source = entries.find(({ book }) => book.id === command.bookId);
     if (!source) return "conflict";
-    return await dispatch({ context, source, entries, progress }, command);
+    return await dispatch({ context, source, entries, versions, progress }, command);
   } catch (error: unknown) {
     return progress.moveStarted ? "pending" : failureOf(error);
   }

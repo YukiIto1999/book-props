@@ -14,7 +14,6 @@ fn request(action: &str, evidence: Value, mut books: Value) -> Value {
     // Matching ignores purchase receipts and pending moves; the stored books carry none here.
     for book in books.as_array_mut().expect("books") {
         book["appliedPurchases"] = json!([]);
-        book["pendingMove"] = json!(false);
     }
     let input: CatalogRequest =
         serde_json::from_value(json!({ "action": action, "product": evidence, "books": books }))

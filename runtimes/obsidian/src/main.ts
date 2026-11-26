@@ -51,7 +51,7 @@ export default class BookProps extends Plugin {
   };
 
   override async onload(): Promise<void> {
-    this.core = startCatalogCore();
+    this.core = await startCatalogCore();
     const saved: unknown = await this.loadData();
     this.config = decodeConfiguration(saved);
     this.registerEvent(this.app.vault.on("modify", (file) => this.fileVersions.delete(file)));

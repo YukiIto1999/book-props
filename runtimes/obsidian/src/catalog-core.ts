@@ -1,20 +1,45 @@
-import type { AppliedPurchase, EditionRecord } from "./book-note.ts";
+import type { Management } from "./book-management.ts";
+import type {
+  AppliedPurchase,
+  BookRecord,
+  BookUpdate,
+  CustomField,
+  EditionRecord,
+  PendingMove,
+} from "./book-note.ts";
+import { readEditionBackup } from "./book-note-parse.ts";
 import type { Operation, PurchaseKey, StoredBook } from "./catalog.ts";
 import { optionalField } from "./optional-field.ts";
 import type {
   Admission,
   Book,
+  BooksRequest,
+  BookStep,
+  BookWrite,
   CatalogCore,
   CatalogRequest,
   ChangePlan,
   ChangeRequest,
+  CopiesRequest,
+  CustomField as WireField,
   Edition,
   ExpiryRequest,
   IsbnList,
+  ManagementCommand,
+  ManagementPlan,
+  ManagementRequest,
+  MoveCopy as SavedCopy,
+  MoveMarker,
+  MovePlan,
+  MoveRequest,
+  NewBook,
   Outcome,
   ReceiptExpiry,
+  ReceiptWrite,
   ReconcileRequest,
   Reconciliation,
+  SettledShelf,
+  StepRequest,
 } from "./wasm.ts";
 
 /** 新しい本と版に付けるIDと、購入の記録に残す時刻。coreは乱数と時計を持たないので、ここで渡す。 */
@@ -22,7 +47,7 @@ export type Stamp = Readonly<{ now: number; newBookId: string; newEditionId: str
 /** 最初に読んだときに立てた計画の版。書き込む前に読み直した内容で、同じ版になるかを確かめる。 */
 export type Commit = Stamp & Readonly<{ expected: string }>;
 
-function catalogEdition({
+export function catalogEdition({
   id,
   owned,
   isbns,
@@ -40,8 +65,31 @@ function catalogEdition({
   };
 }
 
-function catalogBooks(entries: readonly StoredBook[]): Book[] {
-  return entries.map(({ book }) => ({
+/** coreが書くと決めた版を、本ページに書く版の形に戻す。 */
+export function recordEdition({ details, ...edition }: Edition): EditionRecord {
+  return { ...edition, ...details };
+}
+
+/** 本の移動記録。控えがあれば、YAMLとして読んだ版を添える。 */
+export function catalogMarker({
+  editionId,
+  destinationId,
+  digest,
+  backup,
+}: PendingMove): MoveMarker {
+  const recorded =
+    backup === undefined
+      ? undefined
+      : { signature: backup, edition: catalogEdition(readEditionBackup(backup).edition) };
+  return { editionId, destinationId, digest, ...optionalField("backup", recorded) };
+}
+
+function catalogField(field: CustomField): WireField {
+  return field.kind === "choice" ? { ...field, choices: [...field.choices] } : { ...field };
+}
+
+function catalogBook(book: BookRecord): Book {
+  return {
     id: book.id,
     title: book.title,
     authors: [...book.authors],
@@ -49,8 +97,13 @@ function catalogBooks(entries: readonly StoredBook[]): Book[] {
     ...optionalField("archivedAt", book.archivedAt),
     editions: book.editions.map(catalogEdition),
     appliedPurchases: [...book.appliedPurchases],
-    pendingMove: book.pendingMove !== undefined,
-  }));
+    ...optionalField("pendingMove", book.pendingMove && catalogMarker(book.pendingMove)),
+    customFields: (book.customFields ?? []).map(catalogField),
+  };
+}
+
+function catalogBooks(entries: readonly StoredBook[]): Book[] {
+  return entries.map(({ book }) => catalogBook(book));
 }
 
 /** 目録の判定に渡す要求を、操作と書籍の保存範囲にある本から作る。 */
@@ -71,6 +124,45 @@ function catalogRequest(
     books: catalogBooks(entries),
     ...optionalField("selection", selection),
   };
+}
+
+function managementCommand(command: Management): ManagementCommand {
+  switch (command.action) {
+    case "editEdition":
+      return {
+        ...command,
+        baseline: catalogEdition(command.baseline),
+        value: catalogEdition(command.value),
+      };
+    case "addEdition":
+      return { ...command, value: catalogEdition(command.value) };
+    case "updateCustomField":
+      return {
+        action: command.action,
+        bookId: command.bookId,
+        ...optionalField("baseline", command.baseline && catalogField(command.baseline)),
+        ...optionalField("value", command.value && catalogField(command.value)),
+      };
+    default:
+      return command;
+  }
+}
+
+function appliedPurchase({ appliedAtMs, ...receipt }: ReceiptWrite): AppliedPurchase {
+  return { ...receipt, appliedAt: new Date(appliedAtMs).toISOString() };
+}
+
+/** coreが立てた書き込みを、本ページに書く値にする。時刻の書き方は本ページの形式が決める。 */
+export function bookUpdate({ wanted, edition, receipt }: BookWrite): BookUpdate {
+  return {
+    wanted,
+    ...optionalField("edition", edition),
+    ...optionalField("receipt", receipt && appliedPurchase(receipt)),
+  };
+}
+
+export function newBookRecord(book: NewBook): BookRecord {
+  return { ...book, appliedPurchases: book.appliedPurchases.map(appliedPurchase) };
 }
 
 /**
@@ -119,9 +211,52 @@ export class CatalogRules {
     return this.core.reconcile(JSON.stringify(request));
   }
 
-  /** 購入の記録ごとに、保持期間を過ぎたか。 */
+  /** 購入の記録ごとに、保持期間を過ぎたか。読めない時刻の記録は残す。 */
   expired(receipts: readonly AppliedPurchase[], now: number): ReceiptExpiry["expired"] {
-    const request: ExpiryRequest = { receipts: [...receipts], now };
+    const appliedAtMs = receipts.map(({ appliedAt }) => {
+      const at = Date.parse(appliedAt);
+      return Number.isNaN(at) ? null : at;
+    });
+    const request: ExpiryRequest = { appliedAtMs, now };
     return this.core.expiredReceipts(JSON.stringify(request)).expired;
+  }
+
+  /** 管理の操作が、読んだ本でどうなるか。アーカイブの時刻はここで時計から渡す。 */
+  manage(command: Management, entries: readonly StoredBook[], copy?: SavedCopy): ManagementPlan {
+    const request: ManagementRequest = {
+      command: managementCommand(command),
+      books: catalogBooks(entries),
+      stamp: new Date().toISOString(),
+      ...optionalField("copy", copy),
+    };
+    return this.core.planManagement(JSON.stringify(request));
+  }
+
+  /** 本ページの最新の内容に、この変更を書いてよいか。 */
+  allows(latest: BookRecord, step: BookStep): boolean {
+    const request: StepRequest = { latest: catalogBook(latest), step };
+    return this.core.allowsStep(JSON.stringify(request));
+  }
+
+  /** 移動元に記録された版の移動を、どこから続けるか。 */
+  resume(entries: readonly StoredBook[], source: BookRecord, latest: BookRecord): MovePlan {
+    const request: MoveRequest = {
+      books: catalogBooks(entries),
+      source: catalogBook(source),
+      latest: catalogBook(latest),
+    };
+    return this.core.planMove(JSON.stringify(request));
+  }
+
+  /** 移動が終わるまで、本棚でどの本の版の見せ方を変えるか。 */
+  settle(entries: readonly StoredBook[]): SettledShelf {
+    const request: BooksRequest = { books: catalogBooks(entries) };
+    return this.core.settleShelf(JSON.stringify(request));
+  }
+
+  /** Vaultの外に控えた版ごとに、どの本にも見当たらないか。 */
+  missing(entries: readonly StoredBook[], editionIds: readonly string[]): boolean[] {
+    const request: CopiesRequest = { books: catalogBooks(entries), editionIds: [...editionIds] };
+    return this.core.missingMoveCopies(JSON.stringify(request)).missing;
   }
 }

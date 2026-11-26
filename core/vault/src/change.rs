@@ -4,9 +4,9 @@
 use crate::matching::inspect;
 use crate::model::{
     Action, Book, BookWrite, ChangePlan, ChangeRequest, Decision, Edition, EditionPatch,
-    EditionWrite, NewBook, Outcome, Product, Receipt, WritePlan,
+    EditionWrite, NewBook, Outcome, Product, ReceiptWrite, WritePlan,
 };
-use crate::receipt::{Replay, format_instant, replay};
+use crate::receipt::{Replay, replay};
 
 /// Decides what one read of the catalog leads to.
 ///
@@ -26,7 +26,7 @@ pub fn plan_change(request: &ChangeRequest) -> ChangePlan {
         )
         .map(replay_plan)
     };
-    let pending = books.iter().any(|book| book.pending_move);
+    let pending = books.iter().any(Book::moving);
     let Some(expected) = request.expected.as_deref() else {
         if let Some(plan) = replayed() {
             return plan;
@@ -174,18 +174,22 @@ fn stored_edition<'a>(book: Option<&'a Book>, edition_id: Option<&str>) -> Optio
 }
 
 /// The receipt for a purchase that settles on an edition.
-fn receipt(request: &ChangeRequest, book_id: &str, edition_id: Option<&str>) -> Option<Receipt> {
+fn receipt(
+    request: &ChangeRequest,
+    book_id: &str,
+    edition_id: Option<&str>,
+) -> Option<ReceiptWrite> {
     let purchase = request.purchase.as_ref()?;
     let input_hash = request
         .input_hash
         .as_deref()
         .filter(|hash| !hash.is_empty())?;
     let edition_id = edition_id.filter(|id| !id.is_empty())?;
-    Some(Receipt {
+    Some(ReceiptWrite {
         request_id: purchase.request_id.clone(),
         client_id: purchase.client_id.clone(),
         input_hash: input_hash.to_owned(),
-        applied_at: format_instant(request.now),
+        applied_at_ms: request.now,
         book_id: book_id.to_owned(),
         edition_id: edition_id.to_owned(),
     })
@@ -213,7 +217,7 @@ fn new_book(
     id: &str,
     wanted: bool,
     edition: Option<EditionWrite>,
-    receipt: Option<Receipt>,
+    receipt: Option<ReceiptWrite>,
 ) -> NewBook {
     let product = &request.catalog.product;
     NewBook {

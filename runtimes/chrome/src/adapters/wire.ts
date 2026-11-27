@@ -1,10 +1,19 @@
 import { siteOf } from "@book-props/book-products";
 import { product, response, type Product, type Response } from "@book-props/vault-contract";
-import type { ConnectionStatus, PageAnswer, PageState, Reply } from "../extension/outcomes.ts";
-import type { PopupAction } from "../extension/popup.ts";
+import type {
+  ConnectionStatus,
+  PageAction,
+  PageAnswer,
+  PageState,
+  Reply,
+} from "../extension/outcomes.ts";
+import { isPageKey } from "../extension/page-key.ts";
 
 // Messages exchanged between the extension's contexts over chrome.runtime and chrome.tabs messaging.
-export type PopupMessage = { kind: "inspect" | PopupAction };
+// An action on the page's book names the page the popup showed, as `inspect` gave it.
+export type PopupMessage =
+  | { kind: "inspect" | "reconcile" | "forget" }
+  | { kind: PageAction; page: string };
 export type OptionsMessage = { kind: "status" | "disconnect" } | { kind: "pair"; grantId: string };
 // A content script asks for consent with `consent` before it reads its page, and sends `unmark` only after it checked a book.
 export type PageMessage = { kind: "check"; product: Product } | { kind: "consent" | "unmark" };
@@ -25,7 +34,8 @@ export function decodeResponse(value: unknown, fallback: Response): Reply {
     kind === "forgotten" ||
     kind === "scopeMismatch" ||
     kind === "manualCheck" ||
-    kind === "consentRequired"
+    kind === "consentRequired" ||
+    kind === "pageChanged"
   )
     return { kind };
   const parsed = response.safeParse(value);
@@ -38,9 +48,11 @@ const bookHeading = product.pick({ title: true, authors: true });
 export function decodePageState(value: unknown): PageState | undefined {
   if (typeof value !== "object" || value === null) return undefined;
   const book = bookHeading.safeParse(messageField(value, "book"));
+  const page = messageField(value, "page");
   return {
     supported: messageField(value, "supported") === true,
     ...(book.success ? { book: book.data } : {}),
+    ...(isPageKey(page) ? { page } : {}),
     pending: messageField(value, "pending") === true,
     reply: decodeResponse(messageField(value, "reply"), { kind: "unavailable" }),
   };

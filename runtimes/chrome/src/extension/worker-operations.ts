@@ -3,6 +3,7 @@ import type { BadgeClaim, TabBadges } from "./badge.ts";
 import type { Consent } from "./consent.ts";
 import {
   consentRequired,
+  pageChanged,
   unavailable,
   type ActivePage,
   type BookChange,
@@ -11,6 +12,7 @@ import {
   type PageState,
   type Reply,
 } from "./outcomes.ts";
+import { pageKey } from "./page-key.ts";
 import type { VaultClient } from "./vault-client.ts";
 
 /** Asks product page tabs which book they show, shows them a re-check result, and tells them about consent. */
@@ -28,8 +30,10 @@ export type WorkerOperations = {
   /** Checks the book a product page in `tabId` reads, and marks the tab's toolbar icon with the answer. */
   check(book: Product, tabId: number): Promise<Reply>;
   inspect(): Promise<PageState>;
-  open(): Promise<Reply>;
-  change(kind: BookChange): Promise<Reply>;
+  /** Opens the book of the page named `page` in Obsidian; `page` is what `inspect` gave, and undefined names no page. */
+  open(page: string | undefined): Promise<Reply>;
+  /** Changes the book of the page named `page`, unless the active tab has moved on from it. */
+  change(kind: BookChange, page: string | undefined): Promise<Reply>;
   reconcile(): Promise<Reply>;
   forget(): Promise<Reply>;
   status(): Promise<ConnectionStatus>;
@@ -76,39 +80,52 @@ export function workerOperations({
     inspectFor(tabId === undefined ? undefined : badges.claim(tabId), book);
   const agreed = async <T>(work: () => Promise<T>, refusal: T): Promise<T> =>
     (await consent.given()) ? work() : refusal;
+  // Reads the active tab again: an action runs only on the page and book the popup showed.
+  const shownPage = async (page: string | undefined): Promise<ActivePage | undefined> => {
+    const active = await tabs.active();
+    return page !== undefined && (await pageKey(active)) === page ? active : undefined;
+  };
   return {
     consented: consent.given,
     check: (book, tabId) => agreed(() => inspectTab(tabId, book), refusedReply),
     inspect: () =>
       agreed(async () => {
-        const page = await tabs.active();
+        const active = await tabs.active();
         const pending = await client.hasPending();
-        const reply = await inspectTab(page.tabId, page.product);
+        const reply = await inspectTab(active.tabId, active.product);
         // Of the book, the popup gets only the title and authors the page gave.
-        const { title, authors } = page.product ?? {};
-        const book = page.product && {
+        const { title, authors } = active.product ?? {};
+        const book = active.product && {
           ...(title ? { title } : {}),
           ...(authors ? { authors } : {}),
         };
-        return { supported: Boolean(page.url), ...(book ? { book } : {}), pending, reply };
+        return {
+          supported: Boolean(active.url),
+          ...(book ? { book } : {}),
+          page: await pageKey(active),
+          pending,
+          reply,
+        };
       }, refusedPage),
-    open: () =>
+    open: (page) =>
       agreed(async () => {
-        const page = await tabs.active();
-        return client.send({ action: "open", product: page.product ?? {} });
+        const active = await shownPage(page);
+        if (!active) return pageChanged;
+        return client.send({ action: "open", product: active.product ?? {} });
       }, refusedReply),
     // A saved change re-marks the tab even if the popup closes before it asks again. The tab is claimed when the
     // change starts, so a page load, a move off the book or a withdrawn consent meanwhile skips that check and
     // keeps the old book's dot off; the change's outcome stands whether or not the check gets an answer.
-    change: (kind) =>
+    change: (kind, page) =>
       agreed(async () => {
-        const page = await tabs.active();
-        if (!page.product) return unavailable;
-        const claim = page.tabId === undefined ? undefined : badges.claim(page.tabId);
-        const outcome = await client.changeBook(kind, page.product);
+        const active = await shownPage(page);
+        if (!active) return pageChanged;
+        if (!active.product) return unavailable;
+        const claim = active.tabId === undefined ? undefined : badges.claim(active.tabId);
+        const outcome = await client.changeBook(kind, active.product);
         const saved = outcome.kind === "saved" || outcome.kind === "replayed";
         if (saved && claim && (await consent.given()) && claim.current())
-          await inspectFor(claim, page.product).catch(() => undefined);
+          await inspectFor(claim, active.product).catch(() => undefined);
         return outcome;
       }, refusedReply),
     reconcile: () => agreed(client.reconcilePending, refusedReply),

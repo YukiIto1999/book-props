@@ -1,74 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { decodePageState } from "../src/adapters/wire.ts";
-import { badgeFor, TabBadges } from "../src/extension/badge.ts";
+import { badgeFor } from "../src/extension/badge.ts";
 import { consentRequired } from "../src/extension/outcomes.ts";
 import { PageWatch } from "../src/extension/page-watch.ts";
 import { Popup } from "../src/extension/popup.ts";
 import { statusLabel } from "../src/extension/status.ts";
-import { workerOperations } from "../src/extension/worker-operations.ts";
 import { markIcon } from "../src/views/toolbar-dot.ts";
-
-const productUrl = "https://www.amazon.co.jp/dp/4000000000";
-const book = { title: "吾輩は猫である", authors: ["夏目漱石"], isbns: ["9784101010014"] };
-const observed = (ownership, wanted) => ({ kind: "observed", ownership, wanted });
-const settle = () => new Promise((resolve) => setImmediate(resolve));
-
-// A toolbar that keeps each tab's tone, as chrome.action keeps each tab's icon.
-function toolbar() {
-  const tones = new Map();
-  return {
-    tones,
-    show: async (tabId, badge) => {
-      if (badge) tones.set(tabId, badge.tone);
-      else tones.delete(tabId);
-    },
-    clearAll: async () => tones.clear(),
-  };
-}
-
-// The worker over a Vault whose answers and saves the test releases one by one, and a consent the test sets.
-function worker({ active = { tabId: 1, url: productUrl, product: book } } = {}) {
-  const icon = toolbar();
-  const answers = [];
-  const saves = [];
-  const consent = { agreed: true, given: async () => consent.agreed };
-  const client = {
-    send: () => {
-      const answer = Promise.withResolvers();
-      answers.push(answer);
-      return answer.promise;
-    },
-    hasPending: async () => false,
-    changeBook: () => {
-      const save = Promise.withResolvers();
-      saves.push(save);
-      return save.promise;
-    },
-  };
-  const operations = workerOperations({
-    client,
-    tabs: {
-      active: async () => active,
-      inTab: async () => active,
-      show: async () => {},
-      consentChanged: async () => {},
-    },
-    badges: new TabBadges(icon),
-    consent,
-    disclose: async () => {},
-  });
-  return { operations, tones: icon.tones, answers, saves, consent };
-}
+import { book, observed, productUrl, settle, stubWorker as worker, until } from "./page-stubs.mjs";
 
 void test("a saved change marks its tab from a check afterwards, unless the tab or consent moved on meanwhile", async () => {
   // Nothing newer: the check after the save marks the tab.
   const kept = worker();
   kept.tones.set(1, "wanted");
-  const purchase = kept.operations.change("purchase");
-  await settle();
+  const purchase = kept.operations.change("purchase", await kept.key());
+  await until(() => kept.saves.length);
   kept.saves[0].resolve({ kind: "saved" });
-  await settle();
+  await until(() => kept.answers.length);
   kept.answers[0].resolve(observed("sameEdition", true));
   assert.deepEqual(await purchase, { kind: "saved" });
   assert.equal(kept.tones.get(1), "owned");
@@ -76,8 +24,8 @@ void test("a saved change marks its tab from a check afterwards, unless the tab 
   // The page moves off the book while the save is on its way.
   const moved = worker();
   moved.tones.set(1, "wanted");
-  const wish = moved.operations.change("setWish");
-  await settle();
+  const wish = moved.operations.change("setWish", await moved.key());
+  await until(() => moved.saves.length);
   await moved.operations.unmark(1);
   moved.saves[0].resolve({ kind: "saved" });
   await settle();
@@ -88,8 +36,8 @@ void test("a saved change marks its tab from a check afterwards, unless the tab 
   // Consent is withdrawn while the save is on its way, and the marks are cleared.
   const withdrawn = worker();
   withdrawn.tones.set(1, "wanted");
-  const bought = withdrawn.operations.change("purchase");
-  await settle();
+  const bought = withdrawn.operations.change("purchase", await withdrawn.key());
+  await until(() => withdrawn.saves.length);
   withdrawn.consent.agreed = false;
   await withdrawn.operations.consentChanged();
   withdrawn.saves[0].resolve({ kind: "replayed" });
@@ -100,8 +48,8 @@ void test("a saved change marks its tab from a check afterwards, unless the tab 
 
   // Even before the withdrawal's notice clears the marks, nothing more is asked of the Vault.
   const unnoticed = worker();
-  const cleared = unnoticed.operations.change("clearWish");
-  await settle();
+  const cleared = unnoticed.operations.change("clearWish", await unnoticed.key());
+  await until(() => unnoticed.saves.length);
   unnoticed.consent.agreed = false;
   unnoticed.saves[0].resolve({ kind: "saved" });
   await settle();

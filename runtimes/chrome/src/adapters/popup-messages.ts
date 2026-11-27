@@ -13,10 +13,10 @@ export const popupRequests: PopupRequests = {
       return undefined;
     }
   },
-  async request(action, failure) {
-    const reply: unknown = await chrome.runtime.sendMessage({
-      kind: action,
-    } satisfies PopupMessage);
+  async request(action, page, failure) {
+    const message: PopupMessage =
+      action === "reconcile" || action === "forget" ? { kind: action } : { kind: action, page };
+    const reply: unknown = await chrome.runtime.sendMessage(message);
     return decodeResponse(reply, failure);
   },
 };

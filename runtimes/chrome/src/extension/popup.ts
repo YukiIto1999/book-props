@@ -1,15 +1,18 @@
 import type { Response } from "@book-props/vault-contract";
 import type { ConnectionFolder } from "./options.ts";
-import type { BookChange, PageState, Reply } from "./outcomes.ts";
+import type { PageAction, PageState, Reply } from "./outcomes.ts";
 import { statusLabel } from "./status.ts";
 
-export type PopupAction = BookChange | "open" | "reconcile" | "forget";
+export type PopupAction = PageAction | "reconcile" | "forget";
 /** The popup's requests to the worker about the active tab. */
 export type PopupRequests = {
   /** The active tab's state; undefined when the worker cannot answer. */
   inspect(): Promise<PageState | undefined>;
-  /** Throws when the worker cannot be reached; an unreadable answer becomes `failure`. */
-  request(action: PopupAction, failure: Response): Promise<Reply>;
+  /**
+   * Asks for an action on the page named `page`, as `inspect` gave it; the pending purchase's actions ignore it.
+   * Throws when the worker cannot be reached; an unreadable answer becomes `failure`.
+   */
+  request(action: PopupAction, page: string, failure: Response): Promise<Reply>;
 };
 type PopupControls = {
   canPurchase: boolean;
@@ -35,6 +38,8 @@ export class Popup {
   private readonly folder: Pick<ConnectionFolder, "permission">;
   private readonly view: PopupView;
   private wanted = false;
+  // The page the popup shows, so that the worker acts only while the tab still shows it.
+  private page = "";
   private busy = false;
 
   constructor(
@@ -54,6 +59,7 @@ export class Popup {
       return;
     }
     const { reply, book } = state;
+    this.page = state.page ?? "";
     // Before consent the worker read nothing, so no action is offered and the popup only points to the disclosure.
     const agreed = reply.kind !== "consentRequired";
     this.wanted = reply.kind === "observed" && reply.wanted;
@@ -79,7 +85,9 @@ export class Popup {
     // A purchase whose reply is lost may still have been saved, so it stays unknown rather than unavailable.
     const failure: Response = action === "purchase" ? { kind: "unknown" } : { kind: "unavailable" };
     try {
-      const outcome = await this.requests.request(action, failure).catch((): Reply => failure);
+      const outcome = await this.requests
+        .request(action, this.page, failure)
+        .catch((): Reply => failure);
       await this.refresh(statusLabel(outcome, true));
     } finally {
       this.busy = false;

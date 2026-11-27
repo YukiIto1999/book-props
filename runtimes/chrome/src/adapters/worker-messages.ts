@@ -1,6 +1,7 @@
 import { siteOf } from "@book-props/book-products";
 import { product } from "@book-props/vault-contract";
 import { unavailable, type BookChange } from "../extension/outcomes.ts";
+import { isPageKey } from "../extension/page-key.ts";
 import type { WorkerOperations } from "../extension/worker-operations.ts";
 import { messageField } from "./wire.ts";
 
@@ -36,12 +37,19 @@ async function optionsRequest(
   return typeof grantId === "string" ? operations.pair(grantId) : { kind: "invalidRequest" };
 }
 
-async function popupRequest(operations: WorkerOperations, kind: string): Promise<unknown> {
+// A book action names the page the popup showed; a missing or malformed name counts as a page that changed.
+async function popupRequest(
+  operations: WorkerOperations,
+  kind: string,
+  message: unknown,
+): Promise<unknown> {
   if (kind === "reconcile") return operations.reconcile();
   if (kind === "forget") return operations.forget();
   if (kind === "inspect") return operations.inspect();
-  if (kind === "open") return operations.open();
-  return isBookChange(kind) ? operations.change(kind) : unavailable;
+  const field = messageField(message, "page");
+  const page = isPageKey(field) ? field : undefined;
+  if (kind === "open") return operations.open(page);
+  return isBookChange(kind) ? operations.change(kind, page) : unavailable;
 }
 
 // The sender decides which operations a message may reach; the payload's own claims never do.
@@ -61,7 +69,8 @@ async function receive(
     return productPageRequest(operations, tabId, kind, message);
   if (sender.url === chrome.runtime.getURL("options.html"))
     return optionsRequest(operations, kind, message);
-  if (sender.url === chrome.runtime.getURL("popup.html")) return popupRequest(operations, kind);
+  if (sender.url === chrome.runtime.getURL("popup.html"))
+    return popupRequest(operations, kind, message);
   return unavailable;
 }
 

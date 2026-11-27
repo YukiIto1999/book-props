@@ -42,6 +42,8 @@ export function statusLabel(reply: Reply, manual: boolean): string {
       return "Obsidian を開き、拡張の接続設定を確認してください。";
     case "conflict":
       return "競合を検出しました。対象をObsidianで確認してください。";
+    case "pageChanged":
+      return "開いているページの本が変わりました。書名を確かめてから、もう一度選んでください。";
     case "notSaved":
       return "保存しませんでした。";
     case "unavailable":

@@ -1,4 +1,4 @@
-import { FileSystemAdapter, Notice, Plugin, TFolder, normalizePath } from "obsidian";
+import { FileSystemAdapter, Notice, Plugin, TFile, TFolder, normalizePath } from "obsidian";
 import type { TAbstractFile } from "obsidian";
 import { bibliographySources, type BibliographySources } from "./adapters/bibliography-sources.ts";
 import { decodeConfiguration, type Configuration } from "./adapters/configuration.ts";
@@ -75,13 +75,20 @@ export default class BookProps extends Plugin {
     new Registration(this.app, services, product, intent).open();
   }
 
+  /** 変わったファイルの版を忘れ、書籍フォルダの本ページなら、手で書き換えた分類の番号に名前を合わせる。 */
+  private readonly modified = (file: TAbstractFile): void => {
+    this.fileVersions.delete(file);
+    if (file instanceof TFile && file.extension === "md" && file.path.startsWith(`${this.folder}/`))
+      void this.catalog?.bibliography.followClassification(file.path);
+  };
+
   override async onload(): Promise<void> {
     const core = startCatalogCore();
     const runtime = { core, notes: new NoteFormat(core), sources: bibliographySources(core) };
     this.runtime = runtime;
     const saved: unknown = await this.loadData();
     this.config = decodeConfiguration(saved);
-    this.registerEvent(this.app.vault.on("modify", (file) => this.fileVersions.delete(file)));
+    this.registerEvent(this.app.vault.on("modify", this.modified));
     const { folder } = this.config;
     if (folder && normalizePath(folder) === folder) {
       this.folder = folder;
@@ -131,7 +138,7 @@ export default class BookProps extends Plugin {
         else new BibliographyReview(this.app, this.catalog.bibliography).open();
       },
     });
-    addBooksBaseCommand(this, () => this.folder);
+    addBooksBaseCommand(this, () => this.folder, core.ndcClasses());
     addNoteTemplates(this, () => this.folder, runtime.notes);
     this.app.workspace.onLayoutReady(() => {
       if (this.unloaded) return;

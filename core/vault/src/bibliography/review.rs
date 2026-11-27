@@ -127,10 +127,22 @@ fn kept_roles(book: &Book) -> Vec<AuthorRole> {
         .collect()
 }
 
+/// The NDC number for a book that has none: the first one a record states, taking the records in
+/// the order they speak for the book.
+fn classification(book: &Book, records: &HashMap<&str, Described>) -> Option<String> {
+    if !book.unclassified() {
+        return None;
+    }
+    speaking_order(book)
+        .flat_map(|edition| &edition.isbns)
+        .find_map(|isbn| records.get(isbn.as_str())?.classification.clone())
+}
+
 /// The text a stored book would have in the stored spelling. With records, the record of the
 /// first ISBN that has one gives the title and authors, and each ISBN's record gives its edition's
-/// publisher and series and fills a blank edition statement; without one, a title ending in a
-/// series stated for one of the book's ISBNs loses that series. Only values that change appear.
+/// publisher and series and fills a blank edition statement, and a book without an NDC number
+/// gets the first one they state; without one, a title ending in a series stated for one of the
+/// book's ISBNs loses that series. Only values that change appear.
 #[must_use]
 pub fn plan_review(request: &BibliographyRequest) -> BibliographyRevision {
     let book = &request.book;
@@ -163,6 +175,7 @@ pub fn plan_review(request: &BibliographyRequest) -> BibliographyRevision {
         title: (title != book.title && !title.is_empty()).then_some(title),
         authors: authors_change.then_some(names),
         author_roles: authors_change.then_some(author_roles),
+        classification: classification(book, &records),
         editions: book
             .editions
             .iter()

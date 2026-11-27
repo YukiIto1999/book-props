@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { parse } from "yaml";
 import { booksBase, booksBasePath, placeBooksBase } from "../src/views/books-base.ts";
-import { notes } from "./core.mjs";
+import { core, notes } from "./core.mjs";
+
+const classes = core.ndcClasses();
+const baseText = (folder) => booksBase(folder, classes);
 
 // 本ページの書式が書きうる項目をすべて埋めた本。一覧が参照してよいキーの見本にする。
 const fullBook = {
@@ -13,6 +16,7 @@ const fullBook = {
   wanted: true,
   readingStatus: "reading",
   finishedOn: "2026-11-20",
+  classification: "007.64",
   archivedAt: "2026-11-21T10:00:00Z",
   editions: [
     {
@@ -61,7 +65,7 @@ const propertyNames = (base) => [
 ];
 
 void test("一覧のファイルはYAMLとして読め、書籍フォルダの本ページだけを対象にする", () => {
-  const base = parse(booksBase("Tom's 本"));
+  const base = parse(baseText("Tom's 本"));
   assert.deepEqual(base.filters.and.slice(0, 3), [
     `file.inFolder("Tom's 本")`,
     'file.ext == "md"',
@@ -72,6 +76,8 @@ void test("一覧のファイルはYAMLとして読め、書籍フォルダの�
     [
       "cards:表紙",
       "table:すべての本",
+      "table:分類別",
+      "table:類別",
       "table:出版社別",
       "table:著者別",
       "table:欲しい本",
@@ -79,11 +85,11 @@ void test("一覧のファイルはYAMLとして読め、書籍フォルダの�
       "table:同じ著者の本",
     ],
   );
-  assert.deepEqual(parse(booksBase('棚"A"')).filters.and[0], 'file.inFolder("棚\\"A\\"")');
+  assert.deepEqual(parse(baseText('棚"A"')).filters.and[0], 'file.inFolder("棚\\"A\\"")');
 });
 
 void test("一覧が参照するキーは、本ページの書式が書くキーだけである", () => {
-  const base = parse(booksBase("本"));
+  const base = parse(baseText("本"));
   const written = writtenKeys();
   const text = expressions(base).join("\n");
   const noteKeys = [
@@ -110,7 +116,7 @@ void test("一覧が参照するキーは、本ページの書式が書くキー
 });
 
 void test("読書状態は本棚と同じ表示名に変え、未設定は「未設定」にする", () => {
-  const { reading } = parse(booksBase("本")).formulas;
+  const { reading } = parse(baseText("本")).formulas;
   for (const [value, label] of [
     ["unread", "未読"],
     ["reading", "読書中"],
@@ -123,8 +129,44 @@ void test("読書状態は本棚と同じ表示名に変え、未設定は「未
   assert.ok(reading.endsWith('"未設定")))))'));
 });
 
+void test("分類は要目の名前でまとめ、類はその先頭の数字から日本十進分類法の類の名前にする", () => {
+  const parsed = parse(baseText("本"));
+  const { ndc_section: section, ndc_class: mainClass } = parsed.formulas;
+  assert.equal(section, 'if(note["book-ndc-section"], note["book-ndc-section"], "分類なし")');
+  assert.deepEqual(classes, [
+    "0 総記",
+    "1 哲学",
+    "2 歴史",
+    "3 社会科学",
+    "4 自然科学",
+    "5 技術．工学",
+    "6 産業",
+    "7 芸術．美術",
+    "8 言語",
+    "9 文学",
+  ]);
+  for (const name of classes) {
+    const digit = name.slice(0, 1);
+    assert.ok(
+      mainClass.includes(`note["book-ndc-section"].startsWith("${digit}"), "${name}"`),
+      name,
+    );
+  }
+  assert.ok(mainClass.startsWith('if(note["book-ndc-section"], if('));
+  const grouped = Object.fromEntries(
+    parsed.views
+      .filter(({ groupBy }) => groupBy)
+      .map(({ name, groupBy, sort }) => [
+        name,
+        [groupBy.property, sort.map(({ property }) => property)],
+      ]),
+  );
+  assert.deepEqual(grouped["分類別"], ["formula.ndc_section", ["book-ndc", "book-title"]]);
+  assert.deepEqual(grouped["類別"], ["formula.ndc_class", ["book-ndc", "book-title"]]);
+});
+
 void test("値のない項目の否定は、Basesで真にならないので isTruthy() を通す", () => {
-  const text = expressions(parse(booksBase("本"))).join("\n");
+  const text = expressions(parse(baseText("本"))).join("\n");
   const negations = /!(?:note|value)(?:\["[^"]+"\]|\.[\w-]+\b(?!\())+(?:\.\w+\(\))?/g;
   for (const [negation] of text.matchAll(negations)) {
     assert.match(negation, /\.isTruthy\(\)$/, negation);
@@ -144,13 +186,13 @@ const fakeVault = (paths) => {
 
 void test("一覧のファイルがなければVaultの直下に作る", async () => {
   const vault = fakeVault([]);
-  assert.equal(await placeBooksBase(vault, "本"), "created");
-  assert.deepEqual(vault.created, [{ path: "本の一覧.base", text: booksBase("本") }]);
+  assert.equal(await placeBooksBase(vault, "本", classes), "created");
+  assert.deepEqual(vault.created, [{ path: "本の一覧.base", text: baseText("本") }]);
   assert.equal(booksBasePath, "本の一覧.base");
 });
 
 void test("同じ名前のファイルがあれば書き換えない", async () => {
   const vault = fakeVault(["本の一覧.base"]);
-  assert.equal(await placeBooksBase(vault, "本"), "existing");
+  assert.equal(await placeBooksBase(vault, "本", classes), "existing");
   assert.deepEqual(vault.created, []);
 });

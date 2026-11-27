@@ -53,6 +53,20 @@ pub struct CatalogueRecord {
     #[serde(default)]
     #[tsify(optional)]
     pub(crate) edition: Option<String>,
+    /// The NDC numbers the record states, each with the NDC edition it follows.
+    #[serde(default)]
+    pub(crate) ndc: Vec<StatedNdc>,
+}
+
+/// One NDC number a record states, such as NDC10 `007.64`, with the edition it follows; no
+/// edition when the record names none (`dcndl:NDC`).
+#[derive(Clone, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct StatedNdc {
+    #[serde(default)]
+    #[tsify(optional)]
+    pub(crate) edition: Option<u32>,
+    pub(crate) number: String,
 }
 
 /// A record in the stored spelling, as a product the registration screen can fill in. An author
@@ -71,6 +85,10 @@ pub struct DescribedRecord {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[tsify(optional)]
     pub(crate) series: Option<String>,
+    /// The NDC number of the record, from the newest NDC edition it states.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub(crate) classification: Option<String>,
 }
 
 /// What the National Diet Library answered for one ISBN; no record when it has none.
@@ -141,6 +159,10 @@ pub struct BibliographyRevision {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[tsify(optional)]
     pub(crate) author_roles: Option<Vec<AuthorRole>>,
+    /// The NDC number for a book that has none; a number the book has always stays.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub(crate) classification: Option<String>,
     pub(crate) editions: Vec<EditionText>,
     /// The revision ends the lookups the book waited for, and removes their record.
     #[serde(skip_serializing_if = "std::ops::Not::not")]

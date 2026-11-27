@@ -259,8 +259,9 @@ fn revise_edition(
 }
 
 /// What finishing the lookups of a book leads to: the ISBNs still to fetch, or the revision that
-/// replaces each field still holding what its write left with the library's record, and removes
-/// the record of the lookups. An ISBN the library has no record for leaves its fields as written.
+/// replaces each field still holding what its write left with the library's record, gives a book
+/// without an NDC number the first one a record states, and removes the record of the lookups.
+/// An ISBN the library has no record for leaves its fields as written.
 #[must_use]
 pub fn plan_enrichment(request: &BibliographyRequest) -> EnrichmentPlan {
     let book = &request.book;
@@ -301,6 +302,9 @@ pub fn plan_enrichment(request: &BibliographyRequest) -> EnrichmentPlan {
             if let Some(edition) = edition {
                 revise_edition(edition, &lookup.isbn, field, &found, &mut revision);
             }
+        }
+        if revision.classification.is_none() && book.unclassified() {
+            revision.classification = found.classification;
         }
     }
     EnrichmentPlan::Write {

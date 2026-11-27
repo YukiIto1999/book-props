@@ -57,3 +57,5 @@ Book Props has no telemetry, ads, accounts, or payments.
 ## License
 
 Book Props is available under the [MIT License](LICENSE). Licenses of bundled third-party code are in `THIRD-PARTY-NOTICES.txt` attached to each release.
+
+The names of the Nippon Decimal Classification (NDC) classes and sections that the plugin writes next to a book's classification number come from the [NDC9 data of the Japan Library Association Classification Committee](https://www.jla.or.jp/committees/bunrui/ndc-data/) (日本図書館協会分類委員会「NDCデータ」ndc9), licensed under [CC BY](https://creativecommons.jp/licenses/). Book Props extracts only the names; the changes are described in [`core/vault/data/ndc9/NOTICE.txt`](core/vault/data/ndc9/NOTICE.txt).

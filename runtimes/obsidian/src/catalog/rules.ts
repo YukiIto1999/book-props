@@ -117,6 +117,7 @@ function catalogBook(book: BookRecord, notes: NoteFormat): Book {
     appliedPurchases: [...book.appliedPurchases],
     ...optionalField("pendingMove", book.pendingMove && catalogMarker(book.pendingMove, notes)),
     ...optionalField("pendingLookup", book.pendingLookup),
+    ...optionalField("classification", book.classification),
     customFields: (book.customFields ?? []).map(catalogField),
   };
 }
@@ -152,7 +153,7 @@ function appliedPurchase({ appliedAtMs, ...receipt }: ReceiptWrite): AppliedPurc
  * @param pendingLookup - 書き込みの後に本が待つ国立国会図書館サーチへの照会の記録
  */
 export function bookUpdate(
-  { wanted, edition, receipt }: BookWrite,
+  { wanted, edition, receipt, classification }: BookWrite,
   pendingLookup: string | undefined,
 ): BookUpdate {
   return {
@@ -160,6 +161,7 @@ export function bookUpdate(
     ...optionalField("edition", edition),
     ...optionalField("receipt", receipt && appliedPurchase(receipt)),
     ...optionalField("pendingLookup", pendingLookup),
+    ...optionalField("classification", classification),
   };
 }
 
@@ -193,7 +195,7 @@ export class CatalogRules {
     { action, product, selection }: Operation,
     entries: readonly StoredBook[],
   ): CatalogRequest {
-    const { title, authors, isbns, label, series, ...details } = product;
+    const { title, authors, isbns, label, series, classification, ...details } = product;
     return {
       action,
       product: {
@@ -202,6 +204,7 @@ export class CatalogRules {
         ...optionalField("isbns", isbns),
         ...optionalField("label", label),
         ...optionalField("series", series),
+        ...optionalField("classification", classification),
         details,
       },
       books: this.books(entries),

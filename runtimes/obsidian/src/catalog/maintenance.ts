@@ -1,5 +1,6 @@
 import type { AppliedPurchase } from "../adapters/note-format/book-record.ts";
 import type { PortableNote, PresentNote } from "../core/catalog-core.ts";
+import { followClassifications } from "./bibliography.ts";
 import type { BookContext } from "./book-change.ts";
 import type { StoredBook } from "./catalog.ts";
 import { manageBooks } from "./management.ts";
@@ -123,7 +124,7 @@ async function pruneReceipts(
 
 /**
  * 終わっていない版の移動を再開し、移動がなければ保存期間を過ぎた購入の記録を取り除く。
- * 失敗したら何も返さず、次の機会に回す。
+ * 番号と合わない分類の名前も直す。失敗したら何も返さず、次の機会に回す。
  */
 export async function maintainBooks(context: BookContext): Promise<void> {
   if (!context.active()) return;
@@ -138,6 +139,10 @@ export async function maintainBooks(context: BookContext): Promise<void> {
     const now = Date.now();
     if (!hasPendingMove(entries))
       await pruneReceipts(context, entries, (receipts) => context.rules.expired(receipts, now));
+    await followClassifications(
+      context,
+      entries.map(({ path }) => path),
+    );
   } catch {
     return;
   }

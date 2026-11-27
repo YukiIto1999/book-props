@@ -1,20 +1,28 @@
 //! Bibliographic text in one spelling whatever source it came from: products from the extension,
 //! store pages, and the registration screen, and records from the National Diet Library, which is
-//! the authority for the title, authors, publisher, and series of a book with an ISBN.
+//! the authority for the title, authors, publisher, series, and classification of a book with an
+//! ISBN.
 
+mod classification;
 mod lookup;
 mod names;
 mod review;
 mod series;
 mod text;
 
+pub(crate) use classification::ndc_number;
+pub use classification::{ndc_classes, ndc_section};
 pub use lookup::plan_enrichment;
 pub(crate) use lookup::{WrittenEdition, pending_lookup};
 pub(crate) use names::{author_key, author_keys, name_key};
 pub use review::plan_review;
 pub(crate) use text::{tidy, tidy_title};
 
-use crate::model::{AuthorRole, CatalogueRecord, DescribedRecord, Details, Person, Product};
+use std::cmp::Reverse;
+
+use crate::model::{
+    AuthorRole, CatalogueRecord, DescribedRecord, Details, Person, Product, StatedNdc,
+};
 
 fn present(value: Option<&str>) -> Option<String> {
     value.map(tidy).filter(|value| !value.is_empty())
@@ -53,6 +61,7 @@ impl Product {
                 ..self.details.clone()
             },
             series,
+            classification: self.classification.as_deref().and_then(ndc_number),
             roles: roles(&people),
         }
     }
@@ -80,6 +89,7 @@ pub(crate) struct Described {
     pub(crate) publisher: Option<String>,
     pub(crate) label: Option<String>,
     pub(crate) series: Option<String>,
+    pub(crate) classification: Option<String>,
 }
 
 /// The publisher of a record: the first one not marked as the distributor with `(発売)`.
@@ -101,6 +111,16 @@ fn publisher(publishers: &[String]) -> Option<String> {
         .filter(|name| !name.is_empty())
 }
 
+/// The NDC number of a record: the readable one of the newest NDC edition it states, a number
+/// whose edition the record does not name coming last, and the first of equals.
+fn classification(stated: &[StatedNdc]) -> Option<String> {
+    stated
+        .iter()
+        .filter_map(|entry| Some((entry.edition, ndc_number(&entry.number)?)))
+        .min_by_key(|(edition, _)| Reverse(*edition))
+        .map(|(_, number)| number)
+}
+
 pub(crate) fn describe(record: &CatalogueRecord) -> Described {
     Described {
         title: tidy_title(&record.title),
@@ -108,6 +128,7 @@ pub(crate) fn describe(record: &CatalogueRecord) -> Described {
         publisher: publisher(&record.publishers),
         label: present(record.edition.as_deref()),
         series: record.series.iter().find_map(|name| present(Some(name))),
+        classification: classification(&record.ndc),
     }
 }
 
@@ -121,13 +142,14 @@ pub fn describe_record(record: &CatalogueRecord) -> DescribedRecord {
         publisher: described.publisher,
         label: described.label,
         series: described.series,
+        classification: described.classification,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{describe_record, publisher};
-    use crate::model::{CatalogueRecord, Details, Product};
+    use crate::model::{CatalogueRecord, Details, Product, StatedNdc};
 
     fn texts(values: &[&str]) -> Vec<String> {
         values.iter().map(|value| (*value).to_owned()).collect()
@@ -156,6 +178,10 @@ mod tests {
             publishers: texts(&["オライリー・ジャパン", "オーム社 (発売)"]),
             series: texts(&["THEORY/IN/PRACTICE"]),
             edition: None,
+            ndc: vec![StatedNdc {
+                edition: Some(9),
+                number: "007.64".to_owned(),
+            }],
         };
         let described = describe_record(&record);
         assert_eq!(
@@ -164,6 +190,43 @@ mod tests {
         );
         assert_eq!(described.publisher.as_deref(), Some("オライリー・ジャパン"));
         assert_eq!(described.series.as_deref(), Some("THEORY/IN/PRACTICE"));
+        assert_eq!(described.classification.as_deref(), Some("007.64"));
+    }
+
+    #[test]
+    fn takes_the_number_of_the_newest_ndc_edition() {
+        let stated = |entries: &[(Option<u32>, &str)]| CatalogueRecord {
+            title: "十戒".to_owned(),
+            creators: Vec::new(),
+            statement: None,
+            publishers: Vec::new(),
+            series: Vec::new(),
+            edition: None,
+            ndc: entries
+                .iter()
+                .map(|(edition, number)| StatedNdc {
+                    edition: *edition,
+                    number: (*number).to_owned(),
+                })
+                .collect(),
+        };
+        let chosen =
+            |entries: &[(Option<u32>, &str)]| describe_record(&stated(entries)).classification;
+        assert_eq!(
+            chosen(&[(Some(9), "913.8"), (Some(10), "913.6")]).as_deref(),
+            Some("913.6")
+        );
+        assert_eq!(
+            chosen(&[(Some(10), "Y84"), (Some(9), "913.8")]).as_deref(),
+            Some("913.8")
+        );
+        assert_eq!(chosen(&[(Some(8), "389")]).as_deref(), Some("389"));
+        assert_eq!(
+            chosen(&[(None, "389.1"), (Some(6), "389")]).as_deref(),
+            Some("389")
+        );
+        assert_eq!(chosen(&[(None, "389.1")]).as_deref(), Some("389.1"));
+        assert_eq!(chosen(&[]), None);
     }
 
     #[test]
@@ -178,6 +241,7 @@ mod tests {
                 ..Details::default()
             },
             series: Some("講談社現代新書 ; 2004".to_owned()),
+            classification: Some("１６１．１".to_owned()),
             roles: Vec::new(),
         }
         .normalized();
@@ -189,5 +253,6 @@ mod tests {
             product.details.publisher.as_deref(),
             Some("オライリー・ジャパン")
         );
+        assert_eq!(product.classification.as_deref(), Some("161.1"));
     }
 }

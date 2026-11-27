@@ -187,26 +187,36 @@ function replaceField(header: Frontmatter, stored: unknown, value: Plain): Edit 
   return { start, end, text: before + encoded + after };
 }
 
-function insertFields(header: Frontmatter, node: YAMLMap, missing: readonly string[]): Edit {
-  const [start, end] = editableRange(node);
+/** 足す位置の指定。`before`の項目があれば、その前に足す。 */
+type Placement = Readonly<{ appendIsbnAliases?: boolean; before?: string }>;
+
+function insertFields(
+  header: Frontmatter,
+  node: YAMLMap,
+  missing: readonly string[],
+  before: string | undefined,
+): Edit {
+  const [first, end] = editableRange(node);
   if (node.flow) {
     const separator = node.items.length ? ", " : "";
     return { start: end - 1, end: end - 1, text: `${separator}${missing.join(", ")}` };
   }
+  const next = node.items.find(({ key }) => isScalar(key) && key.value === before)?.key;
+  const start = next === undefined ? first : editableRange(next)[0];
   const indent = " ".repeat(start - lineStart(header.source, start));
   const lines = missing.join(header.lineBreak + indent);
   return { start, end: start, text: `${lines}${header.lineBreak}${indent}` };
 }
 
 /**
- * マップの項目を置き換え、ない項目は先頭に足す。値が`undefined`の項目は変えない。
- * `appendIsbnAliases`では、既存のISBNのリストを置き換えずに末尾へ足す。
+ * マップの項目を置き換え、ない項目は`before`の項目の前(なければ先頭)に足す。値が`undefined`の項目は
+ * 変えない。`appendIsbnAliases`では、既存のISBNのリストを置き換えずに末尾へ足す。
  */
 export function fieldEdits(
   header: Frontmatter,
   node: YAMLMap,
   fields: FieldValues,
-  appendIsbnAliases = false,
+  { appendIsbnAliases = false, before }: Placement = {},
 ): Edit[] {
   editableRange(node);
   const edits: Edit[] = [];
@@ -222,7 +232,7 @@ export function fieldEdits(
       edits.push(replaceField(header, stored, value));
     }
   }
-  if (missing.length) edits.push(insertFields(header, node, missing));
+  if (missing.length) edits.push(insertFields(header, node, missing, before));
   return edits;
 }
 

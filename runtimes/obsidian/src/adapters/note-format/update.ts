@@ -8,6 +8,7 @@ import {
   storePurchase,
   type Edit,
 } from "./edit.ts";
+import { classificationEdits, type SectionRule } from "./classification.ts";
 import { BookNoteError } from "./error.ts";
 import { checkPurchase, map, type ParsedNote } from "./parse.ts";
 
@@ -43,7 +44,7 @@ function editionEdits({ header, editions, book }: ParsedNote, requested: Edition
       ? [...stated, ...series].map(({ isbn, name }) => ({ isbn, name }))
       : undefined,
   };
-  edits.push(...fieldEdits(header, node, fields, true));
+  edits.push(...fieldEdits(header, node, fields, { appendIsbnAliases: true }));
   return edits;
 }
 
@@ -56,8 +57,8 @@ function receiptEdit({ header, purchases, book }: ParsedNote, receipt: AppliedPu
   return appendRows(header, purchases, "applied-purchases", [storePurchase(receipt)]);
 }
 
-/** 購入希望、版、適用済み購入の記録と、照会を待つ記録を書き換える編集。 */
-export function updateEdits(note: ParsedNote, input: BookUpdate): Edit[] {
+/** 購入希望、版、適用済み購入の記録と、照会を待つ記録と、番号のない本の分類の番号を書き換える編集。 */
+export function updateEdits(note: ParsedNote, input: BookUpdate, rules: SectionRule): Edit[] {
   const { header, root, managed, editions, book } = note;
   for (const node of [root, managed, editions]) editableRange(node);
   const edits: Edit[] = [];
@@ -69,16 +70,20 @@ export function updateEdits(note: ParsedNote, input: BookUpdate): Edit[] {
   if (input.pendingLookup !== undefined && input.pendingLookup !== book.pendingLookup) {
     edits.push(...fieldEdits(header, managed, { "pending-lookup": input.pendingLookup }));
   }
+  if (input.classification !== undefined && book.classification === undefined) {
+    edits.push(...classificationEdits(note, rules, input.classification));
+  }
   return edits;
 }
 
-/** 書き換えた後の本に、指定した購入希望、版の所持とISBN、購入の記録があるかを確かめる。 */
+/** 書き換えた後の本に、指定した購入希望、版の所持とISBN、購入の記録、分類の番号があるかを確かめる。 */
 export function confirmsUpdate(
   saved: BookRecord,
-  { wanted, edition, receipt, pendingLookup }: BookUpdate,
+  { wanted, edition, receipt, pendingLookup, classification }: BookUpdate,
 ): boolean {
   if (saved.wanted !== wanted) return false;
   if (pendingLookup !== undefined && saved.pendingLookup !== pendingLookup) return false;
+  if (classification !== undefined && saved.classification === undefined) return false;
   const editionSaved =
     !edition ||
     saved.editions.some(

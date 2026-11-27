@@ -26,6 +26,10 @@ function revisionLines(book: BookRecord, revision: BibliographyRevision): string
     const before = people(book.authors, book.authorRoles);
     lines.push(`著者：${before} → ${people(revision.authors, revision.authorRoles)}`);
   }
+  if (revision.classification !== undefined)
+    lines.push(
+      `分類（日本十進分類法）：${book.classification ?? "なし"} → ${revision.classification}`,
+    );
   for (const text of revision.editions) {
     const edition = book.editions.find(({ id }) => id === text.id);
     const name = edition?.label ?? edition?.isbns[0] ?? "版";
@@ -72,7 +76,7 @@ export class BibliographyReview extends Modal {
     new Setting(content)
       .setName("国立国会図書館サーチで確かめる")
       .setDesc(
-        "ISBNのある本は、国立国会図書館の書誌の書名・著者・出版社・シリーズを使います。ISBNごとに間をあけて問い合わせ、混み合っているときは待って問い直すため、1冊に数十秒から1分ほどかかることがあります。",
+        "ISBNのある本は、国立国会図書館の書誌の書名・著者・出版社・シリーズを使い、分類の番号がない本には書誌の日本十進分類法の番号を入れます。ISBNごとに間をあけて問い合わせ、混み合っているときは待って問い直すため、1冊に数十秒から1分ほどかかることがあります。",
       )
       .addToggle((toggle) =>
         toggle.setValue(false).onChange((value) => {

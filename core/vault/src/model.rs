@@ -9,7 +9,7 @@ mod shelf;
 
 pub use bibliography::{
     AuthorRole, BibliographyRequest, BibliographyRevision, CatalogueRecord, DescribedRecord,
-    EditionText, EnrichmentPlan, LookupAnswer, Person, SeriesEntry,
+    EditionText, EnrichmentPlan, LookupAnswer, Person, SeriesEntry, StatedNdc,
 };
 pub use management::{
     BookOptions, BookStep, BooksRequest, CopiesRequest, CopyPlace, CustomField, EditionOptions,
@@ -78,6 +78,10 @@ pub struct Product {
     #[serde(default)]
     #[tsify(optional)]
     pub(crate) series: Option<String>,
+    /// The NDC number a source states for the product, such as `007.64`.
+    #[serde(default)]
+    #[tsify(optional)]
+    pub(crate) classification: Option<String>,
     /// The roles split off the author entries; set when the product is normalised.
     #[serde(skip)]
     pub(crate) roles: Vec<AuthorRole>,
@@ -109,9 +113,20 @@ pub struct Book {
     #[serde(default)]
     #[tsify(optional)]
     pub(crate) pending_lookup: Option<String>,
+    /// The book's NDC number as stored; the user may have written it by hand.
+    #[serde(default)]
+    #[tsify(optional)]
+    pub(crate) classification: Option<String>,
 }
 
 impl Book {
+    /// Whether the book has no NDC number, so a source's number may fill it.
+    pub(crate) fn unclassified(&self) -> bool {
+        self.classification
+            .as_deref()
+            .is_none_or(|number| number.trim().is_empty())
+    }
+
     pub(crate) fn edition(&self, id: &str) -> Option<&Edition> {
         self.editions.iter().find(|edition| edition.id == id)
     }
@@ -425,6 +440,9 @@ pub struct NewBook {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     #[tsify(optional)]
     pub(crate) author_roles: Vec<AuthorRole>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub(crate) classification: Option<String>,
 }
 
 /// The wish, and optionally the edition and receipt, to write to one book.
@@ -438,6 +456,10 @@ pub struct BookWrite {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[tsify(optional)]
     pub(crate) receipt: Option<ReceiptWrite>,
+    /// The NDC number for a stored book that has none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub(crate) classification: Option<String>,
 }
 
 /// An edition to add, or the ownership and blank values to write to a stored edition.

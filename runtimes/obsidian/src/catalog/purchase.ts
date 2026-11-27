@@ -81,6 +81,7 @@ export async function inputHash(input: Operation): Promise<string> {
   ];
   if (input.selection) stable.push(input.selection.bookId, input.selection.editionId);
   if (input.product.series !== undefined) stable.push(input.product.series);
+  if (input.product.classification !== undefined) stable.push(input.product.classification);
   return sha256Hex(JSON.stringify(stable));
 }
 

@@ -9,8 +9,8 @@ import { Busy, Pacer, retryAfter } from "./ndl-pacer.ts";
 
 const api = "https://ndlsearch.ndl.go.jp/api/opensearch";
 
-/** 書誌の候補。国立国会図書館サーチの書誌には、そのISBNのシリーズを添える。 */
-type FoundProduct = Product & { series?: string };
+/** 書誌の候補。国立国会図書館サーチの書誌には、そのISBNのシリーズと日本十進分類法の番号を添える。 */
+type FoundProduct = Product & { series?: string; classification?: string };
 
 /** 書誌の取得先。ISBNと書名は国立国会図書館サーチ、商品URLは対応サイトの商品ページ。 */
 export type BibliographySources = Readonly<{
@@ -101,7 +101,13 @@ function candidate(rules: SourceRules, item: NdlItem): FoundProduct[] {
     ...optionalField("publishedOn", publishedOn(item.issued)),
   });
   if (!parsed.success || !parsed.data.title) return [];
-  return [{ ...parsed.data, ...optionalField("series", described.series) }];
+  return [
+    {
+      ...parsed.data,
+      ...optionalField("series", described.series),
+      ...optionalField("classification", described.classification),
+    },
+  ];
 }
 
 /**

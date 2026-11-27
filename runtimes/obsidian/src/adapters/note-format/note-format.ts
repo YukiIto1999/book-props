@@ -18,6 +18,7 @@ import {
   storePurchase,
   type Plain,
 } from "./edit.ts";
+import { classificationEdits, classificationKey, sectionKey, sectionOf } from "./classification.ts";
 import { BookNoteError, unreadable } from "./error.ts";
 import { map, parseNote, readEditionBackup, type NoteRules, type ParsedNote } from "./parse.ts";
 import { confirmsRevision, revisionEdits } from "./revise.ts";
@@ -69,6 +70,8 @@ export class NoteFormat {
         "book-wanted": book.wanted,
         "book-reading-status": book.readingStatus,
         "book-finished-on": book.finishedOn,
+        [classificationKey]: book.classification,
+        [sectionKey]: sectionOf(book.classification, this.rules),
         tags: book.tags?.length ? book.tags : undefined,
         "book-props": {
           schema: 1,
@@ -117,24 +120,40 @@ export class NoteFormat {
   }
 
   /**
-   * 書名・著者・著者の役割・版の出版社と版とシリーズ・照会待ちの記録だけを書き換える。
-   * 他の行と本文は一文字も変えない。
+   * 書名・著者・著者の役割・版の出版社と版とシリーズ・照会待ちの記録と、番号のない本の分類の番号
+   * だけを書き換える。他の行と本文は一文字も変えない。
    */
   reviseBibliography(raw: string, revision: BibliographyRevision): string {
     const note = this.parse(raw);
-    const saved = spliceNote(raw, note.header, revisionEdits(note, revision));
+    const saved = spliceNote(raw, note.header, revisionEdits(note, revision, this.rules));
     if (!confirmsRevision(this.parse(saved).book, revision)) {
       return unreadable("書誌の書き換えを確定できません。");
     }
     return saved;
   }
 
-  /** 購入希望、版、適用済み購入だけを書き換える。他の行と本文は一文字も変えない。 */
+  /**
+   * 購入希望、版、適用済み購入と、番号のない本の分類の番号だけを書き換える。他の行と本文は
+   * 一文字も変えない。
+   */
   writeUpdate(raw: string, input: BookUpdate): string {
     const note = this.parse(raw);
-    const saved = spliceNote(raw, note.header, updateEdits(note, input));
+    const saved = spliceNote(raw, note.header, updateEdits(note, input, this.rules));
     if (!confirmsUpdate(this.parse(saved).book, input)) {
       return unreadable("YAMLへの更新を確認できません。");
+    }
+    return saved;
+  }
+
+  /**
+   * 要目の名前を、日本十進分類法の番号に合わせる。番号を手で書き換えた本ページのためにある。
+   * 名前が番号と合っていれば、渡した全文をそのまま返す。他の行と本文は一文字も変えない。
+   */
+  followClassification(raw: string): string {
+    const note = this.parse(raw);
+    const saved = spliceNote(raw, note.header, classificationEdits(note, this.rules));
+    if (saved !== raw && classificationEdits(this.parse(saved), this.rules).length) {
+      return unreadable("分類の名前を番号に合わせられません。");
     }
     return saved;
   }

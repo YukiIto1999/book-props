@@ -14,7 +14,7 @@ mod receipt;
 mod shelf;
 mod text;
 
-pub use bibliography::{describe_record, plan_enrichment, plan_review};
+pub use bibliography::{describe_record, ndc_classes, ndc_section, plan_enrichment, plan_review};
 pub use change::plan_change;
 pub use management::{allows_step, book_options, plan_management, restore_targets};
 pub use matching::inspect;
@@ -31,7 +31,7 @@ pub use model::{
     ReceiptWrite, ReconcileRequest, Reconciliation, RestoreRequest, RestoreTargets, Selection,
     SeriesEntry, SettledShelf, ShelfBook, ShelfBound, ShelfField, ShelfOverview, ShelfQuery,
     ShelfRange, ShelfRecord, ShelfRequest, ShelfSelection, ShelfTag, ShelfValue, ShelfView,
-    StepRequest, WishFilter, WritePlan,
+    StatedNdc, StepRequest, WishFilter, WritePlan,
 };
 pub use moving::{missing_move_copies, plan_move, settle_shelf};
 pub use portable::{
@@ -241,6 +241,21 @@ pub fn book_options_request(request: &str) -> Result<Ts<BookOptions>, JsError> {
 #[must_use]
 pub fn calendar_date_value(value: &str) -> Option<String> {
     calendar_date(value)
+}
+
+/// The NDC section a book's number falls in, as its three digits and name (`007 情報科学`), or
+/// nothing when the text is no NDC number.
+#[wasm_bindgen(js_name = ndcSection)]
+#[must_use]
+pub fn ndc_section_value(value: &str) -> Option<String> {
+    ndc_section(value)
+}
+
+/// The ten NDC main classes in order, as digit and name (`0 総記`).
+#[wasm_bindgen(js_name = ndcClasses)]
+#[must_use]
+pub fn ndc_class_names() -> Vec<String> {
+    ndc_classes()
 }
 
 /// One shelf the runtime opened. Its books stay in the core while the user changes the query, so

@@ -115,7 +115,8 @@ fn revision(action: Action, outcome: &Outcome) -> String {
     .to_string()
 }
 
-/// Whether the action records a product whose text the National Diet Library may replace later.
+/// Whether the action records a product: its NDC number fills a stored book that has none, and the
+/// National Diet Library may replace its text later.
 const fn records_product(action: Action) -> bool {
     matches!(
         action,
@@ -170,6 +171,9 @@ fn write_plan(request: &ChangeRequest, product: &Product, outcome: &Outcome) -> 
                 .map(|edition| WrittenEdition { edition, stored });
             pending_lookup(target, isbn, created, written.as_ref())
         });
+    let classification = target
+        .filter(|book| book.unclassified() && records_product(request.catalog.action))
+        .and(product.classification.clone());
     ChangePlan::Write(Box::new(WritePlan {
         revision: revision(request.catalog.action, outcome),
         book_id,
@@ -178,6 +182,7 @@ fn write_plan(request: &ChangeRequest, product: &Product, outcome: &Outcome) -> 
             wanted,
             edition,
             receipt,
+            classification,
         },
         new_book,
         pending_lookup,
@@ -257,6 +262,7 @@ fn new_book(
         editions: edition.into_iter().collect(),
         applied_purchases: receipt.into_iter().collect(),
         author_roles: product.roles.clone(),
+        classification: product.classification.clone(),
     }
 }
 

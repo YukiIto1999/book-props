@@ -153,6 +153,12 @@ def rust_notices():
     return "\n".join(texts)
 
 
+def data_notices():
+    """Notices of the third-party data compiled into the Obsidian plugin's core."""
+    notice = ROOT / "core" / "vault" / "data" / "ndc9" / "NOTICE.txt"
+    return f"data:ndc9 — {notice.relative_to(ROOT)}\n\n{notice.read_text(encoding='utf-8').strip()}\n"
+
+
 def bundle_inputs(version):
     files = {"LICENSE": ROOT / "LICENSE"}
     manifests = [ROOT / "package.json", ROOT / "manifest.json", ROOT / "runtimes" / "chrome" / "manifest.json"]
@@ -217,7 +223,9 @@ def pack(version, output):
     })
     contents = {name: path.read_bytes() for name, path in inputs.items()}
     contents["release-metadata/rust/Cargo.lock"] = cargo_inventory(rust, sysroot_entries).encode()
-    contents["THIRD-PARTY-NOTICES.txt"] = (notices(npm, rust) + "\n" + rust_notices()).encode()
+    contents["THIRD-PARTY-NOTICES.txt"] = (
+        notices(npm, rust) + "\n" + rust_notices() + "\n" + data_notices()
+    ).encode()
     output.mkdir()
     try:
         sums = []

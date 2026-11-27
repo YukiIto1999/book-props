@@ -12,7 +12,8 @@ fn record() -> Value {
         "creators": ["Boswell, Dustin", "Foucher, Trevor", "角, 征典"],
         "statement": "Dustin Boswell, Trevor Foucher 著,角征典 訳",
         "publishers": ["オライリー・ジャパン", "オーム社 (発売)"],
-        "series": ["THEORY/IN/PRACTICE"]
+        "series": ["THEORY/IN/PRACTICE"],
+        "ndc": [{"edition": 9, "number": "007.64"}]
     })
 }
 
@@ -57,6 +58,11 @@ fn enrich(book: &Value, answers: Value) -> Value {
     serde_json::to_value(plan_enrichment(&request)).expect("encode plan")
 }
 
+fn review(book: &Value, answers: Value) -> Value {
+    let request: BibliographyRequest =
+        serde_json::from_value(json!({"book": book, "answers": answers})).expect("decode request");
+    serde_json::to_value(plan_review(&request)).expect("encode revision")
+}
 #[test]
 fn a_product_is_written_in_the_stored_spelling() {
     let planned = plan("recordOwnership", store_product(), json!([]), false);
@@ -156,6 +162,60 @@ fn no_record_keeps_the_written_values_and_ends_the_lookup() {
     ));
 }
 
+#[test]
+fn the_library_classifies_only_a_book_without_a_number() {
+    let planned = plan("recordOwnership", store_product(), json!([]), true);
+    let book = stored(&planned);
+    let answers = json!([{"isbn": ISBN, "record": record()}]);
+    assert_eq!(
+        enrich(&book, answers.clone())["revision"]["classification"],
+        "007.64"
+    );
+    let mut classified = book.clone();
+    classified["classification"] = json!("007.6");
+    let kept = enrich(&classified, answers.clone());
+    assert!(kept["revision"].get("classification").is_none());
+
+    let mut enriched = book;
+    enriched
+        .as_object_mut()
+        .expect("book")
+        .remove("pendingLookup");
+    assert_eq!(
+        review(&enriched, answers.clone())["classification"],
+        "007.64"
+    );
+    assert!(review(&enriched, json!([])).get("classification").is_none());
+    enriched["classification"] = json!(" ");
+    assert_eq!(
+        review(&enriched, answers.clone())["classification"],
+        "007.64"
+    );
+    enriched["classification"] = json!("007.6");
+    assert!(review(&enriched, answers).get("classification").is_none());
+}
+
+#[test]
+fn a_library_product_classifies_the_book_it_records() {
+    let product = json!({"title": "リーダブルコード", "authors": ["角征典"], "isbns": [ISBN],
+        "classification": "007.64"});
+    let created = plan("recordOwnership", product.clone(), json!([]), false);
+    assert_eq!(created["newBook"]["classification"], "007.64");
+    assert!(created["change"].get("classification").is_none());
+
+    let mut books = json!([{
+        "id": "book", "title": "リーダブルコード", "authors": ["角征典"], "wanted": true,
+        "editions": [{"id": "first", "owned": false, "isbns": [ISBN], "details": {}}],
+        "appliedPurchases": []
+    }]);
+    let recorded = plan("recordOwnership", product.clone(), books.clone(), false);
+    assert_eq!(recorded["change"]["classification"], "007.64");
+    let cleared = plan("clearWish", product.clone(), books.clone(), false);
+    assert!(cleared["change"].get("classification").is_none());
+    books[0]["classification"] = json!("913.6");
+    let kept = plan("recordOwnership", product, books, false);
+    assert!(kept["change"].get("classification").is_none());
+}
 #[test]
 fn a_wish_for_a_stored_book_waits_for_no_lookup() {
     let books = json!([{

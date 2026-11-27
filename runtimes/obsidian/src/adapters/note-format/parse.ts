@@ -1,4 +1,4 @@
-import { isMap, isScalar, isSeq, parseDocument, type YAMLMap, type YAMLSeq } from "yaml";
+import { isMap, isNode, isScalar, isSeq, parseDocument, type YAMLMap, type YAMLSeq } from "yaml";
 import type { CatalogCore } from "../../core/catalog-core.ts";
 import { isJsonObject } from "../../shared/json-object.ts";
 import { optionalField } from "../../shared/optional-field.ts";
@@ -12,12 +12,16 @@ import type {
   PendingMove,
   SeriesEntry,
 } from "./book-record.ts";
+import { classificationKey } from "./classification.ts";
 import type { Frontmatter } from "./edit.ts";
 import { BookNoteError, unreadable } from "./error.ts";
 import { decodeCustomFields, plainMap, text } from "./values.ts";
 
-/** 本ページの読み取りが使う、coreの識別の規則。保存済みのISBNが正規のISBN-13かを決める。 */
-export type NoteRules = Pick<CatalogCore, "isCanonicalIsbnList">;
+/**
+ * 本ページの書式が使うcoreの規則。保存済みのISBNが正規のISBN-13かを決め、日本十進分類法の番号から
+ * 要目の名前を作る。
+ */
+export type NoteRules = Pick<CatalogCore, "isCanonicalIsbnList" | "ndcSection">;
 
 /** 読み取った本と、書き換えに使うYAMLのノード。 */
 export type ParsedNote = Readonly<{
@@ -253,6 +257,18 @@ function readCustomFields(managed: YAMLMap): CustomField[] {
   return decodeCustomFields(seq(custom, "独自項目").items);
 }
 
+/**
+ * 本の日本十進分類法の番号。Obsidianが数値として書いた番号(`7.64`)も文字列にして読み、正規の形には
+ * coreがそろえる。リストのような値も、手で書いた値として上書きしないよう、YAMLの書き方のまま読む。
+ */
+function readClassification(root: YAMLMap): string | undefined {
+  const node: unknown = root.get(classificationKey, true);
+  if (!isScalar(node)) return isNode(node) ? node.toString().trim() || undefined : undefined;
+  const { value } = node;
+  const written = typeof value === "number" ? String(value) : value;
+  return typeof written === "string" ? written.trim() || undefined : undefined;
+}
+
 function readBook(
   { root, managed, editions, purchases }: Omit<ParsedNote, "header" | "book">,
   rules: NoteRules,
@@ -277,6 +293,7 @@ function readBook(
     appliedPurchases,
     ...optionalField("pendingMove", readMove(optionalText(managed, "pending-move"), bookId, rules)),
     ...optionalField("pendingLookup", optionalText(managed, "pending-lookup")),
+    ...optionalField("classification", readClassification(root)),
     customFields,
   };
 }

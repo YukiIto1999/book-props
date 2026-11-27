@@ -1,6 +1,7 @@
 import type { YAMLMap } from "yaml";
 import type { BibliographyRevision } from "../../core/catalog-core.ts";
 import type { BookRecord } from "./book-record.ts";
+import { classificationEdits, type SectionRule } from "./classification.ts";
 import { dropPair, fieldEdits, type Edit, type Frontmatter, type Plain } from "./edit.ts";
 import { map, type ParsedNote } from "./parse.ts";
 
@@ -22,11 +23,16 @@ function rolesValue(revision: BibliographyRevision): Plain | undefined {
   return roles.length ? Object.fromEntries(roles.map(({ name, role }) => [name, role])) : null;
 }
 
-/** 書名・著者・著者の役割・版の書誌・照会待ちの記録を書き換える編集。他の項目と本文は変えない。 */
+/**
+ * 書名・著者・著者の役割・版の書誌・照会待ちの記録と、番号のない本の分類の番号を書き換える編集。
+ * 他の項目と本文は変えない。
+ */
 export function revisionEdits(
-  { header, root, managed, editions, book }: ParsedNote,
+  note: ParsedNote,
   revision: BibliographyRevision,
+  rules: SectionRule,
 ): Edit[] {
+  const { header, root, managed, editions, book } = note;
   const edits = fieldEdits(header, root, {
     "book-title": revision.title,
     "book-authors": revision.authors,
@@ -34,6 +40,8 @@ export function revisionEdits(
   edits.push(...setOrDrop(header, managed, "author-roles", rolesValue(revision)));
   if (revision.endsLookups && managed.has("pending-lookup"))
     edits.push(dropPair(header, managed, "pending-lookup"));
+  if (revision.classification !== undefined && book.classification === undefined)
+    edits.push(...classificationEdits(note, rules, revision.classification));
   for (const text of revision.editions) {
     const index = book.editions.findIndex(({ id }) => id === text.id);
     const node = map(editions.items[index], "版");
@@ -62,6 +70,7 @@ export function confirmsRevision(saved: BookRecord, revision: BibliographyRevisi
     (revision.title === undefined || saved.title === revision.title) &&
     (revision.authors === undefined || same(saved.authors, revision.authors)) &&
     (revision.authorRoles === undefined || same(roles, revision.authorRoles)) &&
-    (!revision.endsLookups || saved.pendingLookup === undefined)
+    (!revision.endsLookups || saved.pendingLookup === undefined) &&
+    (revision.classification === undefined || saved.classification !== undefined)
   );
 }

@@ -27,6 +27,7 @@ function changes(revision: BibliographyRevision): boolean {
   return (
     revision.title !== undefined ||
     revision.authors !== undefined ||
+    revision.classification !== undefined ||
     revision.editions.length > 0 ||
     revision.endsLookups === true
   );
@@ -41,9 +42,41 @@ async function answer(
 }
 
 /**
+ * 日本十進分類法の番号と要目の名前が合わない本ページの名前を、番号に合わせる。番号を手で書き換えた
+ * 本のためにある。合っている本ページは書き換えず、書き換えられない本ページは次の機会に回す。
+ */
+export async function followClassifications(
+  context: BookContext,
+  paths: Iterable<string>,
+): Promise<void> {
+  const { files, notes } = context;
+  for (const path of paths) {
+    if (!context.active()) break;
+    try {
+      const raw = await files.read(path);
+      if (!notes.readScoped(raw) || notes.followClassification(raw) === raw) continue;
+      await files.process(path, (latest, currentPath) => {
+        const current = notes.readScoped(latest);
+        if (
+          !context.active() ||
+          !files.canUpdate(currentPath, latest) ||
+          !current ||
+          current.pendingMove
+        )
+          throw new Refuse("unavailable");
+        return notes.followClassification(latest);
+      });
+    } catch {
+      continue;
+    }
+  }
+}
+
+/**
  * 照会を待つ本の書誌を、国立国会図書館サーチの書誌で書き換える。問い合わせは本の書き込みと
  * 切り離して一件ずつ行い、問い合わせに失敗したら、その回はそこでやめて次の機会に回す。
- * 書き換える内容は、本ページの最新の内容でcoreが決め直す。
+ * 書き換える内容は、本ページの最新の内容でcoreが決め直す。表記をそろえる案と、手で書き換えた
+ * 分類の番号に要目の名前を合わせることも受け持つ。
  */
 export class LibraryLookups {
   private running: Promise<void> | undefined;
@@ -87,6 +120,11 @@ export class LibraryLookups {
   /** 選んだ案を、案を作った後に変わっていない本ページにだけ書く。 */
   apply(chosen: readonly Proposal[]): Promise<RevisionResult> {
     return this.serial(() => applyRevisions(this.context, chosen));
+  }
+
+  /** 変わった本ページの分類の名前を、日本十進分類法の番号に合わせる。目録の操作と順に行う。 */
+  followClassification(path: string): Promise<void> {
+    return this.serial(() => followClassifications(this.context, [path]));
   }
 
   private async drain(): Promise<void> {

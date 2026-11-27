@@ -31,12 +31,16 @@ import { readCatalog, readEntries, readEntry, readFailure, readStable } from "./
 import { bookUpdate, CatalogRules, newBookRecord, type Commit, type Stamp } from "./rules.ts";
 import { ShelfQuery } from "./shelf-query.ts";
 
-/** 拡張から届く書誌と同じ形に、登録画面で扱う購入の記録と、書誌が示すシリーズを加えたもの。 */
+/**
+ * 拡張から届く書誌と同じ形に、登録画面で扱う購入の記録と、書誌が示すシリーズと日本十進分類法の
+ * 番号を加えたもの。
+ */
 export type Product = Readonly<
   WireProduct & {
     purchasedOn?: string;
     purchasedFrom?: string;
     series?: string;
+    classification?: string;
   }
 >;
 export type PurchaseKey = Readonly<{ clientId: string; requestId: string; issuedAt: number }>;
@@ -70,7 +74,7 @@ export class Catalog {
   private readonly core: CatalogCore;
   private readonly context: BookContext;
   private readonly portable: PortableLibrary;
-  /** 国立国会図書館サーチでの照会と、表記をそろえる案。 */
+  /** 国立国会図書館サーチでの照会と、表記をそろえる案と、手で書き換えた分類の番号への名前の追従。 */
   readonly bibliography: LibraryLookups;
 
   constructor(files: BookFiles, core: CatalogCore, notes: NoteFormat, library: BibliographyLookup) {

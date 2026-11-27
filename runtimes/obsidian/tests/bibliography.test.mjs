@@ -44,11 +44,13 @@ void test("NDLの応答から書誌を読み、同じISBNの書誌が複数あ�
     statement: "Robert C.Martin 著,角征典 訳",
     publishers: ["ドワンゴ", "KADOKAWA (発売)"],
     series: [],
+    ndc: [{ edition: 10, number: "007.35" }],
   });
   assert.deepEqual(core.describeRecord(JSON.stringify(chosen)), {
     title: "Clean Coder : プロフェッショナルプログラマへの道",
     authors: ["Robert C Martin", "角 征典 (訳)"],
     publisher: "ドワンゴ",
+    classification: "007.35",
   });
   assert.equal(chooseRecord(items, "9784873115658", core), undefined);
 });
@@ -56,6 +58,7 @@ void test("NDLの応答から書誌を読み、同じISBNの書誌が複数あ�
 void test("NDLの書誌から、版の表記とシリーズと発行年月を読み、混み合った応答は誤りとする", () => {
   const [item] = readNdlItems(fixture("isbn-9784062880046"));
   assert.deepEqual(item.record.series, ["講談社現代新書 ; 2004"]);
+  assert.deepEqual(item.record.ndc, [{ edition: 9, number: "134.97" }]);
   assert.equal(item.record.statement, "橋爪大三郎 著");
   assert.equal(item.issued, "2009.7");
   assert.deepEqual(item.isbns, ["978-4-06-288004-6"]);
@@ -64,6 +67,7 @@ void test("NDLの書誌から、版の表記とシリーズと発行年月を読
     authors: ["橋爪 大三郎"],
     publisher: "講談社",
     series: "講談社現代新書 ; 2004",
+    classification: "134.97",
   });
   assert.throws(() => readNdlItems(fixture("too-many-requests")));
 });
@@ -83,6 +87,11 @@ void test("拡張からの購入は表記をそろえて先に保存し、後か
   assert.equal(edition.publisher, "オライリー・ジャパン");
   assert.deepEqual(edition.series, [{ isbn: readable, name: "THEORY/IN/PRACTICE" }]);
   assert.equal(book.pendingLookup, undefined);
+  assert.equal(book.classification, "007.64");
+  assert.match(
+    onlyBook(notes).raw,
+    /^book-ndc: "007\.64"\nbook-ndc-section: "007 情報科学"\nbook-props:/m,
+  );
   assert.equal(book.appliedPurchases[0].inputHash, await inputHash(operation));
   assert.equal((await catalog.execute(operation)).kind, "replayed");
   assert.equal((await catalog.reconcile(operation)).kind, "replayed");
@@ -114,6 +123,7 @@ void test("NDLに問い合わせられない間はそろえた表記のまま待
   assert.deepEqual(book.authors, ["Dustin Boswell", "Trevor Foucher", "角 征典"]);
   assert.equal(book.pendingLookup, undefined);
   assert.deepEqual(lookup.calls, [readable, readable]);
+  assert.equal(book.classification, "007.64");
 });
 
 void test("NDLに書誌がなければ、そろえた表記を残して照会を終える", async () => {
@@ -125,6 +135,8 @@ void test("NDLに書誌がなければ、そろえた表記を残して照会を
   assert.deepEqual(lookup.calls, [readable]);
   assert.equal(book.editions[0].publisher, "オライリージャパン");
   assert.equal(book.pendingLookup, undefined);
+  assert.equal(book.classification, undefined);
+  assert.doesNotMatch(onlyBook(notes).raw, /book-ndc/);
 });
 
 void test("照合と照会を求めない登録は、NDLに問い合わせない", async () => {
@@ -236,6 +248,7 @@ void test("NDLで確かめる案は、ISBNごとに一度だけ問い合わせ�
   assert.equal(proposals.length, 1);
   assert.equal(proposals[0].revision.title, ndlTitle);
   assert.equal(proposals[0].revision.editions[0].publisher, "オライリー・ジャパン");
+  assert.equal(proposals[0].revision.classification, "007.64");
 
   const stopped = new AbortController();
   stopped.abort();

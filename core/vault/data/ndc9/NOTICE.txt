@@ -1,0 +1,18 @@
+日本十進分類法（NDC）新訂9版の分類項目名 / Nippon Decimal Classification (NDC) 9th edition class names
+
+出典: 日本図書館協会分類委員会「NDCデータ（NDC8版および9版）」の ndc9（ndc9.ttl）
+Source: Japan Library Association, Classification Committee, "NDC data (NDC8 and NDC9)", ndc9 (ndc9.ttl)
+https://www.jla.or.jp/committees/bunrui/ndc-data/
+https://www.jla.or.jp/wp/wp-content/uploads/2025/06/ndc9.zip
+
+ライセンス: クリエイティブ・コモンズ 表示（CC BY）
+License: Creative Commons Attribution (CC BY)
+https://creativecommons.jp/licenses/
+
+変更: 類目と綱目の分類項目名（skos:prefLabel）と、3桁の要目の文脈付き分類項目名（rdfs:label）だけを
+labels.tsv に抜き出した。Book Props は要目を「007 情報科学」のように分類記号と名前を並べて表示し、
+NDC10 や NDC8 などほかの版の分類記号にも、同じ3桁の NDC9 の名前を添える。
+Changes: Only the preferred labels (skos:prefLabel) of the main classes and divisions and the contextual
+labels (rdfs:label) of the three-digit sections are extracted into labels.tsv. Book Props shows a section
+as its notation followed by its label, such as "007 情報科学", and also labels notations of other NDC
+editions, such as NDC10 and NDC8, with the NDC9 name of the same three digits.

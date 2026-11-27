@@ -13,6 +13,8 @@ import {
   inspect,
   isCanonicalIsbnList,
   missingMoveCopies,
+  ndcClasses,
+  ndcSection,
   normalizeIsbns,
   openShelf,
   planChange,
@@ -115,6 +117,8 @@ export type CatalogCore = Readonly<{
   describeRecord: typeof describeRecord;
   planEnrichment: typeof planEnrichment;
   planReview: typeof planReview;
+  ndcSection: typeof ndcSection;
+  ndcClasses: typeof ndcClasses;
 }>;
 
 /** バンドルに埋め込んだcoreの本体を読み込み、使える状態にして返す。プラグインの起動で一度だけ呼ぶ。 */
@@ -144,5 +148,7 @@ export function startCatalogCore(): CatalogCore {
     describeRecord,
     planEnrichment,
     planReview,
+    ndcSection,
+    ndcClasses,
   };
 }

@@ -85,6 +85,20 @@ class Feed {
     return new RegExp(`${name}="${escape(type)}"`).test(attributes);
   }
 
+  /**
+   * 件名のうち日本十進分類法の番号を、従う版(`dcndl:NDC10`なら10)とともに応答の順に読む。
+   * 版を示さない`dcndl:NDC`の番号は、版なしとして読む。どの番号をとるかはcoreが決める。
+   */
+  ndcNumbers(source: string): NonNullable<CatalogueRecord["ndc"]> {
+    const type = new RegExp(`${escape(this.name(xsi, "type"))}="dcndl:NDC(\\d*)"`);
+    return this.elements(source, dc, "subject").flatMap(({ attributes, inner }) => {
+      const [, edition] = type.exec(attributes) ?? [];
+      if (edition === undefined) return [];
+      const stated = edition ? Number(edition) : undefined;
+      return [{ ...optionalField("edition", stated), number: decode(inner).trim() }];
+    });
+  }
+
   item(source: string): NdlItem | undefined {
     const [title] = this.texts(source, dc, "title");
     if (!title) return undefined;
@@ -106,6 +120,7 @@ class Feed {
       publishers: this.texts(source, dc, "publisher"),
       series: this.texts(source, dcndl, "seriesTitle"),
       ...optionalField("edition", edition),
+      ndc: this.ndcNumbers(source),
     };
     return {
       record,

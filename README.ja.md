@@ -55,3 +55,5 @@ Obsidian では「書籍を登録・編集」「本棚を開く」「本・版�
 ## ライセンス
 
 Book Props のコードと文書は [MIT ライセンス](LICENSE)で利用できる。同梱した依存のライセンスは、各 Release に添付する `THIRD-PARTY-NOTICES.txt` にある。
+
+プラグインが本の分類の番号に添える日本十進分類法(NDC)の類と要目の名前は、[日本図書館協会分類委員会「NDCデータ」の ndc9](https://www.jla.or.jp/committees/bunrui/ndc-data/)([CC BY](https://creativecommons.jp/licenses/))から作った。名前だけを抜き出しており、変更点は [`core/vault/data/ndc9/NOTICE.txt`](core/vault/data/ndc9/NOTICE.txt) に記す。

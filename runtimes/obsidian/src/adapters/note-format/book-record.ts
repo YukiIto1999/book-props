@@ -61,17 +61,23 @@ export type BookRecord = Readonly<{
   pendingMove?: PendingMove;
   /** 国立国会図書館サーチでの照会を待つ記録。中身はcoreだけが読む。 */
   pendingLookup?: string;
+  /** 日本十進分類法の番号。本ページに書いてあるとおりで、手で書いた値のこともある。 */
+  classification?: string;
   customFields?: readonly CustomField[];
   editions: readonly EditionRecord[];
   appliedPurchases: readonly AppliedPurchase[];
 }>;
 
-/** 購入や所持の記録で、本ページに書く購入希望・版・購入の記録と、照会を待つ記録。 */
+/**
+ * 購入や所持の記録で、本ページに書く購入希望・版・購入の記録と、照会を待つ記録。
+ * `classification`は、番号のない本にだけ書く日本十進分類法の番号。
+ */
 export type BookUpdate = Readonly<{
   wanted: boolean;
   edition?: EditionRecord;
   receipt?: AppliedPurchase;
   pendingLookup?: string;
+  classification?: string;
 }>;
 
 /** 移動する版の項目の値と、移動先で同じ値であることを確かめるための署名。 */

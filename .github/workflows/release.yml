@@ -111,6 +111,16 @@ jobs:
           artifact-ids: ${{ needs.package.outputs.artifact }}
           path: ${{ runner.temp }}/assets
 
+      # The acceptance asserts the exact notes the extension writes. The plugin's later lookup at the
+      # National Diet Library would rewrite them whenever that public service happens to answer, so
+      # the test machine cannot reach it; the lookup then stays pending, as when NDL is down.
+      - name: Keep the acceptance away from the National Diet Library
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then hosts=/c/Windows/System32/drivers/etc/hosts; else hosts=/etc/hosts; fi
+          echo "127.0.0.1 ndlsearch.ndl.go.jp" | sudo tee -a "$hosts" > /dev/null 2>&1 || echo "127.0.0.1 ndlsearch.ndl.go.jp" >> "$hosts"
+          grep -F ndlsearch.ndl.go.jp "$hosts"
+
       - name: Verify and extract the ZIP and provision Chrome on Windows
         if: runner.os == 'Windows'
         shell: pwsh

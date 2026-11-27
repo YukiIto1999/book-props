@@ -5,6 +5,7 @@ import type { BibliographyLookup } from "../catalog/ports.ts";
 import type { CatalogCore, CatalogueRecord } from "../core/catalog-core.ts";
 import { optionalField } from "../shared/optional-field.ts";
 import { readNdlItems, type NdlItem } from "./ndl-records.ts";
+import { Busy, Pacer, retryAfter } from "./ndl-pacer.ts";
 
 const api = "https://ndlsearch.ndl.go.jp/api/opensearch";
 
@@ -42,9 +43,10 @@ function publicText(url: URL, accept: string, signal: AbortSignal, purpose: Purp
     (response) => {
       if (response.statusCode !== 200) {
         response.destroy();
+        const header = response.headers["retry-after"];
         reject(
           response.statusCode === 429
-            ? new Busy()
+            ? new Busy(retryAfter(header, Date.now()))
             : new Error("書誌の取得先が応答しませんでした。"),
         );
         return;
@@ -129,39 +131,13 @@ async function lookupProduct(url: URL, signal: AbortSignal): Promise<Product | u
   return parsed.success ? parsed.data : undefined;
 }
 
-/** 国立国会図書館サーチが混み合って、要求を受け付けなかった。 */
-export class Busy extends Error {
-  constructor() {
-    super("国立国会図書館サーチが混み合っています。");
-  }
-}
-
 /**
- * NDLサーチは混み合うと同時アクセスの上限として429を返すので、少し待って一度だけ問い直す。
- * 他の失敗と二度目の失敗はそのまま投げる。待つ間に中止されたら問い直さない。
- */
-export async function askOnceMore<T>(
-  ask: () => Promise<T>,
-  signal: AbortSignal,
-  pause = 3000,
-): Promise<T> {
-  try {
-    return await ask();
-  } catch (error: unknown) {
-    if (!(error instanceof Busy)) throw error;
-    const { promise, resolve } = Promise.withResolvers<void>();
-    setTimeout(resolve, pause);
-    await promise;
-    signal.throwIfAborted();
-    return ask();
-  }
-}
-
-/**
- * 書誌の取得先。画面からの検索と商品ページの取得に加え、登録後の照会で使う、ISBN一つにつき
- * 一度だけの国立国会図書館サーチへの問い合わせを持つ。
+ * 書誌の取得先。画面からの検索と商品ページの取得に加え、登録後の照会と表記をそろえる案で使う、
+ * ISBN一つにつき一件の国立国会図書館サーチへの問い合わせを持つ。この問い合わせは`pacer`で
+ * 間をあけて一つずつ行い、混み合っていれば待って問い直す。
  */
 export function bibliographySources(rules: SourceRules): BibliographySources & BibliographyLookup {
+  const pacer = new Pacer();
   return {
     async search(mode, query, signal) {
       const items = await ndlItems({ [mode]: query }, 12, signal, interactive);
@@ -169,7 +145,7 @@ export function bibliographySources(rules: SourceRules): BibliographySources & B
     },
     productPage: lookupProduct,
     async record(isbn, signal) {
-      const items = await askOnceMore(() => ndlItems({ isbn }, 5, signal, background), signal);
+      const items = await pacer.ask(() => ndlItems({ isbn }, 5, signal, background), signal);
       return chooseRecord(items, isbn, rules);
     },
   };

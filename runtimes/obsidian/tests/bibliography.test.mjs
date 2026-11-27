@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { askOnceMore, Busy, chooseRecord } from "../src/adapters/bibliography-sources.ts";
+import { chooseRecord } from "../src/adapters/bibliography-sources.ts";
 import { readNdlItems } from "../src/adapters/ndl-records.ts";
 import { inputHash } from "../src/catalog/purchase.ts";
 import { key, library, scope } from "./catalog-fixture.mjs";
@@ -276,33 +276,4 @@ void test("著者の役割と版のシリーズと照会待ちの記録は本ペ
   assert.equal(revised.editions[0].series, undefined);
   assert.equal(revised.pendingLookup, undefined);
   assert.doesNotMatch(cleared, /author-roles|pending-lookup|series/);
-});
-
-void test("NDLが混み合っていると答えたときだけ、待って一度だけ問い直す", async () => {
-  const signal = new AbortController().signal;
-  const answers = (...results) => {
-    const calls = [];
-    const ask = async () => {
-      calls.push(calls.length);
-      const next = results[calls.length - 1];
-      if (next instanceof Error) throw next;
-      return next;
-    };
-    return { calls, ask };
-  };
-  const busyOnce = answers(new Busy(), "record");
-  assert.equal(await askOnceMore(busyOnce.ask, signal, 1), "record");
-  assert.equal(busyOnce.calls.length, 2);
-  const busyTwice = answers(new Busy(), new Busy(), "never");
-  await assert.rejects(askOnceMore(busyTwice.ask, signal, 1), Busy);
-  assert.equal(busyTwice.calls.length, 2);
-  const failed = answers(new Error("timeout"), "never");
-  await assert.rejects(askOnceMore(failed.ask, signal, 1), /timeout/);
-  assert.equal(failed.calls.length, 1);
-  const stopped = new AbortController();
-  const abortedWhileWaiting = answers(new Busy(), "never");
-  const pending = askOnceMore(abortedWhileWaiting.ask, stopped.signal, 20);
-  stopped.abort();
-  await assert.rejects(pending);
-  assert.equal(abortedWhileWaiting.calls.length, 1);
 });

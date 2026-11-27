@@ -72,7 +72,7 @@ export class BibliographyReview extends Modal {
     new Setting(content)
       .setName("国立国会図書館サーチで確かめる")
       .setDesc(
-        "ISBNのある本は、国立国会図書館の書誌の書名・著者・出版社・シリーズを使います。ISBNごとに問い合わせるため、1冊に十数秒かかることがあります。",
+        "ISBNのある本は、国立国会図書館の書誌の書名・著者・出版社・シリーズを使います。ISBNごとに間をあけて問い合わせ、混み合っているときは待って問い直すため、1冊に数十秒から1分ほどかかることがあります。",
       )
       .addToggle((toggle) =>
         toggle.setValue(false).onChange((value) => {

@@ -4,8 +4,9 @@
  * 本はYAMLの本IDで識別するので、ファイル名は読みやすさのためにあり、利用者が変えてもよい。
  */
 import { sha256Hex } from "../shared/sha256.ts";
-import type { StoredBook } from "./catalog.ts";
-import type { BookFiles, NoteFileName } from "./ports.ts";
+import type { BookContext } from "./book-change.ts";
+import type { NoteFileName } from "./ports.ts";
+import { Refuse } from "./purchase.ts";
 
 /** WindowsとmacOSのファイル名、またはObsidianのリンクで使えない文字と、置き換える全角の文字。 */
 const replacements: Readonly<Record<string, string>> = {
@@ -61,6 +62,8 @@ export function titleStem(title: string): string {
   const cleaned = title
     .normalize("NFC")
     .replace(/[\s\p{Cc}]+/gu, (run) => (/\s/u.test(run) ? " " : ""))
+    // The stored subtitle separator 「 : 」 reads as one full-width colon in a file name, without the spaces around it.
+    .replace(/ *: */gu, "：")
     .replace(forbidden, (character) => replacements[character] ?? character);
   const stem = trimEnds(truncate(trimEnds(cleaned))) || untitled;
   return reserved.test(stem) ? `_${stem}` : stem;
@@ -77,6 +80,11 @@ function nameKey(name: string): string {
   return name.normalize("NFC").toLowerCase();
 }
 
+/** 短い符号から順に、`taken`にない名前を選ぶ。どの符号でも重なれば`undefined`。 */
+function freeName(stem: string, codes: readonly string[], taken: ReadonlySet<string>) {
+  return codes.map((code) => `${stem} (${code}).md`).find((name) => !taken.has(nameKey(name)));
+}
+
 /**
  * フォルダにある名前と重ならない、本ページのファイル名。重なるときだけ長い符号を使う。
  * @param codes - `bookCodes`が返した、短い順の符号
@@ -87,13 +95,9 @@ export function noteFileName(
   codes: readonly string[],
   existing: Iterable<string>,
 ): string {
-  const taken = new Set(Array.from(existing, nameKey));
-  const stem = titleStem(title);
-  for (const code of codes) {
-    const name = `${stem} (${code}).md`;
-    if (!taken.has(nameKey(name))) return name;
-  }
-  throw new Error("本ページと同じ名前のファイルがあります。");
+  const name = freeName(titleStem(title), codes, new Set(Array.from(existing, nameKey)));
+  if (name === undefined) throw new Error("本ページと同じ名前のファイルがあります。");
+  return name;
 }
 
 /** 本の書名と本IDから、フォルダにある名前を受け取ってファイル名を決める関数を作る。 */
@@ -102,29 +106,104 @@ export async function noteNaming(title: string, bookId: string): Promise<NoteFil
   return (existing) => noteFileName(title, codes, existing);
 }
 
-/** ファイル名が本IDに`.md`を付けただけの本ページか。以前の版はこの名前で作っていた。 */
-function namedAfterId({ path, book }: StoredBook): boolean {
-  return path.slice(path.lastIndexOf("/") + 1) === `${book.id}.md`;
+/** 名前を確かめる本ページ。`codes`は`bookCodes`が返した符号。 */
+export type NamedNote = Readonly<{
+  path: string;
+  bookId: string;
+  title: string;
+  codes: readonly string[];
+}>;
+
+/** 本ページ一冊の、いまの名前`from`と新しい名前`to`。`bookId`と`title`は一覧を作ったときの値。 */
+export type NoteRename = Readonly<{
+  path: string;
+  bookId: string;
+  title: string;
+  from: string;
+  to: string;
+}>;
+
+export type RenameResult = Readonly<{ renamed: number; skipped: number; failed: number }>;
+
+/**
+ * 名前がいまの書名と本IDから決まる名前でない本ページと、それぞれの新しい名前。重なりを避けて
+ * 長い符号を使った名前は、そのままにする。新しい名前は、パスの順に前の本ページを変えた後の
+ * フォルダで、大文字と小文字を区別せずに重ならないように決める。
+ * @param folders - フォルダごとの、その直下にあるファイルとフォルダの名前
+ */
+export function renameCandidates(
+  notes: readonly NamedNote[],
+  folders: ReadonlyMap<string, readonly string[]>,
+): NoteRename[] {
+  const taken = new Map<string, Set<string>>();
+  const renames: NoteRename[] = [];
+  for (const { path, bookId, title, codes } of [...notes].sort((a, b) =>
+    a.path < b.path ? -1 : 1,
+  )) {
+    const slash = path.lastIndexOf("/");
+    const folder = path.slice(0, slash);
+    const from = path.slice(slash + 1);
+    const stem = titleStem(title);
+    if (codes.some((code) => `${stem} (${code}).md` === from.normalize("NFC"))) continue;
+    const names = taken.get(folder) ?? new Set(Array.from(folders.get(folder) ?? [], nameKey));
+    taken.set(folder, names);
+    names.delete(nameKey(from));
+    const to = freeName(stem, codes, names);
+    names.add(nameKey(to ?? from));
+    if (to !== undefined) renames.push({ path, bookId, title, from, to });
+  }
+  return renames;
 }
 
-export type RenameResult = Readonly<{ renamed: number; failed: number }>;
+/** 書籍の保存範囲の本ページを読み、名前を変える本ページを選ぶ。本でないページと読めない本ページは扱わない。 */
+export async function proposeNoteRenames({ files, notes }: BookContext): Promise<NoteRename[]> {
+  const named: NamedNote[] = [];
+  for (const path of files.versions().keys()) {
+    let book;
+    try {
+      book = notes.readScoped(await files.read(path));
+    } catch {
+      continue;
+    }
+    if (book)
+      named.push({ path, bookId: book.id, title: book.title, codes: await bookCodes(book.id) });
+  }
+  const folders = new Map<string, readonly string[]>();
+  for (const { path } of named) {
+    const folder = path.slice(0, path.lastIndexOf("/"));
+    if (!folders.has(folder)) folders.set(folder, files.names(folder));
+  }
+  return renameCandidates(named, folders);
+}
 
-/** ファイル名が本IDのままの本ページだけを、書名の名前に変える。ほかの本ページには触れない。 */
-export async function renameIdNamed(
-  files: Pick<BookFiles, "rename">,
-  entries: readonly StoredBook[],
-  active: () => boolean,
+/** 一冊の本ページを、一覧を作ったときと同じ本と書名で、新しい名前が空いているときだけ変える。 */
+async function renameOne({ files, notes }: BookContext, rename: NoteRename): Promise<void> {
+  if (!files.versions().has(rename.path)) throw new Refuse("conflict");
+  const book = notes.readScoped(await files.read(rename.path));
+  if (book?.id !== rename.bookId || book.title !== rename.title) throw new Refuse("conflict");
+  await files.rename(rename.path, (existing) => {
+    if (Array.from(existing, nameKey).includes(nameKey(rename.to))) throw new Refuse("conflict");
+    return rename.to;
+  });
+}
+
+/** 選んだ本ページの名前を順に変える。一覧を作った後に変わった本ページと、新しい名前が埋まった本ページは飛ばす。 */
+export async function applyNoteRenames(
+  context: BookContext,
+  chosen: readonly NoteRename[],
 ): Promise<RenameResult> {
   let renamed = 0;
+  let skipped = 0;
   let failed = 0;
-  for (const entry of entries.filter(namedAfterId)) {
-    if (!active()) break;
+  for (const rename of chosen) {
+    if (!context.active()) break;
     try {
-      await files.rename(entry.path, await noteNaming(entry.book.title, entry.book.id));
+      await renameOne(context, rename);
       renamed++;
-    } catch {
-      failed++;
+    } catch (error: unknown) {
+      if (error instanceof Refuse && error.kind === "conflict") skipped++;
+      else failed++;
     }
   }
-  return { renamed, failed };
+  return { renamed, skipped, failed };
 }

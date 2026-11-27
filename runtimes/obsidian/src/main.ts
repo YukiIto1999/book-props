@@ -15,6 +15,7 @@ import { addBooksBaseCommand } from "./views/books-base-command.ts";
 import { answerExtension, type ExtensionHost } from "./views/extension-requests.ts";
 import { LibraryTools } from "./views/library-tools.ts";
 import { addNoteTemplates } from "./views/note-templates.ts";
+import { NoteNameReview } from "./views/note-name-review.ts";
 import type { LocalAction } from "./views/registration-messages.ts";
 import { Registration } from "./views/registration.ts";
 import { Settings } from "./views/settings.ts";
@@ -74,21 +75,6 @@ export default class BookProps extends Plugin {
     new Registration(this.app, services, product, intent).open();
   }
 
-  /** ファイル名が本IDのままの本ページを書名の名前に変え、変えた件数を知らせる。 */
-  private async renameIdNamedNotes(catalog: Catalog): Promise<void> {
-    try {
-      const { renamed, failed } = await catalog.renameIdNamedNotes();
-      if (renamed === 0 && failed === 0)
-        new Notice("ファイル名が本IDのままの本ページはありません。");
-      else {
-        const rest = failed > 0 ? `${failed}件は変えられませんでした。` : "";
-        new Notice(`${renamed}件の本ページのファイル名を書名に変えました。${rest}`);
-      }
-    } catch {
-      new Notice("本ページのファイル名を変えられませんでした。");
-    }
-  }
-
   override async onload(): Promise<void> {
     const core = startCatalogCore();
     const runtime = { core, notes: new NoteFormat(core), sources: bibliographySources(core) };
@@ -129,11 +115,12 @@ export default class BookProps extends Plugin {
       },
     });
     this.addCommand({
+      // 以前の「本IDのファイル名を書名に変える」と同じIDのままにして、割り当てたホットキーを保つ。
       id: "rename-id-named-notes",
-      name: "本IDのファイル名を書名に変える",
+      name: "ファイル名を書名に合わせる",
       callback: () => {
         if (!this.catalog) new Notice("Book Propsの設定で書籍フォルダを指定してください。");
-        else void this.renameIdNamedNotes(this.catalog);
+        else new NoteNameReview(this.app, this.catalog).open();
       },
     });
     this.addCommand({

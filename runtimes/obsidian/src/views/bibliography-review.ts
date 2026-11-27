@@ -66,7 +66,7 @@ export class BibliographyReview extends Modal {
     const content = this.contentEl;
     content.empty();
     content.createEl("p", {
-      text: "書名・著者・出版社・シリーズの表記をそろえる案を作ります。案を確かめてから、選んだ本だけを書き換えます。ファイル名は変えません。",
+      text: "書名・著者・出版社・シリーズの表記をそろえる案を作ります。案を確かめてから、選んだ本だけを書き換えます。ファイル名は変えません。書名を書き換えた本のファイル名は、「ファイル名を書名に合わせる」で合わせられます。",
     });
     let library = false;
     new Setting(content)

@@ -87,6 +87,7 @@ function scope(initial, moveCopies = memoryCopies(), lookup = library()) {
       notes.set(path, change(await files.read(path), path));
       return path;
     },
+    names: (folder) => siblings(notes, folder),
     create: async (fileName, raw) => {
       const path = `Books/${fileName(siblings(notes, "Books"))}`;
       assert.ok(!notes.has(path));

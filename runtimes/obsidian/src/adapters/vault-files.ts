@@ -57,6 +57,16 @@ export class VaultFiles implements BookFiles {
     return file.path;
   }
 
+  names(folder: string): string[] {
+    const found = this.app.vault.getAbstractFileByPath(folder);
+    if (
+      !(found instanceof TFolder) ||
+      (folder !== this.folder && !folder.startsWith(`${this.folder}/`))
+    )
+      throw new Error("書籍フォルダの外にはアクセスできません。");
+    return found.children.map(({ name }) => name);
+  }
+
   async create(fileName: NoteFileName, raw: string): Promise<string> {
     const folder = this.app.vault.getAbstractFileByPath(this.folder);
     if (!(folder instanceof TFolder)) throw new Error("書籍フォルダが見つかりません。");

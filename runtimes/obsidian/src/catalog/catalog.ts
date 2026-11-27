@@ -8,7 +8,13 @@ import type { BookContext } from "./book-change.ts";
 import { missingMoveCopies, settledShelf, type MissingCopy } from "./edition-recovery.ts";
 import { importNotes, maintainBooks, type ImportResult } from "./maintenance.ts";
 import { manageBooks, type Management, type ManagementResult } from "./management.ts";
-import { noteNaming, renameIdNamed, type RenameResult } from "./note-name.ts";
+import {
+  applyNoteRenames,
+  noteNaming,
+  proposeNoteRenames,
+  type NoteRename,
+  type RenameResult,
+} from "./note-name.ts";
 import type { BibliographyLookup, BookFiles } from "./ports.ts";
 import { PortableLibrary } from "./portable-library.ts";
 import {
@@ -174,12 +180,14 @@ export class Catalog {
     return this.serial(() => importNotes(this.context, desired));
   }
 
-  /** ファイル名が本IDのままの本ページを、書名の名前に変える。 */
-  renameIdNamedNotes(): Promise<RenameResult> {
-    return this.serial(async () => {
-      if (!this.accepting) throw new Refuse("unavailable");
-      return renameIdNamed(this.files, await this.entries(), () => this.accepting);
-    });
+  /** 名前がいまの書名と本IDから決まる名前でない本ページと、それぞれの新しい名前。 */
+  proposeNoteNames(): Promise<NoteRename[]> {
+    return this.serial(() => proposeNoteRenames(this.context));
+  }
+
+  /** 選んだ本ページの名前を、一覧を作った後に変わっていなければ変える。 */
+  renameNotes(chosen: readonly NoteRename[]): Promise<RenameResult> {
+    return this.serial(() => applyNoteRenames(this.context, chosen));
   }
 
   maintain(): Promise<void> {

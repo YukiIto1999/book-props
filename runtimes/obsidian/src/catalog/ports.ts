@@ -35,6 +35,8 @@ export interface BookFiles {
   versions(): ReadonlyMap<string, string>;
   read(path: string): Promise<string>;
   process(path: string, update: (raw: string, currentPath: string) => string): Promise<string>;
+  /** 書籍フォルダかその中のフォルダの、直下にあるファイルとフォルダの名前。 */
+  names(folder: string): readonly string[];
   /** 書籍フォルダの直下に本ページを作り、そのパスを返す。 */
   create(fileName: NoteFileName, raw: string): Promise<string>;
   /** 本ページを同じフォルダの中で改名し、リンクも直す。改名後のパスを返す。 */

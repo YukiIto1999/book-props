@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Book Props",
   "description": "Obsidian の蔵書の記録と照らして、書店の商品ページで本の所持と購入希望を表示します。",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "permissions": ["storage", "contextMenus"],
   "background": { "service_worker": "worker.js", "type": "module" },
   "content_security_policy": {

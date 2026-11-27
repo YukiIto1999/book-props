@@ -2,12 +2,17 @@
 
 use unicode_normalization::UnicodeNormalization;
 
+use crate::bibliography::{author_keys, tidy, tidy_title};
+
+/// A label or other short text compared without width, case, or spacing differences.
 pub(crate) fn normalized(text: &str) -> String {
-    normalize(text, false)
+    normalize(&tidy(text), false)
 }
 
+/// A title compared in the stored spelling, without case or spacing differences, and with every
+/// subtitle separator alike.
 pub(crate) fn normalized_title(text: &str) -> String {
-    normalize(text, true)
+    normalize(&tidy_title(text), true)
 }
 
 fn normalize(text: &str, title: bool) -> String {
@@ -34,26 +39,10 @@ fn normalize(text: &str, title: bool) -> String {
     result
 }
 
-fn normalized_author(text: &str) -> String {
-    let mut value = normalized(text);
-    if value
-        .chars()
-        .all(|c| matches!(c, ' ' | '々' | '\u{3040}'..='\u{30ff}' | '\u{3400}'..='\u{9fff}'))
-    {
-        value.retain(|c| c != ' ');
-    }
-    value
-}
-
+/// Whether two author lists name the same people, whatever the order, the spelling of each name,
+/// or the roles written with them.
 pub(crate) fn same_authors(stored: &[String], source: &[String]) -> bool {
-    if stored.len() != source.len() {
-        return false;
-    }
-    let mut left: Vec<_> = stored.iter().map(|s| normalized_author(s)).collect();
-    let mut right: Vec<_> = source.iter().map(|s| normalized_author(s)).collect();
-    left.sort_unstable();
-    right.sort_unstable();
-    left == right
+    author_keys(stored) == author_keys(source)
 }
 
 /// Canonical ISBN-13s of the inputs without duplicates, or the first input that is not an ISBN.

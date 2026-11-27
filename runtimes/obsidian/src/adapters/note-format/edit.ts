@@ -13,7 +13,7 @@ export type Frontmatter = Readonly<{
 export type Edit = Readonly<{ start: number; end: number; text: string }>;
 export type Plain = string | number | boolean | null | readonly Plain[] | PlainMap;
 export type PlainMap = Readonly<{ [key: string]: Plain }>;
-type StoredEdition = Readonly<Record<string, string | boolean | readonly string[] | undefined>>;
+type StoredEdition = Readonly<Record<string, Plain | undefined>>;
 type FieldValues = Readonly<Record<string, Plain | undefined>>;
 type RowField = "editions" | "applied-purchases" | "isbns" | "custom-fields";
 type Row = object | string;
@@ -55,6 +55,9 @@ export function storeEdition(edition: EditionRecord): StoredEdition {
     "purchased-on": edition.purchasedOn,
     "purchased-from": edition.purchasedFrom,
     "archived-at": edition.archivedAt,
+    series: edition.series?.length
+      ? edition.series.map(({ isbn, name }) => ({ isbn, name }))
+      : undefined,
   };
 }
 

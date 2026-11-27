@@ -1,7 +1,17 @@
+import type { CatalogueRecord } from "../core/catalog-core.ts";
+
 /**
- * 目録の操作が使う外部の口。Vaultのファイルと、Vaultの外に控えた版の置き場所を、
- * adaptersがこの形で実装する。
+ * 目録の操作が使う外部の口。Vaultのファイルと、Vaultの外に控えた版の置き場所と、
+ * 国立国会図書館サーチの書誌を、adaptersがこの形で実装する。
  */
+
+/**
+ * 国立国会図書館サーチで、ISBN一つにつき一件の書誌を探す。国立国会図書館の書誌がなければ
+ * `undefined`、問い合わせられなければ例外。
+ */
+export interface BibliographyLookup {
+  record(isbn: string, signal: AbortSignal): Promise<CatalogueRecord | undefined>;
+}
 
 /** 版を移動するあいだVaultの外に控えた版。`snapshot`は版の内容の署名。 */
 export type MoveCopy = Readonly<{

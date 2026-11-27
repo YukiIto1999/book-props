@@ -4,11 +4,13 @@ import { isJsonObject } from "../../shared/json-object.ts";
 import { optionalField } from "../../shared/optional-field.ts";
 import type {
   AppliedPurchase,
+  AuthorRole,
   BookRecord,
   Capture,
   CustomField,
   EditionRecord,
   PendingMove,
+  SeriesEntry,
 } from "./book-record.ts";
 import type { Frontmatter } from "./edit.ts";
 import { BookNoteError, unreadable } from "./error.ts";
@@ -79,10 +81,41 @@ function flag(node: unknown, field: string): boolean {
     : unreadable(`${field} はtrueかfalseで指定してください。`);
 }
 
+function absent(node: unknown): boolean {
+  return node === undefined || (isScalar(node) && node.value === null);
+}
+
 function texts(record: YAMLMap, field: string): string[] {
   const node = record.get(field, true);
-  if (node === undefined || (isScalar(node) && node.value === null)) return [];
+  if (absent(node)) return [];
   return seq(node, field).items.map((item) => text(item, field));
+}
+
+/** 版のシリーズ。ISBNごとに一つまで。 */
+function readSeries(edition: YAMLMap): SeriesEntry[] {
+  const node = edition.get("series", true);
+  if (absent(node)) return [];
+  const entries = seq(node, "版のシリーズ").items.map((item) => {
+    const entry = map(item, "版のシリーズ");
+    return {
+      isbn: text(entry.get("isbn", true), "シリーズのISBN"),
+      name: text(entry.get("name", true), "シリーズ名"),
+    };
+  });
+  if (new Set(entries.map(({ isbn }) => isbn)).size !== entries.length) {
+    return unreadable("版のシリーズは、ISBNごとに一つずつ指定してください。");
+  }
+  return entries;
+}
+
+/** 著者の役割。著者の名前から役割へのマップ。 */
+function readAuthorRoles(managed: YAMLMap): AuthorRole[] {
+  const node = managed.get("author-roles", true);
+  if (absent(node)) return [];
+  return map(node, "著者の役割").items.map(({ key, value }) => ({
+    name: text(key, "役割を持つ著者"),
+    role: text(value, "著者の役割"),
+  }));
 }
 
 function readEdition(node: unknown, rules: NoteRules): EditionRecord {
@@ -91,6 +124,7 @@ function readEdition(node: unknown, rules: NoteRules): EditionRecord {
   if (!rules.isCanonicalIsbnList(isbns)) {
     return unreadable("版のISBNは、重複しないISBN-13の文字列で指定してください。");
   }
+  const series = readSeries(edition);
   return {
     id: readId(edition.get("id", true), "版"),
     owned: flag(edition.get("owned", true), "版の所持"),
@@ -102,6 +136,7 @@ function readEdition(node: unknown, rules: NoteRules): EditionRecord {
     ...optionalField("purchasedOn", optionalText(edition, "purchased-on")),
     ...optionalField("purchasedFrom", optionalText(edition, "purchased-from")),
     ...optionalField("archivedAt", optionalText(edition, "archived-at")),
+    ...optionalField("series", series.length ? series : undefined),
   };
 }
 
@@ -232,6 +267,7 @@ function readBook(
     id: bookId,
     title: text(root.get("book-title", true), "書名"),
     authors: texts(root, "book-authors"),
+    authorRoles: readAuthorRoles(managed),
     tags,
     wanted: flag(root.get("book-wanted", true), "購入希望"),
     ...optionalField("readingStatus", readingStatus),
@@ -240,6 +276,7 @@ function readBook(
     editions: ownedEditions,
     appliedPurchases,
     ...optionalField("pendingMove", readMove(optionalText(managed, "pending-move"), bookId, rules)),
+    ...optionalField("pendingLookup", optionalText(managed, "pending-lookup")),
     customFields,
   };
 }

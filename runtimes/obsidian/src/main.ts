@@ -1,6 +1,6 @@
 import { FileSystemAdapter, Notice, Plugin, TFolder, normalizePath } from "obsidian";
 import type { TAbstractFile } from "obsidian";
-import { bibliographySources } from "./adapters/bibliography-sources.ts";
+import { bibliographySources, type BibliographySources } from "./adapters/bibliography-sources.ts";
 import { decodeConfiguration, type Configuration } from "./adapters/configuration.ts";
 import type { ConnectionGrant } from "./adapters/connection/connection-grant.ts";
 import { Connection } from "./adapters/connection/connection.ts";
@@ -8,7 +8,9 @@ import { VaultConnection } from "./adapters/connection/vault-connection.ts";
 import { NoteFormat } from "./adapters/note-format/note-format.ts";
 import { VaultFiles } from "./adapters/vault-files.ts";
 import { Catalog, type Product } from "./catalog/catalog.ts";
+import type { BibliographyLookup } from "./catalog/ports.ts";
 import { startCatalogCore, type CatalogCore } from "./core/catalog-core.ts";
+import { BibliographyReview } from "./views/bibliography-review.ts";
 import { addBooksBaseCommand } from "./views/books-base-command.ts";
 import { answerExtension, type ExtensionHost } from "./views/extension-requests.ts";
 import { LibraryTools } from "./views/library-tools.ts";
@@ -18,8 +20,12 @@ import { Registration } from "./views/registration.ts";
 import { Settings } from "./views/settings.ts";
 import { Shelf } from "./views/shelf.ts";
 
-/** 起動したcoreと、それを使う本ページの書式。プラグインの読み込みで一度だけ作る。 */
-type Runtime = Readonly<{ core: CatalogCore; notes: NoteFormat }>;
+/** 起動したcoreと、それを使う本ページの書式と書誌の取得先。プラグインの読み込みで一度だけ作る。 */
+type Runtime = Readonly<{
+  core: CatalogCore;
+  notes: NoteFormat;
+  sources: BibliographySources & BibliographyLookup;
+}>;
 
 export default class BookProps extends Plugin {
   folder = "";
@@ -56,12 +62,15 @@ export default class BookProps extends Plugin {
   };
 
   /** 書籍フォルダの本を扱う目録を、Vaultのファイルと起動済みのcoreで組み立てる。 */
-  private openCatalog(folder: string, { core, notes }: Runtime): Catalog {
-    return new Catalog(new VaultFiles(this.app, folder, this.fileVersion), core, notes);
+  private openCatalog(folder: string, { core, notes, sources }: Runtime): Catalog {
+    const files = new VaultFiles(this.app, folder, this.fileVersion);
+    return new Catalog(files, core, notes, sources);
   }
 
   private openRegistration(catalog: Catalog, product?: Product, intent?: LocalAction): void {
-    const services = { catalog, sources: bibliographySources, clientId: this.clientId };
+    const sources = this.runtime?.sources;
+    if (!sources) return;
+    const services = { catalog, sources, clientId: this.clientId };
     new Registration(this.app, services, product, intent).open();
   }
 
@@ -82,7 +91,7 @@ export default class BookProps extends Plugin {
 
   override async onload(): Promise<void> {
     const core = startCatalogCore();
-    const runtime = { core, notes: new NoteFormat(core) };
+    const runtime = { core, notes: new NoteFormat(core), sources: bibliographySources(core) };
     this.runtime = runtime;
     const saved: unknown = await this.loadData();
     this.config = decodeConfiguration(saved);
@@ -125,6 +134,14 @@ export default class BookProps extends Plugin {
       callback: () => {
         if (!this.catalog) new Notice("Book Propsの設定で書籍フォルダを指定してください。");
         else void this.renameIdNamedNotes(this.catalog);
+      },
+    });
+    this.addCommand({
+      id: "normalize-book-text",
+      name: "本の表記をそろえる",
+      callback: () => {
+        if (!this.catalog) new Notice("Book Propsの設定で書籍フォルダを指定してください。");
+        else new BibliographyReview(this.app, this.catalog.bibliography).open();
       },
     });
     addBooksBaseCommand(this, () => this.folder);

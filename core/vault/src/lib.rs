@@ -1,7 +1,8 @@
 //! Catalog rules for the Vault: identity evidence, matching, the decisions they lead to, the
 //! purchase changes planned from them, the management of stored books and edition moves, the
-//! shelf's queries, and the portable library.
+//! shelf's queries, the portable library, and bibliographic text in one spelling.
 
+mod bibliography;
 mod change;
 mod identity;
 mod management;
@@ -13,21 +14,24 @@ mod receipt;
 mod shelf;
 mod text;
 
+pub use bibliography::{describe_record, plan_enrichment, plan_review};
 pub use change::plan_change;
 pub use management::{allows_step, book_options, plan_management, restore_targets};
 pub use matching::inspect;
 pub use model::{
-    Action, Admission, Book, BookOptions, BookStep, BookWrite, BooksRequest, CatalogRequest,
-    ChangePlan, ChangeRequest, CopiesRequest, CopyPlace, CustomField, Decision, Details, Edition,
-    EditionOptions, EditionPatch, EditionWrite, ExpiryRequest, ImportPlan, ImportRequest, IsbnList,
-    ManagementCommand, ManagementPlan, ManagementRequest, MissingCopies, MoveBackup, MoveCopy,
-    MoveMarker, MovePlan, MoveRequest, MoveSource, MoveStage, NewBook, NoteFacts, OptionsRequest,
-    Outcome, Ownership, OwnershipFilter, PortableEnvelope, PortableExport, PortableNote,
-    PortableNotes, PortableProblem, PortableVerdict, PresentNote, Product, PurchaseKey, RangeKind,
-    Receipt, ReceiptExpiry, ReceiptWrite, ReconcileRequest, Reconciliation, RestoreRequest,
-    RestoreTargets, Selection, SettledShelf, ShelfBook, ShelfBound, ShelfField, ShelfOverview,
-    ShelfQuery, ShelfRange, ShelfRecord, ShelfRequest, ShelfSelection, ShelfTag, ShelfValue,
-    ShelfView, StepRequest, WishFilter, WritePlan,
+    Action, Admission, AuthorRole, BibliographyRequest, BibliographyRevision, Book, BookOptions,
+    BookStep, BookWrite, BooksRequest, CatalogRequest, CatalogueRecord, ChangePlan, ChangeRequest,
+    CopiesRequest, CopyPlace, CustomField, Decision, DescribedRecord, Details, Edition,
+    EditionOptions, EditionPatch, EditionText, EditionWrite, EnrichmentPlan, ExpiryRequest,
+    ImportPlan, ImportRequest, IsbnList, LookupAnswer, ManagementCommand, ManagementPlan,
+    ManagementRequest, MissingCopies, MoveBackup, MoveCopy, MoveMarker, MovePlan, MoveRequest,
+    MoveSource, MoveStage, NewBook, NoteFacts, OptionsRequest, Outcome, Ownership, OwnershipFilter,
+    Person, PortableEnvelope, PortableExport, PortableNote, PortableNotes, PortableProblem,
+    PortableVerdict, PresentNote, Product, PurchaseKey, RangeKind, Receipt, ReceiptExpiry,
+    ReceiptWrite, ReconcileRequest, Reconciliation, RestoreRequest, RestoreTargets, Selection,
+    SeriesEntry, SettledShelf, ShelfBook, ShelfBound, ShelfField, ShelfOverview, ShelfQuery,
+    ShelfRange, ShelfRecord, ShelfRequest, ShelfSelection, ShelfTag, ShelfValue, ShelfView,
+    StepRequest, WishFilter, WritePlan,
 };
 pub use moving::{missing_move_copies, plan_move, settle_shelf};
 pub use portable::{
@@ -38,6 +42,38 @@ pub use shelf::{ShelfError, ShelfIndex};
 pub use text::calendar_date;
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::{JsError, wasm_bindgen};
+/// A National Diet Library record in the stored spelling, from the JSON text of a
+/// `CatalogueRecord`.
+///
+/// # Errors
+/// Throws when the request is not a well-formed `CatalogueRecord`.
+#[wasm_bindgen(js_name = describeRecord)]
+pub fn describe_record_request(request: &str) -> Result<Ts<DescribedRecord>, JsError> {
+    let record: CatalogueRecord = serde_json::from_str(request)?;
+    Ok(describe_record(&record).into_ts()?)
+}
+
+/// What finishing the National Diet Library lookups of a book leads to, from the JSON text of a
+/// `BibliographyRequest`.
+///
+/// # Errors
+/// Throws when the request is not a well-formed `BibliographyRequest`.
+#[wasm_bindgen(js_name = planEnrichment)]
+pub fn plan_enrichment_request(request: &str) -> Result<Ts<EnrichmentPlan>, JsError> {
+    let request: BibliographyRequest = serde_json::from_str(request)?;
+    Ok(plan_enrichment(&request).into_ts()?)
+}
+
+/// The text a stored book would have in the stored spelling, from the JSON text of a
+/// `BibliographyRequest`.
+///
+/// # Errors
+/// Throws when the request is not a well-formed `BibliographyRequest`.
+#[wasm_bindgen(js_name = planReview)]
+pub fn plan_review_request(request: &str) -> Result<Ts<BibliographyRevision>, JsError> {
+    let request: BibliographyRequest = serde_json::from_str(request)?;
+    Ok(plan_review(&request).into_ts()?)
+}
 
 /// Canonical ISBN-13s of the inputs without duplicates, or the first input that is not an ISBN.
 #[must_use]

@@ -134,13 +134,18 @@ export class PortableLibrary {
   }
 
   /**
-   * 書籍の保存範囲にある本ページの全文から、Vaultに依存しないJSONを作る。
-   * 購入の再確認記録だけを取り除き、プロパティ、タグ、改行、本文はそのまま残す。
+   * 書籍の保存範囲にある本ページの全文から、Vaultに依存しないJSONを作る。購入の再確認記録と、
+   * 国立国会図書館サーチへの照会を待つ記録だけを取り除き、プロパティ、タグ、改行、本文はそのまま残す。
    */
   encode(raws: readonly string[]): string {
     const { notes } = this;
     const readings = raws.map((raw) =>
-      readNote(notes, () => notes.removePurchases(raw, (purchases) => purchases.map(() => true))),
+      readNote(notes, () =>
+        notes.reviseBibliography(
+          notes.removePurchases(raw, (purchases) => purchases.map(() => true)),
+          { editions: [], endsLookups: true },
+        ),
+      ),
     );
     const request: PortableExport = { notes: [...this.check(readings)] };
     return this.core.encodePortableLibrary(JSON.stringify(request));

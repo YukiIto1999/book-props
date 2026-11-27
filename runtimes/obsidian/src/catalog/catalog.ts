@@ -3,12 +3,13 @@ import type { BookRecord } from "../adapters/note-format/book-record.ts";
 import type { NoteFormat } from "../adapters/note-format/note-format.ts";
 import type { Action, BookOptions, CatalogCore, IsbnList, Outcome } from "../core/catalog-core.ts";
 import { optionalField } from "../shared/optional-field.ts";
+import { LibraryLookups } from "./bibliography.ts";
 import type { BookContext } from "./book-change.ts";
 import { missingMoveCopies, settledShelf, type MissingCopy } from "./edition-recovery.ts";
-import { importNotes, pruneReceipts, type ImportResult } from "./maintenance.ts";
+import { importNotes, maintainBooks, type ImportResult } from "./maintenance.ts";
 import { manageBooks, type Management, type ManagementResult } from "./management.ts";
 import { noteNaming, renameIdNamed, type RenameResult } from "./note-name.ts";
-import type { BookFiles } from "./ports.ts";
+import type { BibliographyLookup, BookFiles } from "./ports.ts";
 import { PortableLibrary } from "./portable-library.ts";
 import {
   assertUnchanged,
@@ -24,20 +25,23 @@ import { readCatalog, readEntries, readEntry, readFailure, readStable } from "./
 import { bookUpdate, CatalogRules, newBookRecord, type Commit, type Stamp } from "./rules.ts";
 import { ShelfQuery } from "./shelf-query.ts";
 
-/** 拡張から届く書誌と同じ形に、登録画面で扱う購入の記録を加えたもの。 */
+/** 拡張から届く書誌と同じ形に、登録画面で扱う購入の記録と、書誌が示すシリーズを加えたもの。 */
 export type Product = Readonly<
   WireProduct & {
     purchasedOn?: string;
     purchasedFrom?: string;
+    series?: string;
   }
 >;
 export type PurchaseKey = Readonly<{ clientId: string; requestId: string; issuedAt: number }>;
 export type Selection = Readonly<{ bookId: string; editionId?: string }>;
+/** `lookup`が真なら、書いた書誌を後で国立国会図書館サーチの書誌で書き換える。 */
 export type Operation = Readonly<{
   action: Action;
   product: Product;
   purchase?: PurchaseKey;
   selection?: Selection;
+  lookup?: boolean;
 }>;
 export type StoredBook = Readonly<{ path: string; book: BookRecord }>;
 export type Result =
@@ -60,12 +64,15 @@ export class Catalog {
   private readonly core: CatalogCore;
   private readonly context: BookContext;
   private readonly portable: PortableLibrary;
+  /** 国立国会図書館サーチでの照会と、表記をそろえる案。 */
+  readonly bibliography: LibraryLookups;
 
-  constructor(files: BookFiles, core: CatalogCore, notes: NoteFormat) {
+  constructor(files: BookFiles, core: CatalogCore, notes: NoteFormat, library: BibliographyLookup) {
     this.core = core;
     const rules = new CatalogRules(core, notes);
     this.context = { files, notes, rules, active: () => this.accepting };
     this.portable = new PortableLibrary(core, notes);
+    this.bibliography = new LibraryLookups(this.context, library, (work) => this.serial(work));
   }
 
   private get files(): BookFiles {
@@ -176,35 +183,23 @@ export class Catalog {
   }
 
   maintain(): Promise<void> {
-    return this.serial(async () => {
-      if (!this.accepting) return;
-      try {
-        const initial = await this.entries();
-        for (const { book } of initial) {
-          if (book.pendingMove) {
-            await manageBooks(this.context, { action: "recoverMove", bookId: book.id });
-          }
-        }
-        const entries = hasPendingMove(initial) ? await this.entries() : initial;
-        const now = Date.now();
-        if (!hasPendingMove(entries))
-          await pruneReceipts(this.context, entries, (receipts) =>
-            this.rules.expired(receipts, now),
-          );
-      } catch {
-        return;
-      }
-    });
+    const maintained = this.serial(() => maintainBooks(this.context));
+    return maintained.then(() => this.bibliography.request());
   }
 
   stop(): Promise<unknown> {
     this.accepting = false;
+    this.bibliography.stop();
     return this.tail;
   }
 
+  /** 購入などを順に処理する。書誌の照会を求める操作は、保存した後で照会を始め、その終わりは待たない。 */
   execute(operation: Operation, signal?: AbortSignal): Promise<Result> {
     if (operation.action === "inspect") return this.run(operation, signal);
-    return this.serial(() => this.run(operation, signal));
+    const done = this.serial(() => this.run(operation, signal));
+    if (operation.lookup)
+      void done.then(({ kind }) => (kind === "saved" ? this.bibliography.request() : undefined));
+    return done;
   }
 
   /** この端末の登録画面から保存する。購入には、この端末で作った再確認の要求IDを付ける。 */
@@ -302,7 +297,7 @@ export class Catalog {
     const fileName = plan.newBook && (await noteNaming(plan.newBook.title, plan.bookId));
     assertUnchanged(step.versions, this.files.versions(), target?.path, target?.path);
     if (plan.newBook && fileName) {
-      const raw = this.context.notes.create(newBookRecord(plan.newBook));
+      const raw = this.context.notes.create(newBookRecord(plan.newBook, plan.pendingLookup));
       progress.change = plan.change;
       progress.started = true;
       return this.files.create(fileName, raw);
@@ -331,7 +326,10 @@ export class Catalog {
     const verified = this.rules.plan(step.operation, updated, step.hash, step.commit);
     if (verified.kind !== "write" || verified.newBook) throw new Refuse("conflict");
     assertUnchanged(step.versions, this.files.versions(), step.target?.path, currentPath);
-    const written = this.context.notes.writeUpdate(raw, bookUpdate(verified.change));
+    const written = this.context.notes.writeUpdate(
+      raw,
+      bookUpdate(verified.change, verified.pendingLookup),
+    );
     progress.change = verified.change;
     progress.started = true;
     return written;

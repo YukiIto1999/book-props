@@ -6,6 +6,7 @@ import {
   calendarDate,
   checkPortableNotes,
   decodePortableLibrary,
+  describeRecord,
   encodePortableLibrary,
   expiredReceipts,
   initSync,
@@ -15,9 +16,11 @@ import {
   normalizeIsbns,
   openShelf,
   planChange,
+  planEnrichment,
   planImport,
   planManagement,
   planMove,
+  planReview,
   reconcile,
   restoreTargets,
   settleShelf,
@@ -26,23 +29,29 @@ import {
 export type {
   Action,
   Admission,
+  BibliographyRequest,
+  BibliographyRevision,
   Book,
   BookOptions,
   BooksRequest,
   BookStep,
   BookWrite,
   CatalogRequest,
+  CatalogueRecord,
   ChangePlan,
   ChangeRequest,
   CopiesRequest,
   CustomField,
+  DescribedRecord,
   Edition,
   EditionOptions,
+  EnrichmentPlan,
   ExpiryRequest,
   FieldKey,
   ImportPlan,
   ImportRequest,
   IsbnList,
+  LookupAnswer,
   ManagementCommand,
   ManagementPlan,
   ManagementRequest,
@@ -103,6 +112,9 @@ export type CatalogCore = Readonly<{
   checkPortableNotes: typeof checkPortableNotes;
   encodePortableLibrary: typeof encodePortableLibrary;
   planImport: typeof planImport;
+  describeRecord: typeof describeRecord;
+  planEnrichment: typeof planEnrichment;
+  planReview: typeof planReview;
 }>;
 
 /** バンドルに埋め込んだcoreの本体を読み込み、使える状態にして返す。プラグインの起動で一度だけ呼ぶ。 */
@@ -129,5 +141,8 @@ export function startCatalogCore(): CatalogCore {
     checkPortableNotes,
     encodePortableLibrary,
     planImport,
+    describeRecord,
+    planEnrichment,
+    planReview,
   };
 }

@@ -1,10 +1,11 @@
 //! Planning a change to the catalog for a product: replayed purchases, the revision the user
 //! confirmed, and the book or edition to write.
 
-use crate::matching::inspect;
+use crate::bibliography::{WrittenEdition, pending_lookup};
+use crate::matching::evaluate;
 use crate::model::{
     Action, Book, BookWrite, ChangePlan, ChangeRequest, Decision, Edition, EditionPatch,
-    EditionWrite, NewBook, Outcome, Product, ReceiptWrite, WritePlan,
+    EditionWrite, NewBook, Outcome, Product, ReceiptWrite, SeriesEntry, WritePlan,
 };
 use crate::receipt::{Replay, replay};
 
@@ -18,6 +19,7 @@ use crate::receipt::{Replay, replay};
 #[must_use]
 pub fn plan_change(request: &ChangeRequest) -> ChangePlan {
     let books = &request.catalog.books;
+    let product = request.catalog.product.normalized();
     let replayed = || {
         replay(
             books,
@@ -34,19 +36,19 @@ pub fn plan_change(request: &ChangeRequest) -> ChangePlan {
         if pending {
             return ChangePlan::Unavailable;
         }
-        return first_read(request, inspect(&request.catalog));
+        return first_read(request, &product, evaluate(&request.catalog, &product));
     };
     if pending {
         return ChangePlan::Unavailable;
     }
-    let outcome = inspect(&request.catalog);
+    let outcome = evaluate(&request.catalog, &product);
     if let Some(plan) = replayed() {
         return plan;
     }
     if revision(request.catalog.action, &outcome) != expected {
         return ChangePlan::Conflict;
     }
-    write_plan(request, &outcome)
+    write_plan(request, &product, &outcome)
 }
 
 fn replay_plan(replay: Replay<'_>) -> ChangePlan {
@@ -59,14 +61,14 @@ fn replay_plan(replay: Replay<'_>) -> ChangePlan {
     }
 }
 
-fn first_read(request: &ChangeRequest, outcome: Outcome) -> ChangePlan {
+fn first_read(request: &ChangeRequest, product: &Product, outcome: Outcome) -> ChangePlan {
     if request.catalog.action == Action::Inspect || matches!(outcome.decision, Decision::None) {
         return ChangePlan::Observed { outcome };
     }
     if !writes(&outcome.decision) {
         return ChangePlan::NeedsInput { outcome };
     }
-    write_plan(request, &outcome)
+    write_plan(request, product, &outcome)
 }
 
 const fn writes(decision: &Decision) -> bool {
@@ -113,25 +115,27 @@ fn revision(action: Action, outcome: &Outcome) -> String {
     .to_string()
 }
 
+/// Whether the action records a product whose text the National Diet Library may replace later.
+const fn records_product(action: Action) -> bool {
+    matches!(
+        action,
+        Action::Purchase | Action::RecordOwnership | Action::SetWish
+    )
+}
+
 /// The book to create or the change to apply, planned against the books in the request.
-fn write_plan(request: &ChangeRequest, outcome: &Outcome) -> ChangePlan {
+fn write_plan(request: &ChangeRequest, product: &Product, outcome: &Outcome) -> ChangePlan {
     let target = outcome
         .book_id
         .as_deref()
         .and_then(|id| request.catalog.books.iter().find(|book| book.id == id));
-    let added = || {
-        new_edition(
-            &request.catalog.product,
-            &outcome.isbns,
-            &request.new_edition_id,
-        )
-    };
-    let (wanted, edition) = match &outcome.decision {
+    let added = || new_edition(product, &outcome.isbns, &request.new_edition_id);
+    let (wanted, edition, stored) = match &outcome.decision {
         Decision::CreateBook {
             wanted,
             record_edition,
-        } => (*wanted, record_edition.then(added)),
-        Decision::AddEdition { wanted_after, .. } => (*wanted_after, Some(added())),
+        } => (*wanted, record_edition.then(added), None),
+        Decision::AddEdition { wanted_after, .. } => (*wanted_after, Some(added()), None),
         Decision::Update {
             wanted_after,
             owned_after: Some(owned),
@@ -142,16 +146,30 @@ fn write_plan(request: &ChangeRequest, outcome: &Outcome) -> ChangePlan {
                 return ChangePlan::Conflict;
             };
             let patch = edition_patch.as_deref();
-            (*wanted_after, Some(updated_edition(stored, *owned, patch)))
+            let edition = updated_edition(stored, *owned, patch);
+            (*wanted_after, Some(edition), Some(stored))
         }
-        Decision::Update { wanted_after, .. } => (*wanted_after, None),
+        Decision::Update { wanted_after, .. } => (*wanted_after, None, None),
         _ => return ChangePlan::Conflict,
     };
     let book_id = target.map_or_else(|| request.new_book_id.clone(), |book| book.id.clone());
     let edition_id = edition.as_ref().map(|edition| edition.id.clone());
     let receipt = receipt(request, &book_id, edition_id.as_deref());
     let new_book = matches!(outcome.decision, Decision::CreateBook { .. })
-        .then(|| new_book(request, &book_id, wanted, edition.clone(), receipt.clone()));
+        .then(|| new_book(product, &book_id, wanted, edition.clone(), receipt.clone()));
+    let pending_lookup = outcome
+        .isbns
+        .first()
+        .filter(|_| request.lookup && records_product(request.catalog.action))
+        .and_then(|isbn| {
+            let created = new_book
+                .as_ref()
+                .map(|book| (book.title.as_str(), product.people()));
+            let written = edition
+                .as_ref()
+                .map(|edition| WrittenEdition { edition, stored });
+            pending_lookup(target, isbn, created, written.as_ref())
+        });
     ChangePlan::Write(Box::new(WritePlan {
         revision: revision(request.catalog.action, outcome),
         book_id,
@@ -162,6 +180,7 @@ fn write_plan(request: &ChangeRequest, outcome: &Outcome) -> ChangePlan {
             receipt,
         },
         new_book,
+        pending_lookup,
     }))
 }
 
@@ -195,10 +214,20 @@ fn receipt(
     })
 }
 
-/// An owned edition with the product's ISBNs and its non-empty edition facts.
+/// An owned edition with the product's ISBNs, its non-empty edition facts, and the series it
+/// states for those ISBNs.
 fn new_edition(product: &Product, isbns: &[String], id: &str) -> EditionWrite {
     let value = |value: Option<&String>| value.filter(|value| !value.is_empty()).cloned();
     let details = &product.details;
+    let series = product.series.as_ref().map_or_else(Vec::new, |name| {
+        isbns
+            .iter()
+            .map(|isbn| SeriesEntry {
+                isbn: isbn.clone(),
+                name: name.clone(),
+            })
+            .collect()
+    });
     EditionWrite {
         id: id.to_owned(),
         owned: true,
@@ -209,17 +238,17 @@ fn new_edition(product: &Product, isbns: &[String], id: &str) -> EditionWrite {
         cover: value(details.cover.as_ref()),
         purchased_on: value(details.purchased_on.as_ref()),
         purchased_from: value(details.purchased_from.as_ref()),
+        series,
     }
 }
 
 fn new_book(
-    request: &ChangeRequest,
+    product: &Product,
     id: &str,
     wanted: bool,
     edition: Option<EditionWrite>,
     receipt: Option<ReceiptWrite>,
 ) -> NewBook {
-    let product = &request.catalog.product;
     NewBook {
         id: id.to_owned(),
         title: product.title.trim_matches(is_js_whitespace).to_owned(),
@@ -227,6 +256,7 @@ fn new_book(
         wanted,
         editions: edition.into_iter().collect(),
         applied_purchases: receipt.into_iter().collect(),
+        author_roles: product.roles.clone(),
     }
 }
 
@@ -248,6 +278,7 @@ fn updated_edition(stored: &Edition, owned: bool, patch: Option<&EditionPatch>) 
         cover: None,
         purchased_on: None,
         purchased_from: None,
+        series: Vec::new(),
     };
     if let Some(patch) = patch {
         edition.isbns.extend(patch.isbns.iter().cloned());
@@ -257,6 +288,7 @@ fn updated_edition(stored: &Edition, owned: bool, patch: Option<&EditionPatch>) 
         edition.cover.clone_from(&patch.cover);
         edition.purchased_on.clone_from(&patch.purchased_on);
         edition.purchased_from.clone_from(&patch.purchased_from);
+        edition.series.clone_from(&patch.series);
     }
     edition
 }

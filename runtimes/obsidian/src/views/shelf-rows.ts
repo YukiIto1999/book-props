@@ -55,8 +55,12 @@ function drawAuthors(row: HTMLElement, book: BookRecord, actions: RowActions): v
   if (!actions.columns.has("author") || !book.authors.length) return;
   const line = row.createDiv({ text: "著者: " });
   for (const name of book.authors) {
+    const role = book.authorRoles?.find((entry) => entry.name === name)?.role;
     line
-      .createEl("button", { text: name, attr: { "aria-label": `著者「${name}」の本を表示` } })
+      .createEl("button", {
+        text: role ? `${name}（${role}）` : name,
+        attr: { "aria-label": `著者「${name}」の本を表示` },
+      })
       .addEventListener("click", () => actions.showAuthor(name));
   }
 }

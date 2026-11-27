@@ -60,7 +60,10 @@ async function openFromExtension(
   return showInspection(host, inspection, catalog, request.product);
 }
 
-/** 拡張からの要求を目録で処理し、拡張に返す答えにする。 */
+/**
+ * 拡張からの要求を目録で処理し、拡張に返す答えにする。購入や欲しい本の登録は、保存した後で
+ * 国立国会図書館サーチの書誌を照会するが、拡張への答えはその照会を待たない。照合は照会しない。
+ */
 export async function answerExtension(
   host: ExtensionHost,
   catalog: Catalog,
@@ -72,7 +75,10 @@ export async function answerExtension(
   const execution =
     request.action === "reconcile"
       ? await catalog.reconcile({ ...request, action: "purchase" }, signal)
-      : await catalog.execute(request, signal);
+      : await catalog.execute(
+          request.action === "inspect" ? request : { ...request, lookup: true },
+          signal,
+        );
   if (execution.kind === "observed")
     return {
       kind: "observed",

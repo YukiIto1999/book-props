@@ -103,12 +103,17 @@ export class EditionEditor extends Modal {
               return;
             }
           }
+          // 編集画面はシリーズを扱わないので、残るISBNのシリーズをそのまま引き継ぐ。
+          const series = this.baseline?.series?.filter(({ isbn }) =>
+            normalized.values.includes(isbn),
+          );
           const value = {
             ...metadata,
             id: this.baseline?.id ?? crypto.randomUUID(),
             isbns: normalized.values,
             owned,
             ...optionalField("archivedAt", this.baseline?.archivedAt),
+            ...optionalField("series", series?.length ? series : undefined),
           };
           button.setDisabled(true);
           const bookId = this.target.book.id;

@@ -1,4 +1,5 @@
 import { isMap, parseDocument, stringify } from "yaml";
+import type { BibliographyRevision } from "../../core/catalog-core.ts";
 import type {
   AppliedPurchase,
   BookRecord,
@@ -19,6 +20,7 @@ import {
 } from "./edit.ts";
 import { BookNoteError, unreadable } from "./error.ts";
 import { map, parseNote, readEditionBackup, type NoteRules, type ParsedNote } from "./parse.ts";
+import { confirmsRevision, revisionEdits } from "./revise.ts";
 import { confirmsUpdate, updateEdits } from "./update.ts";
 import { customFieldEdits, decodeCustomField, plainMap } from "./values.ts";
 
@@ -71,9 +73,13 @@ export class NoteFormat {
         "book-props": {
           schema: 1,
           "book-id": book.id,
+          "author-roles": book.authorRoles?.length
+            ? Object.fromEntries(book.authorRoles.map(({ name, role }) => [name, role]))
+            : undefined,
           "archived-at": book.archivedAt,
           editions: book.editions.map(storeEdition),
           "applied-purchases": book.appliedPurchases.map(storePurchase),
+          "pending-lookup": book.pendingLookup,
         },
       },
       { lineWidth: 0 },
@@ -108,6 +114,19 @@ export class NoteFormat {
   /** 移動中の版の控えを、版とその署名として読む。 */
   readEditionBackup(signature: string): Capture & { edition: EditionRecord } {
     return readEditionBackup(signature, this.rules);
+  }
+
+  /**
+   * 書名・著者・著者の役割・版の出版社と版とシリーズ・照会待ちの記録だけを書き換える。
+   * 他の行と本文は一文字も変えない。
+   */
+  reviseBibliography(raw: string, revision: BibliographyRevision): string {
+    const note = this.parse(raw);
+    const saved = spliceNote(raw, note.header, revisionEdits(note, revision));
+    if (!confirmsRevision(this.parse(saved).book, revision)) {
+      return unreadable("書誌の書き換えを確定できません。");
+    }
+    return saved;
   }
 
   /** 購入希望、版、適用済み購入だけを書き換える。他の行と本文は一文字も変えない。 */

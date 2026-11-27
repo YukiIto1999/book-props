@@ -60,7 +60,8 @@ await test("only the extension that proved the folder can save a purchase throug
   const grant = await ConnectionGrant.create("Reading Vault", profile);
   assert.equal(grant.directory, join(await realpath(profile), "Book Props", "Reading Vault"));
   const files = bookFiles(folder);
-  const catalog = new Catalog(files, core, new NoteFormat(core));
+  const library = { record: async () => undefined };
+  const catalog = new Catalog(files, core, new NoteFormat(core), library);
   // Only purchases reach the Vault; any other request arriving here fails the test.
   const dispatch = async (input, signal) => {
     assert.equal(input.action, "purchase");

@@ -56,7 +56,25 @@ function siblings(notes, folder, except) {
     .map((path) => path.slice(folder.length + 1));
 }
 
-function scope(initial, moveCopies = memoryCopies()) {
+/**
+ * A stand-in for the National Diet Library: `answers` maps an ISBN to its record, or to an
+ * Error to fail; `calls` lists the ISBNs asked for.
+ */
+function library(answers = new Map()) {
+  const calls = [];
+  return {
+    calls,
+    answers,
+    record: async (isbn) => {
+      calls.push(isbn);
+      const answer = answers.get(isbn);
+      if (answer instanceof Error) throw answer;
+      return answer;
+    },
+  };
+}
+
+function scope(initial, moveCopies = memoryCopies(), lookup = library()) {
   const notes = new Map(initial === undefined ? [] : [[row, initial]]);
   const files = {
     moveCopies,
@@ -86,7 +104,7 @@ function scope(initial, moveCopies = memoryCopies()) {
     },
     canUpdate: () => true,
   };
-  return { files, notes, catalog: new Catalog(files, core, noteFormat) };
+  return { files, notes, lookup, catalog: new Catalog(files, core, noteFormat, lookup) };
 }
 
-export { product, first, key, row, original, scope };
+export { product, first, key, row, original, scope, library };

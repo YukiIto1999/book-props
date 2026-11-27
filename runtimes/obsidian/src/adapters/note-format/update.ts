@@ -27,6 +27,10 @@ function editionEdits({ header, editions, book }: ParsedNote, requested: Edition
     edits.push(replace(node.get("owned", true), String(requested.owned)));
   }
   const additions = requested.isbns.filter((isbn) => !target.isbns.includes(isbn));
+  const stated = target.series ?? [];
+  const series = (requested.series ?? []).filter(
+    ({ isbn }) => !stated.some((entry) => entry.isbn === isbn),
+  );
   const fields = {
     isbns: additions.length ? additions : undefined,
     label: supplement(target.label, requested.label),
@@ -35,6 +39,9 @@ function editionEdits({ header, editions, book }: ParsedNote, requested: Edition
     cover: supplement(target.cover, requested.cover),
     "purchased-on": supplement(target.purchasedOn, requested.purchasedOn),
     "purchased-from": supplement(target.purchasedFrom, requested.purchasedFrom),
+    series: series.length
+      ? [...stated, ...series].map(({ isbn, name }) => ({ isbn, name }))
+      : undefined,
   };
   edits.push(...fieldEdits(header, node, fields, true));
   return edits;
@@ -49,9 +56,9 @@ function receiptEdit({ header, purchases, book }: ParsedNote, receipt: AppliedPu
   return appendRows(header, purchases, "applied-purchases", [storePurchase(receipt)]);
 }
 
-/** 購入希望、版、適用済み購入の記録を書き換える編集。 */
+/** 購入希望、版、適用済み購入の記録と、照会を待つ記録を書き換える編集。 */
 export function updateEdits(note: ParsedNote, input: BookUpdate): Edit[] {
-  const { root, managed, editions, book } = note;
+  const { header, root, managed, editions, book } = note;
   for (const node of [root, managed, editions]) editableRange(node);
   const edits: Edit[] = [];
   if (input.wanted !== book.wanted) {
@@ -59,15 +66,19 @@ export function updateEdits(note: ParsedNote, input: BookUpdate): Edit[] {
   }
   if (input.edition) edits.push(...editionEdits(note, input.edition));
   if (input.receipt) edits.push(receiptEdit(note, input.receipt));
+  if (input.pendingLookup !== undefined && input.pendingLookup !== book.pendingLookup) {
+    edits.push(...fieldEdits(header, managed, { "pending-lookup": input.pendingLookup }));
+  }
   return edits;
 }
 
 /** 書き換えた後の本に、指定した購入希望、版の所持とISBN、購入の記録があるかを確かめる。 */
 export function confirmsUpdate(
   saved: BookRecord,
-  { wanted, edition, receipt }: BookUpdate,
+  { wanted, edition, receipt, pendingLookup }: BookUpdate,
 ): boolean {
   if (saved.wanted !== wanted) return false;
+  if (pendingLookup !== undefined && saved.pendingLookup !== pendingLookup) return false;
   const editionSaved =
     !edition ||
     saved.editions.some(

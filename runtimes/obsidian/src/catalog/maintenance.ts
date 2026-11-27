@@ -2,9 +2,10 @@ import type { AppliedPurchase } from "../adapters/note-format/book-record.ts";
 import type { PortableNote, PresentNote } from "../core/catalog-core.ts";
 import type { BookContext } from "./book-change.ts";
 import type { StoredBook } from "./catalog.ts";
+import { manageBooks } from "./management.ts";
 import { noteNaming } from "./note-name.ts";
-import { assertUnchanged, CatalogChanged, Refuse } from "./purchase.ts";
-import { readEntry, readStable } from "./read.ts";
+import { assertUnchanged, CatalogChanged, hasPendingMove, Refuse } from "./purchase.ts";
+import { readCatalog, readEntry, readStable } from "./read.ts";
 
 export type ImportResult = {
   status: "saved" | "pending" | "conflict" | "unavailable";
@@ -100,7 +101,7 @@ export async function importNotes(
  * 保存期間を過ぎた適用済み購入の記録だけを取り除く。書き換えられない本は次の機会に回す。
  * @param expired - 購入の記録ごとに、保存期間を過ぎたかを返す判定
  */
-export async function pruneReceipts(
+async function pruneReceipts(
   context: BookContext,
   entries: readonly StoredBook[],
   expired: (receipts: readonly AppliedPurchase[]) => readonly boolean[],
@@ -117,5 +118,27 @@ export async function pruneReceipts(
         return context.notes.removePurchases(raw, expired);
       })
       .catch(() => undefined);
+  }
+}
+
+/**
+ * 終わっていない版の移動を再開し、移動がなければ保存期間を過ぎた購入の記録を取り除く。
+ * 失敗したら何も返さず、次の機会に回す。
+ */
+export async function maintainBooks(context: BookContext): Promise<void> {
+  if (!context.active()) return;
+  try {
+    const initial = (await readCatalog(context)).value;
+    for (const { book } of initial) {
+      if (book.pendingMove) {
+        await manageBooks(context, { action: "recoverMove", bookId: book.id });
+      }
+    }
+    const entries = hasPendingMove(initial) ? (await readCatalog(context)).value : initial;
+    const now = Date.now();
+    if (!hasPendingMove(entries))
+      await pruneReceipts(context, entries, (receipts) => context.rules.expired(receipts, now));
+  } catch {
+    return;
   }
 }

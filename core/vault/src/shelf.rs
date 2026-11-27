@@ -14,6 +14,7 @@ use std::fmt;
 use unicode_normalization::UnicodeNormalization;
 
 use self::field::{EDITION_TEXTS, Field, STANDARD, Value};
+use crate::bibliography::{author_key, author_keys, name_key};
 use crate::identity::isbn13;
 use crate::model::{
     CustomField, Edition, OwnershipFilter, RangeKind, ShelfField, ShelfOverview, ShelfQuery,
@@ -98,10 +99,10 @@ impl Book {
         let publishers = current
             .iter()
             .filter_map(|edition| edition.details.publisher.as_deref())
-            .map(fold)
+            .map(name_key)
             .collect();
         let owned = current.iter().any(|edition| edition.owned);
-        let authors = record.authors.iter().map(|name| fold(name)).collect();
+        let authors = author_keys(&record.authors);
         Self {
             archived: present(record.archived_at.as_deref()),
             editions,
@@ -213,8 +214,8 @@ impl<'q> Criteria<'q> {
                 .map(Word::new)
                 .collect(),
             tags: query.tags.iter().map(|tag| tag_key(tag)).collect(),
-            author: query.author.as_deref().map(fold),
-            publisher: query.publisher.as_deref().map(fold),
+            author: query.author.as_deref().map(author_key),
+            publisher: query.publisher.as_deref().map(name_key),
             range: query
                 .range
                 .as_ref()

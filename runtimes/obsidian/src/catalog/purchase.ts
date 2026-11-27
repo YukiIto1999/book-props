@@ -50,8 +50,9 @@ export type Write = Readonly<{
 export type WriteProgress = { started: boolean; change?: BookWrite };
 
 /**
- * 購入の要求の指紋。保存済みの購入の記録はこの値を持つので、配列の項目と
- * `JSON.stringify`の書き方を変えると、更新の前後をまたいだ再確認を衝突と誤る。
+ * 購入の要求の指紋。拡張が送った書誌そのものから作り、保存する表記へそろえる前の値を使う。
+ * 保存済みの購入の記録はこの値を持つので、配列の項目と`JSON.stringify`の書き方を変えると、
+ * 更新の前後をまたいだ再確認を衝突と誤る。後から加えた項目は、値があるときだけ末尾に足す。
  */
 export async function inputHash(input: Operation): Promise<string> {
   const {
@@ -79,6 +80,7 @@ export async function inputHash(input: Operation): Promise<string> {
     purchasedFrom,
   ];
   if (input.selection) stable.push(input.selection.bookId, input.selection.editionId);
+  if (input.product.series !== undefined) stable.push(input.product.series);
   return sha256Hex(JSON.stringify(stable));
 }
 

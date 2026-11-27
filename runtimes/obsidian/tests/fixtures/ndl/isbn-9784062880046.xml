@@ -1,0 +1,82 @@
+<rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:openSearch="http://a9.com/-/spec/opensearchrss/1.0/" xmlns:dcndl="http://ndl.go.jp/dcndl/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" version="2.0">
+  <channel>
+    <title>9784062880046 - 国立国会図書館サーチ OpenSearch</title>
+    <link>https://ios-v2-prod-eks-alb.ndlsearch.ndl.go.jp/api/opensearch?isbn=9784062880046&amp;cnt=5</link>
+    <description>Search results for isbn=9784062880046 cnt=5</description>
+    <language>ja</language>
+    <openSearch:totalResults>1</openSearch:totalResults>
+    <openSearch:startIndex>1</openSearch:startIndex>
+    <openSearch:itemsPerPage>5</openSearch:itemsPerPage>
+    <item>
+      <title>はじめての言語ゲーム</title>
+      <link>https://ndlsearch.ndl.go.jp/books/R100000002-I000010412301</link>
+      <description><![CDATA[<p>講談社,2009,978-4-06-288004-6<p><ul><li>タイトル：はじめての言語ゲーム</li><li>タイトル（読み）：ハジメテ ノ ゲンゴ ゲーム</li><li>責任表示：橋爪大三郎 著</li><li>シリーズ名：講談社現代新書 ; 2004</li><li>シリーズ名（読み）：コウダンシャ ゲンダイ シンショ ; 2004</li><li>NDC(9)：134.97</li></ul>]]></description>
+      <author>橋爪, 大三郎, 1948-,橋爪大三郎 著</author>
+      <category>図書</category>
+      <category>紙</category>
+      <guid isPermaLink="true">https://ndlsearch.ndl.go.jp/books/R100000002-I000010412301</guid>
+      <pubDate>Wed, 26 Aug 2009 19:57:27 +0900</pubDate>
+      <dc:title>はじめての言語ゲーム</dc:title>
+      <dcndl:titleTranscription>ハジメテ ノ ゲンゴ ゲーム</dcndl:titleTranscription>
+      <dc:creator>橋爪, 大三郎, 1948-</dc:creator>
+      <dcndl:creatorTranscription>ハシズメ, ダイサブロウ, 1948-</dcndl:creatorTranscription>
+      <dcndl:seriesTitle>講談社現代新書 ; 2004</dcndl:seriesTitle>
+      <dcndl:seriesTitleTranscription>コウダンシャ ゲンダイ シンショ ; 2004</dcndl:seriesTitleTranscription>
+      <dc:publisher>講談社</dc:publisher>
+      <dcndl:publicationPlace>JP</dcndl:publicationPlace>
+      <dc:date xsi:type="dcterms:W3CDTF">2009</dc:date>
+      <dcterms:issued>2009.7</dcterms:issued>
+      <dcndl:price>760円</dcndl:price>
+      <dc:extent>269p</dc:extent>
+      <dc:identifier xsi:type="dcndl:ISBN">978-4-06-288004-6</dc:identifier>
+      <dc:identifier xsi:type="dcndl:NDLBibID">000010412301</dc:identifier>
+      <dc:identifier xsi:type="dcndl:JPNO">21633752</dc:identifier>
+      <dc:identifier xsi:type="dcndl:NSMARCNO">102143300</dc:identifier>
+      <dc:subject>Wittgenstein, Ludwig, 1889-1951</dc:subject>
+      <dc:subject xsi:type="dcndl:NDLC">HD31</dc:subject>
+      <dc:subject xsi:type="dcndl:NDC9">134.97</dc:subject>
+      <dc:description>文献あり</dc:description>
+      <rdfs:seeAlso rdf:resource="https://www.library.pref.hokkaido.jp/wo/opc_srh/"/>
+      <rdfs:seeAlso rdf:resource="https://www.library.city.sapporo.jp/licsxp-opac/WOpacMsgNewListToTifTilDetailAction.do?tilcod=1008000181170"/>
+      <rdfs:seeAlso rdf:resource="https://www.library.pref.iwate.jp/opac/advanced-search"/>
+      <rdfs:seeAlso rdf:resource="https://www.apl.pref.akita.jp/licsxp-opac/WOpacMsgNewListToTifTilDetailAction.do?tilcod=1000000382568"/>
+      <rdfs:seeAlso rdf:resource="https://www.library.fcs.ed.jp/licsxp-opac/WOpacMsgNewListToTifTilDetailAction.do?tilcod=1001102603891"/>
+      <rdfs:seeAlso rdf:resource="https://www.lib.pref.ibaraki.jp/licsxp-opac/WOpacMsgNewListToTifTilDetailAction.do?tilcod=1001001707727"/>
+      <rdfs:seeAlso rdf:resource="http://www.lib.pref.tochigi.lg.jp/winj/opac/switch-detail-iccap.do?bibid=1101586704"/>
+      <rdfs:seeAlso rdf:resource="https://www.lib.city.saitama.jp/bookdetail?num=2254866&amp;ctg=1"/>
+      <rdfs:seeAlso rdf:resource="https://catalog.library.metro.tokyo.lg.jp/winj/opac/switch-detail-iccap.do?bibid=1107851109"/>
+      <rdfs:seeAlso rdf:resource="https://www.klnet.pref.kanagawa.jp/winj/opac/switch-detail-iccap.do?bibid=1103733120"/>
+      <rdfs:seeAlso rdf:resource="https://opac.lib.city.yokohama.lg.jp/winj/opac/switch-detail-iccap.do?bibid=1109053712"/>
+      <rdfs:seeAlso rdf:resource="https://www.lib.sagamihara.kanagawa.jp/TOSHOW/asp/WwShousaiKen.aspx?FCode=1460414"/>
+      <rdfs:seeAlso rdf:resource="https://opac.pref-lib.niigata.niigata.jp/winj/opac/switch-detail-iccap.do?bibid=1106364505"/>
+      <rdfs:seeAlso rdf:resource="https://lib2.lib.pref.toyama.jp/opac/WOpacMsgNewListToTifTilDetailAction.do?tilcod=1009810856445"/>
+      <rdfs:seeAlso rdf:resource="https://www.library.pref.ishikawa.lg.jp/wo/opc_srh/srh_detail/1100000260942/"/>
+      <rdfs:seeAlso rdf:resource="https://www.library-archives.pref.fukui.lg.jp/wo/opc_srh/srh_detail/1104858794/"/>
+      <rdfs:seeAlso rdf:resource="https://www.lib.pref.yamanashi.jp/licsxp-opac/WOpacMnuTopInitAction.do"/>
+      <rdfs:seeAlso rdf:resource="http://www.library.pref.gifu.lg.jp/winj/opac/switch-detail-iccap.do?bibid=1102162702"/>
+      <rdfs:seeAlso rdf:resource="https://www.tosyokan.pref.shizuoka.jp/licsxp-opac/WOpacMsgNewListToTifTilDetailAction.do?tilcod=1000910624514"/>
+      <rdfs:seeAlso rdf:resource="https://www.toshokan.city.shizuoka.jp/licsxp-opac/WOpacMsgNewListToTifTilDetailAction.do?tilcod=1001101613107"/>
+      <rdfs:seeAlso rdf:resource="http://websv.aichi-pref-library.jp/winj/opac/switch-detail-iccap.do?bibid=1182254074"/>
+      <rdfs:seeAlso rdf:resource="https://www.shiga-pref-library.jp/wo/opc_srh/srh_detail/2239022/"/>
+      <rdfs:seeAlso rdf:resource="https://www.library.pref.osaka.jp/bib/?B12472003"/>
+      <rdfs:seeAlso rdf:resource="https://www.oml.city.osaka.lg.jp/licsxp-opac/WOpacMsgNewListToTifTilDetailAction.do?tilcod=1000011903046"/>
+      <rdfs:seeAlso rdf:resource="https://www.lib-sakai.jp/licsxp-opac/WOpacMsgNewListToTifTilDetailAction.do?tilcod=1000900465178"/>
+      <rdfs:seeAlso rdf:resource="https://opacsvr01.library.pref.nara.jp/opac/volume/548910"/>
+      <rdfs:seeAlso rdf:resource="http://www.lib.wakayama-c.ed.jp/winj/opac/switch-detail-iccap.do?bibid=1102066248"/>
+      <rdfs:seeAlso rdf:resource="http://www.library.pref.tottori.jp/winj/opac/switch-detail-iccap.do?bibid=1101628589"/>
+      <rdfs:seeAlso rdf:resource="https://www2.library.pref.shimane.lg.jp/opac/switch-detail-iccap.do?bibid=1110004417"/>
+      <rdfs:seeAlso rdf:resource="https://opac.libnet.pref.okayama.jp/licsxp-opac/WOpacMsgNewListToTifTilDetailAction.do?tilcod=1009811209769"/>
+      <rdfs:seeAlso rdf:resource="https://www2.hplibra.pref.hiroshima.jp/bib/?B11379044"/>
+      <rdfs:seeAlso rdf:resource="https://library.pref.yamaguchi.lg.jp//wo/opc_srh/srh_detail/1000663311/"/>
+      <rdfs:seeAlso rdf:resource="https://alislibopac.bunmori.tokushima.jp/winj/opac/switch-detail-iccap.do?bibid=1102958254"/>
+      <rdfs:seeAlso rdf:resource="https://www.library.pref.kagawa.lg.jp/winj/opac/switch-detail-iccap.do?bibid=1100296663"/>
+      <rdfs:seeAlso rdf:resource="https://www.ehimetosyokan.jp/winj/opac/switch-detail-iccap.do?bibid=1100581009"/>
+      <rdfs:seeAlso rdf:resource="https://opac.library.kochi.jp/winj/opac/switch-detail-iccap.do?bibid=1109214141"/>
+      <rdfs:seeAlso rdf:resource="https://opac.miraionlibrary.jp/licsxp-opac/WOpacMsgNewListToTifTilDetailAction.do?tilcod=1000000709133"/>
+      <rdfs:seeAlso rdf:resource="https://ndlsearch.ndl.go.jp/books/R100000002-I000010412301"/>
+      <rdfs:seeAlso rdf:resource="https://www.books.or.jp/book-details/0628800400100011000T"/>
+      <rdfs:seeAlso rdf:resource="https://www.books.or.jp/book-details/9784062880046"/>
+      <dc:description> 2009</dc:description>
+    </item>
+  </channel>
+</rss>

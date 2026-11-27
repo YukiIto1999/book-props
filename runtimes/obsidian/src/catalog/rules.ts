@@ -9,6 +9,8 @@ import type {
 import type { NoteFormat } from "../adapters/note-format/note-format.ts";
 import type {
   Admission,
+  BibliographyRequest,
+  BibliographyRevision,
   Book,
   BookOptions,
   BooksRequest,
@@ -16,15 +18,19 @@ import type {
   BookWrite,
   CatalogCore,
   CatalogRequest,
+  CatalogueRecord,
   ChangePlan,
   ChangeRequest,
   CopiesRequest,
   CustomField as WireField,
+  DescribedRecord,
   Edition,
+  EnrichmentPlan,
   ExpiryRequest,
   ImportPlan,
   ImportRequest,
   IsbnList,
+  LookupAnswer,
   ManagementCommand,
   ManagementPlan,
   ManagementRequest,
@@ -61,6 +67,7 @@ export function catalogEdition({
   isbns,
   label,
   archivedAt,
+  series,
   ...details
 }: EditionRecord): Edition {
   return {
@@ -70,6 +77,10 @@ export function catalogEdition({
     ...optionalField("label", label),
     ...optionalField("archivedAt", archivedAt),
     details,
+    ...optionalField(
+      "series",
+      series?.map((entry) => ({ ...entry })),
+    ),
   };
 }
 
@@ -99,11 +110,13 @@ function catalogBook(book: BookRecord, notes: NoteFormat): Book {
     id: book.id,
     title: book.title,
     authors: [...book.authors],
+    authorRoles: (book.authorRoles ?? []).map((role) => ({ ...role })),
     wanted: book.wanted,
     ...optionalField("archivedAt", book.archivedAt),
     editions: book.editions.map(catalogEdition),
     appliedPurchases: [...book.appliedPurchases],
     ...optionalField("pendingMove", book.pendingMove && catalogMarker(book.pendingMove, notes)),
+    ...optionalField("pendingLookup", book.pendingLookup),
     customFields: (book.customFields ?? []).map(catalogField),
   };
 }
@@ -134,17 +147,28 @@ function appliedPurchase({ appliedAtMs, ...receipt }: ReceiptWrite): AppliedPurc
   return { ...receipt, appliedAt: new Date(appliedAtMs).toISOString() };
 }
 
-/** coreが立てた書き込みを、本ページに書く値にする。時刻の書き方は本ページの形式が決める。 */
-export function bookUpdate({ wanted, edition, receipt }: BookWrite): BookUpdate {
+/**
+ * coreが立てた書き込みを、本ページに書く値にする。時刻の書き方は本ページの形式が決める。
+ * @param pendingLookup - 書き込みの後に本が待つ国立国会図書館サーチへの照会の記録
+ */
+export function bookUpdate(
+  { wanted, edition, receipt }: BookWrite,
+  pendingLookup: string | undefined,
+): BookUpdate {
   return {
     wanted,
     ...optionalField("edition", edition),
     ...optionalField("receipt", receipt && appliedPurchase(receipt)),
+    ...optionalField("pendingLookup", pendingLookup),
   };
 }
 
-export function newBookRecord(book: NewBook): BookRecord {
-  return { ...book, appliedPurchases: book.appliedPurchases.map(appliedPurchase) };
+export function newBookRecord(book: NewBook, pendingLookup: string | undefined): BookRecord {
+  return {
+    ...book,
+    appliedPurchases: book.appliedPurchases.map(appliedPurchase),
+    ...optionalField("pendingLookup", pendingLookup),
+  };
 }
 
 /**
@@ -169,7 +193,7 @@ export class CatalogRules {
     { action, product, selection }: Operation,
     entries: readonly StoredBook[],
   ): CatalogRequest {
-    const { title, authors, isbns, label, ...details } = product;
+    const { title, authors, isbns, label, series, ...details } = product;
     return {
       action,
       product: {
@@ -177,6 +201,7 @@ export class CatalogRules {
         ...optionalField("authors", authors),
         ...optionalField("isbns", isbns),
         ...optionalField("label", label),
+        ...optionalField("series", series),
         details,
       },
       books: this.books(entries),
@@ -194,6 +219,29 @@ export class CatalogRules {
 
   calendarDate(value: string): string | undefined {
     return this.core.calendarDate(value);
+  }
+
+  /** 国立国会図書館サーチの書誌を、保存する表記の書誌にする。 */
+  describe(record: CatalogueRecord): DescribedRecord {
+    return this.core.describeRecord(JSON.stringify(record));
+  }
+
+  /** 本が待つ照会を終えると、どうなるか。照会の答えがまだなければ、照会するISBNを返す。 */
+  enrichment(book: BookRecord, answers: readonly LookupAnswer[]): EnrichmentPlan {
+    const request: BibliographyRequest = {
+      book: catalogBook(book, this.notes),
+      answers: [...answers],
+    };
+    return this.core.planEnrichment(JSON.stringify(request));
+  }
+
+  /** 本の表記を保存する表記にそろえる案。答えのある国立国会図書館サーチの書誌を優先する。 */
+  review(book: BookRecord, answers: readonly LookupAnswer[]): BibliographyRevision {
+    const request: BibliographyRequest = {
+      book: catalogBook(book, this.notes),
+      answers: [...answers],
+    };
+    return this.core.planReview(JSON.stringify(request));
   }
 
   /** 入出力の記録を、書籍の保存範囲のいまの本ページへ取り込めるか。作る本は記録の順に返す。 */
@@ -219,6 +267,7 @@ export class CatalogRules {
       catalog: this.catalogRequest(operation, entries),
       ...optionalField("purchase", operation.purchase),
       ...optionalField("inputHash", hash),
+      ...optionalField("lookup", operation.lookup),
       ...commit,
     };
     return this.core.planChange(JSON.stringify(request));

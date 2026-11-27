@@ -5,13 +5,19 @@ use crate::identity::{
 };
 use crate::model::{
     Action, Book, CatalogRequest, Decision, Edition, EditionPatch, Outcome, Ownership, Product,
-    Selection,
+    Selection, SeriesEntry,
 };
 
-/// Evaluates catalog evidence and decides the state change without performing Vault I/O.
+/// Evaluates catalog evidence and decides the state change without performing Vault I/O. The
+/// product is compared and written in the stored spelling.
 #[must_use]
 pub fn inspect(request: &CatalogRequest) -> Outcome {
-    let isbns = match canonical_isbns(&request.product.isbns) {
+    evaluate(request, &request.product.normalized())
+}
+
+/// Evaluates catalog evidence for a product already in the stored spelling.
+pub(crate) fn evaluate(request: &CatalogRequest, product: &Product) -> Outcome {
+    let isbns = match canonical_isbns(&product.isbns) {
         Ok(isbns) => isbns,
         Err(input) => {
             return Outcome::undetermined(Decision::InvalidIsbn {
@@ -22,7 +28,7 @@ pub fn inspect(request: &CatalogRequest) -> Outcome {
     let inspect_only = request.action == Action::Inspect;
     let book = match locate_book(
         &request.books,
-        &request.product,
+        product,
         &isbns,
         request.selection.as_ref(),
         request.action,
@@ -31,19 +37,19 @@ pub fn inspect(request: &CatalogRequest) -> Outcome {
         Err(reason) => return Outcome::undetermined(reason),
     };
     let Some(book) = book else {
-        return unknown_book(request, isbns);
+        return unknown_book(request, product, isbns);
     };
     if book.archived_at.is_some() {
         return Outcome::undetermined(Decision::ConflictingEvidence);
     }
-    let label = request
-        .product
+    let label = product
         .label
         .as_deref()
         .map(normalized)
         .filter(|value| !value.is_empty());
     Evidence {
         request,
+        product,
         book,
         isbns,
         label,
@@ -153,13 +159,11 @@ fn insufficient_evidence(books: &[Book], action: Action) -> Decision {
 }
 
 /// The outcome when no stored book is the product.
-fn unknown_book(request: &CatalogRequest, isbns: Vec<String>) -> Outcome {
+fn unknown_book(request: &CatalogRequest, product: &Product, isbns: Vec<String>) -> Outcome {
     let action = request.action;
     let decision = match action {
         _ if !creates_book(action) => Decision::None,
-        _ if request.product.title.trim().is_empty() => {
-            insufficient_evidence(&request.books, action)
-        }
+        _ if product.title.trim().is_empty() => insufficient_evidence(&request.books, action),
         Action::SetWish => Decision::CreateBook {
             wanted: true,
             record_edition: false,
@@ -182,6 +186,7 @@ struct Ambiguous;
 /// What the product says about one active stored book.
 struct Evidence<'a> {
     request: &'a CatalogRequest,
+    product: &'a Product,
     book: &'a Book,
     isbns: Vec<String>,
     label: Option<String>,
@@ -215,7 +220,15 @@ impl<'a> Evidence<'a> {
                 wanted_after: action == Action::RecordOwnership && book.wanted,
             }
         } else {
-            decision(self.request, book, edition, &active, label, &self.isbns)
+            decision(
+                self.request,
+                self.product,
+                book,
+                edition,
+                &active,
+                label,
+                &self.isbns,
+            )
         };
         Outcome {
             ownership,
@@ -284,7 +297,15 @@ impl<'a> Evidence<'a> {
 
     fn undetermined(&self, wish_action: bool) -> Outcome {
         let plan = if wish_action {
-            decision(self.request, self.book, None, &[], None, &self.isbns)
+            decision(
+                self.request,
+                self.product,
+                self.book,
+                None,
+                &[],
+                None,
+                &self.isbns,
+            )
         } else {
             Decision::ConflictingEvidence
         };
@@ -326,6 +347,7 @@ fn new_revision(editions: &[&Edition], label: Option<&str>) -> bool {
 
 fn decision(
     request: &CatalogRequest,
+    product: &Product,
     book: &Book,
     edition: Option<&Edition>,
     editions: &[&Edition],
@@ -355,7 +377,7 @@ fn decision(
             owned_before: Some(edition.owned),
             owned_after: Some(action != Action::CancelOwnership),
             edition_patch: if matches!(action, Action::Purchase | Action::RecordOwnership) {
-                edition_patch(edition, &request.product, isbns)
+                edition_patch(edition, product, isbns)
             } else {
                 None
             },
@@ -407,6 +429,7 @@ fn edition_patch(old: &Edition, source: &Product, isbns: &[String]) -> Option<Bo
             stored.purchased_from.as_deref(),
             found.purchased_from.as_deref(),
         ),
+        series: product_series(&old.series, source, isbns),
     };
     (!patch.isbns.is_empty()
         || [
@@ -418,6 +441,22 @@ fn edition_patch(old: &Edition, source: &Product, isbns: &[String]) -> Option<Bo
             &patch.purchased_from,
         ]
         .into_iter()
-        .any(Option::is_some))
+        .any(Option::is_some)
+        || !patch.series.is_empty())
     .then(|| Box::new(patch))
+}
+
+/// The series the product states, for each of its ISBNs that has none yet.
+fn product_series(stored: &[SeriesEntry], source: &Product, isbns: &[String]) -> Vec<SeriesEntry> {
+    let Some(name) = source.series.as_deref() else {
+        return Vec::new();
+    };
+    isbns
+        .iter()
+        .filter(|isbn| !stored.iter().any(|entry| entry.isbn == **isbn))
+        .map(|isbn| SeriesEntry {
+            isbn: isbn.clone(),
+            name: name.to_owned(),
+        })
+        .collect()
 }

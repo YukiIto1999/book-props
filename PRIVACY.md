@@ -32,7 +32,7 @@ To stop the extension from reading pages, withdraw your consent in its settings.
 
 ### Requests to other services
 
-When you look up a book in the Obsidian plugin, the plugin sends the ISBN or title you typed to the National Diet Library Search (`https://ndlsearch.ndl.go.jp`), or downloads the product page whose address you entered. The extension itself makes no requests to other services.
+When you look up a book in the Obsidian plugin, the plugin sends the ISBN or title you typed to the National Diet Library Search (`https://ndlsearch.ndl.go.jp`), or downloads the product page whose address you entered. After the extension records a purchase, an owned book, or a wish for a book with an ISBN, the plugin also sends that ISBN to the National Diet Library Search, once per ISBN and again later only if the request failed, to align the book's title, authors, publisher, and series with the library's record. The command “本の表記をそろえる” sends the ISBNs of your books there only when you choose that option. The ownership check behind the badge sends nothing. The extension itself makes no requests to other services.
 
 ### Contact
 
@@ -68,7 +68,7 @@ Book Props は、開発者にも第三者にもデータを送らない。利用
 
 ### 他のサービスへの要求
 
-Obsidian プラグインで書誌を探すと、入力した ISBN か書名を国立国会図書館サーチ（`https://ndlsearch.ndl.go.jp`）に送るか、入力したアドレスの商品ページを取得する。拡張自体は他のサービスに要求を送らない。
+Obsidian プラグインで書誌を探すと、入力した ISBN か書名を国立国会図書館サーチ（`https://ndlsearch.ndl.go.jp`）に送るか、入力したアドレスの商品ページを取得する。拡張から ISBN のある本の購入・所持・欲しい本を登録した後も、本の書名・著者・出版社・シリーズを国立国会図書館の書誌にそろえるため、その ISBN を国立国会図書館サーチに送る。送るのは ISBN ごとに一度で、失敗したときだけ後で送り直す。コマンド「本の表記をそろえる」は、国立国会図書館サーチで確かめると選んだときだけ、登録済みの本の ISBN を送る。バッジのための照合では何も送らない。拡張自体は他のサービスに要求を送らない。
 
 ### 問い合わせ
 

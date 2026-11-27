@@ -2,10 +2,15 @@
 //!
 //! The serde names are the wire contract: the TypeScript declarations are generated from them.
 
+mod bibliography;
 mod management;
 mod portable;
 mod shelf;
 
+pub use bibliography::{
+    AuthorRole, BibliographyRequest, BibliographyRevision, CatalogueRecord, DescribedRecord,
+    EditionText, EnrichmentPlan, LookupAnswer, Person, SeriesEntry,
+};
 pub use management::{
     BookOptions, BookStep, BooksRequest, CopiesRequest, CopyPlace, CustomField, EditionOptions,
     ManagementCommand, ManagementPlan, ManagementRequest, MissingCopies, MoveBackup, MoveCopy,
@@ -69,6 +74,13 @@ pub struct Product {
     pub(crate) label: Option<String>,
     #[serde(default)]
     pub(crate) details: Details,
+    /// The series or label a source states for the product's ISBNs.
+    #[serde(default)]
+    #[tsify(optional)]
+    pub(crate) series: Option<String>,
+    /// The roles split off the author entries; set when the product is normalised.
+    #[serde(skip)]
+    pub(crate) roles: Vec<AuthorRole>,
 }
 
 /// A book stored in the Vault.
@@ -90,6 +102,13 @@ pub struct Book {
     /// Fields the user added to the book; only management needs them.
     #[serde(default)]
     pub(crate) custom_fields: Vec<CustomField>,
+    /// The roles of the authors whose role is not plain authorship.
+    #[serde(default)]
+    pub(crate) author_roles: Vec<AuthorRole>,
+    /// The lookups of the book's ISBNs that still wait, as the core recorded them.
+    #[serde(default)]
+    #[tsify(optional)]
+    pub(crate) pending_lookup: Option<String>,
 }
 
 impl Book {
@@ -121,6 +140,10 @@ pub struct Edition {
     pub(crate) archived_at: Option<String>,
     #[serde(default)]
     pub(crate) details: Details,
+    /// The series or label a source states for each ISBN, kept with the ISBN.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[tsify(optional)]
+    pub(crate) series: Vec<SeriesEntry>,
 }
 
 /// Edition facts that only fill gaps; they never identify an edition.
@@ -163,6 +186,9 @@ pub struct EditionPatch {
     pub(crate) purchased_on: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) purchased_from: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[tsify(optional)]
+    pub(crate) series: Vec<SeriesEntry>,
 }
 
 /// How the product relates to what the user already owns.
@@ -331,6 +357,11 @@ pub struct ChangeRequest {
     pub(crate) new_book_id: String,
     /// The id a new edition takes.
     pub(crate) new_edition_id: String,
+    /// Record the bibliographic values the write leaves, to replace them from the National Diet
+    /// Library afterwards.
+    #[serde(default)]
+    #[tsify(optional)]
+    pub(crate) lookup: bool,
 }
 
 /// What the runtime does with one read of the catalog.
@@ -375,6 +406,10 @@ pub struct WritePlan {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[tsify(optional)]
     pub(crate) new_book: Option<NewBook>,
+    /// The lookups the book waits for after the write.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub(crate) pending_lookup: Option<String>,
 }
 
 /// A book note to create.
@@ -387,6 +422,9 @@ pub struct NewBook {
     pub(crate) wanted: bool,
     pub(crate) editions: Vec<EditionWrite>,
     pub(crate) applied_purchases: Vec<ReceiptWrite>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[tsify(optional)]
+    pub(crate) author_roles: Vec<AuthorRole>,
 }
 
 /// The wish, and optionally the edition and receipt, to write to one book.
@@ -427,6 +465,9 @@ pub struct EditionWrite {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[tsify(optional)]
     pub(crate) purchased_from: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[tsify(optional)]
+    pub(crate) series: Vec<SeriesEntry>,
 }
 
 /// Whether a purchase was applied before, asked after the browser lost the answer.

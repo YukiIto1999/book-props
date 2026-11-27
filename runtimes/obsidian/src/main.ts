@@ -9,6 +9,7 @@ import { NoteFormat } from "./adapters/note-format/note-format.ts";
 import { VaultFiles } from "./adapters/vault-files.ts";
 import { Catalog, type Product } from "./catalog/catalog.ts";
 import { startCatalogCore, type CatalogCore } from "./core/catalog-core.ts";
+import { addBooksBaseCommand } from "./views/books-base-command.ts";
 import { answerExtension, type ExtensionHost } from "./views/extension-requests.ts";
 import { LibraryTools } from "./views/library-tools.ts";
 import { addNoteTemplates } from "./views/note-templates.ts";
@@ -126,6 +127,7 @@ export default class BookProps extends Plugin {
         else void this.renameIdNamedNotes(this.catalog);
       },
     });
+    addBooksBaseCommand(this, () => this.folder);
     addNoteTemplates(this, () => this.folder, runtime.notes);
     this.app.workspace.onLayoutReady(() => {
       if (this.unloaded) return;

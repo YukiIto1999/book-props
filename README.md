@@ -60,4 +60,6 @@ Book Props has no telemetry, ads, accounts, or payments.
 
 Book Props is available under the [MIT License](LICENSE). Licenses of bundled third-party code are in `THIRD-PARTY-NOTICES.txt` attached to each release.
 
+The plugin uses the API of the [National Diet Library Search](https://ndlsearch.ndl.go.jp/). Lookup results, and the titles, authors, publishers, series, and Nippon Decimal Classification numbers that the plugin writes into book notes after registrations from the extension or through 本の表記をそろえる, come from the [National Diet Library catalogue (国立国会図書館蔵書)](https://ndlsearch.ndl.go.jp/help/api/provider#opac), provided by the National Diet Library and obtained through the National Diet Library Search API. They are licensed under the [Creative Commons Attribution 4.0 International License](https://creativecommons.org/licenses/by/4.0/legalcode).
+
 The names of the Nippon Decimal Classification (NDC) classes and sections that the plugin writes next to a book's classification number come from the [NDC9 data of the Japan Library Association Classification Committee](https://www.jla.or.jp/committees/bunrui/ndc-data/) (日本図書館協会分類委員会「NDCデータ」ndc9), licensed under [CC BY](https://creativecommons.jp/licenses/). Book Props extracts only the names; the changes are described in [`core/vault/data/ndc9/NOTICE.txt`](core/vault/data/ndc9/NOTICE.txt).

@@ -172,7 +172,7 @@ fn edition_ambiguity_does_not_block_a_wish_for_one_known_book() {
 }
 
 #[test]
-fn a_wish_records_its_isbn_only_on_a_book_without_an_active_edition() {
+fn a_wish_records_its_isbn_where_a_purchase_would_add_the_edition() {
     let wished = json!([{"id": "wished", "title": "夜廻三", "authors": ["黒 史郎"], "wanted": true,
         "editions": []}]);
     let named = json!({"title": "夜廻三", "authors": ["黒史郎"], "isbns": ["9784569857152"]});
@@ -202,6 +202,84 @@ fn a_wish_records_its_isbn_only_on_a_book_without_an_active_edition() {
         request("setWish", both, catalog())["decision"],
         json!({"kind": "update", "wantedBefore": true, "wantedAfter": true})
     );
+}
+
+/// An owned 第2版 under the National Diet Library's title, and the title a store page shows.
+fn tokumaru() -> Value {
+    json!([{"id": "book", "title": "体系的に学ぶ安全なWebアプリケーションの作り方 : 脆弱性が生まれる原理と対策の実践",
+        "authors": ["徳丸 浩"], "wanted": false,
+        "editions": [{"id": "second", "label": "第2版", "owned": true, "isbns": ["9784797393163"]}]}])
+}
+
+#[test]
+fn a_store_title_with_spaces_and_an_edition_names_the_book_under_its_library_title() {
+    let third = json!({
+        "title": "体系的に学ぶ 安全なWebアプリケーションの作り方 第3版 脆弱性が生まれる原理と対策の実践",
+        "authors": ["徳丸 浩"], "isbns": ["9784815631338"]
+    });
+    let inspected = request("inspect", third.clone(), tokumaru());
+    assert_eq!(inspected["bookId"], "book");
+    assert_eq!(inspected["ownership"], "otherEdition");
+    assert_eq!(
+        request("setWish", third, tokumaru())["decision"],
+        json!({"kind": "addEdition", "wantedBefore": false, "wantedAfter": true})
+    );
+    let second = json!({
+        "title": "体系的に学ぶ 安全なWebアプリケーションの作り方 第2版 脆弱性が生まれる原理と対策の実践",
+        "authors": ["徳丸 浩"]
+    });
+    assert_eq!(
+        request("inspect", second, tokumaru())["ownership"],
+        "sameEdition"
+    );
+}
+
+#[test]
+fn spacing_and_edition_words_do_not_join_volumes_sister_books_or_other_authors() {
+    let named = |title: &str, authors: Value| {
+        request(
+            "inspect",
+            json!({"title": title, "authors": authors}),
+            tokumaru(),
+        )["bookId"]
+            .clone()
+    };
+    let author = || json!(["徳丸 浩"]);
+    assert_eq!(
+        named(
+            "体系的に学ぶ 安全なWebアプリケーションの作り方 [新装版] 脆弱性が生まれる原理と対策の実践",
+            author()
+        ),
+        "book"
+    );
+    for other in [
+        "体系的に学ぶ 安全なWebアプリケーションの作り方［発展編］",
+        "体系的に学ぶ 安全なWebアプリケーションの作り方 : 脆弱性を防ぐ設計",
+    ] {
+        assert_eq!(named(other, author()), Value::Null, "{other}");
+    }
+    let title = "体系的に学ぶ安全なWebアプリケーションの作り方 : 脆弱性が生まれる原理と対策の実践";
+    assert_eq!(named(title, json!(["別の 著者"])), Value::Null);
+
+    let book = |id: &str, title: &str| json!({"id": id, "title": title, "authors": ["著者"], "wanted": true, "editions": []});
+    let books = json!([
+        book("joined", "入門自然言語処理"),
+        book("upper", "坊っちゃん (上)"),
+        book("first", "物語 1")
+    ]);
+    let found = |title: &str| {
+        request(
+            "inspect",
+            json!({"title": title, "authors": ["著者"]}),
+            books.clone(),
+        )["bookId"]
+            .clone()
+    };
+    assert_eq!(found("入門 自然言語処理"), "joined");
+    assert_eq!(found("坊っちゃん （上）"), "upper");
+    assert_eq!(found("坊っちゃん (下)"), Value::Null);
+    assert_eq!(found("物語 2"), Value::Null);
+    assert_eq!(found("物語 1 改訂版"), "first");
 }
 
 #[test]

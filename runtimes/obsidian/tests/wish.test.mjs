@@ -91,3 +91,42 @@ void test("版のない購入希望の本にISBNを添えて購入希望を付�
   assert.equal(book.wanted, true);
   assert.deepEqual(editionsOf(book), [{ owned: false, isbns: [isbn], publisher: undefined }]);
 });
+
+void test("NDLの書名で第2版を持つ本は、Amazonの第3版のページで別版の所持と分かり、欲しい本に第3版を未所有の版として加える", async () => {
+  const { notes, catalog } = scope();
+  notes.set(
+    "Books/体系的に学ぶ.md",
+    noteFormat.create({
+      id: "7bdc7e12-8a43-4c1b-9d0e-1f2a3b4c5d6e",
+      title: "体系的に学ぶ安全なWebアプリケーションの作り方 : 脆弱性が生まれる原理と対策の実践",
+      authors: ["徳丸 浩"],
+      wanted: false,
+      editions: [
+        {
+          id: "1e2d3c4b-5a69-4788-9a0b-c1d2e3f4a5b6",
+          owned: true,
+          label: "第2版",
+          isbns: ["9784797393163"],
+        },
+      ],
+      appliedPurchases: [],
+    }),
+  );
+  const page = {
+    title: "体系的に学ぶ 安全なWebアプリケーションの作り方 第3版 脆弱性が生まれる原理と対策の実践",
+    authors: ["徳丸 浩"],
+    isbns: ["9784815631338"],
+  };
+  const inspected = await catalog.execute({ action: "inspect", product: page });
+  assert.equal(inspected.outcome.ownership, "otherEdition");
+  assert.equal((await catalog.execute({ action: "setWish", product: page })).kind, "saved");
+  const book = onlyBook(notes);
+  assert.equal(book.wanted, true);
+  assert.deepEqual(
+    book.editions.map(({ owned, label, isbns }) => ({ owned, label, isbns })),
+    [
+      { owned: true, label: "第2版", isbns: ["9784797393163"] },
+      { owned: false, label: "第3版", isbns: ["9784815631338"] },
+    ],
+  );
+});

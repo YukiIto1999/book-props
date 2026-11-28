@@ -1,7 +1,7 @@
 //! Matching a product to a stored book and edition, and deciding the state change.
 
 use crate::identity::{
-    canonical_isbns, distinct_editions, normalized, normalized_title, same_authors, same_label,
+    canonical_isbns, distinct_editions, normalized, same_authors, same_label, title_key,
 };
 use crate::model::{
     Action, Book, CatalogRequest, Decision, Edition, EditionPatch, Outcome, Ownership, Product,
@@ -66,7 +66,7 @@ fn locate_book<'a>(
     action: Action,
 ) -> Result<Option<&'a Book>, Decision> {
     let inspect_only = action == Action::Inspect;
-    let title = normalized_title(&product.title);
+    let title = title_key(&product.title);
     let named = !title.is_empty()
         && product
             .authors
@@ -100,7 +100,7 @@ fn locate_book<'a>(
     let named_books = || {
         visible_books().filter(|book| {
             named
-                && normalized_title(&book.title) == title
+                && title_key(&book.title) == title
                 && same_authors(&book.authors, &product.authors)
         })
     };
@@ -356,9 +356,13 @@ fn decision(
         Action::RecordOwnership | Action::CancelOwnership => book.wanted,
     };
     // A wish names no edition, but its ISBN is what identifies the book once the library rewrites
-    // its title and authors: a book without an active edition keeps the product as an unowned one.
-    // Where the book holds editions, telling which one the product is would need the user.
-    if action == Action::SetWish && edition.is_none() && editions.is_empty() && !isbns.is_empty() {
+    // its title and authors, and its label tells a later edition from those the book holds: the
+    // product is kept as an unowned edition wherever a purchase would add it without asking.
+    if action == Action::SetWish
+        && edition.is_none()
+        && !isbns.is_empty()
+        && new_revision(editions, label)
+    {
         return Decision::AddEdition {
             wanted_before: book.wanted,
             wanted_after: true,

@@ -274,6 +274,34 @@ fn a_wish_change_that_leaves_the_book_as_stored_writes_nothing() {
 }
 
 #[test]
+fn an_edition_word_in_a_store_title_labels_the_edition_it_records() {
+    let owned = json!([{"id": "book",
+        "title": "体系的に学ぶ安全なWebアプリケーションの作り方 : 脆弱性が生まれる原理と対策の実践",
+        "authors": ["徳丸 浩"], "wanted": false, "appliedPurchases": [],
+        "editions": [{"id": "second", "label": "第2版", "owned": true, "isbns": ["9784797393163"]}]}]);
+    let third = json!({
+        "title": "体系的に学ぶ 安全なWebアプリケーションの作り方 第3版 脆弱性が生まれる原理と対策の実践",
+        "authors": ["徳丸 浩"], "isbns": ["9784815631338"]});
+    let wish = change("setWish", third, owned, None, None);
+    assert_eq!(wish["bookId"], "book");
+    assert_eq!(
+        wish["change"],
+        json!({"wanted": true, "edition": {"id": "new-edition", "owned": false,
+            "isbns": ["9784815631338"], "label": "第3版"}})
+    );
+
+    let labelled = |title: &str| {
+        let product = json!({"title": title, "authors": ["著者"], "isbns": ["9780262033848"]});
+        change("recordOwnership", product, json!([]), None, None)["change"]["edition"]["label"]
+            .clone()
+    };
+    assert_eq!(labelled("ビジュアル情報処理［改訂新版］"), "改訂新版");
+    assert_eq!(labelled("入門 第二版 統計学"), "第二版");
+    assert_eq!(labelled("坊っちゃん (上)"), Value::Null);
+    assert_eq!(labelled("初版本の研究"), Value::Null);
+}
+
+#[test]
 fn buying_a_stored_edition_fills_only_blank_values_and_records_the_receipt() {
     let product = json!({"isbns": ["9780201633610", "9780131103627"], "label": "改訂新版",
         "details": {"publisher": "別の社", "purchasedOn": "2025-11-25"}});

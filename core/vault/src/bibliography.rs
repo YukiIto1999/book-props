@@ -20,6 +20,7 @@ pub(crate) use text::{tidy, tidy_title};
 
 use std::cmp::Reverse;
 
+use crate::identity::title_edition;
 use crate::model::{
     AuthorRole, CatalogueRecord, DescribedRecord, Details, Person, Product, StatedNdc,
 };
@@ -41,8 +42,9 @@ fn roles(people: &[Person]) -> Vec<AuthorRole> {
 }
 
 impl Product {
-    /// The product in the stored spelling: authors split from their roles, and a trailing series
-    /// taken off the title when the product states that series.
+    /// The product in the stored spelling: authors split from their roles, a trailing series taken
+    /// off the title when the product states that series, and, without a stated label, the edition
+    /// a word of the title names.
     pub(crate) fn normalized(&self) -> Self {
         let people = names::people(&self.authors);
         let series = present(self.series.as_deref());
@@ -51,11 +53,12 @@ impl Product {
             Some(name) => series::without_series(&tidied, &[name]).to_owned(),
             None => tidied,
         };
+        let label = present(self.label.as_deref()).or_else(|| title_edition(&title));
         Self {
             title,
             authors: people.iter().map(|person| person.name.clone()).collect(),
             isbns: self.isbns.clone(),
-            label: present(self.label.as_deref()),
+            label,
             details: Details {
                 publisher: present(self.details.publisher.as_deref()),
                 ..self.details.clone()

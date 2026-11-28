@@ -13,7 +13,7 @@
 
 ## 動作環境
 
-- Windows または Linux のデスクトップ版 Obsidian 1.13.0 以降。
+- Windows または Linux のデスクトップ版 Obsidian 1.13.7 以降。
 - 拡張を使う場合は、同じ端末の Chrome などの Chromium 系ブラウザ。Vivaldi でも動作を確かめている。
 - スマートフォンでは同期済みの Markdown を読めるが、プラグインと拡張は動かない。
 

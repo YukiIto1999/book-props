@@ -1,6 +1,6 @@
 # Windows・Linux での導入と運用
 
-Obsidian と Chrome は同じ端末で起動する。デスクトップ版 Obsidian 1.13.0 以降と Chrome が必要。ビルド済みの ZIP を使えば、証明書の登録、追加の実行ファイル、コマンド操作は不要。
+Obsidian と Chrome は同じ端末で起動する。デスクトップ版 Obsidian 1.13.7 以降と Chrome が必要。ビルド済みの ZIP を使えば、証明書の登録、追加の実行ファイル、コマンド操作は不要。
 
 この手順は、接続用フォルダから自動で再接続する版が対象です。[v0.2.0 の導入手順](https://github.com/YukiIto1999/book-props/blob/v0.2.0/docs/installation.md)とはペアリングの操作が異なります。
 v0.1.0 を新たに入れる場合は[旧版の導入手順](https://github.com/YukiIto1999/book-props/blob/6d4b75edeed2ccf85e052d2b91f85eaee5679cb7/docs/installation.md)を使います。

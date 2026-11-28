@@ -15,7 +15,7 @@ The interface is in Japanese.
 
 ## Requirements
 
-- Obsidian 1.13.0 or later on Windows or Linux desktop.
+- Obsidian 1.13.7 or later on Windows or Linux desktop.
 - Chrome or another Chromium-based browser on the same computer, for the extension. Vivaldi is also tested.
 - On mobile you can read the synced notes, but the plugin and the extension do not run.
 

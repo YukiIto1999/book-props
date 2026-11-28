@@ -47,7 +47,7 @@ Obsidian のコミュニティディレクトリと Chrome Web Store に申請�
 | ID は英小文字とハイフンだけで、`obsidian` を含まず、`plugin` で終わらない | [Manifest](https://docs.obsidian.md/Reference/Manifest) | 満たす（`book-props`） |
 | 名前は基本ラテン文字だけで、「Obsidian」「Plugin」を含まない | [Manifest](https://docs.obsidian.md/Reference/Manifest) | 満たす（`Book Props`） |
 | 説明は 250 字以内、動作から書き始め、句点で終える。絵文字や特殊文字を使わない | [Submission requirements](https://docs.obsidian.md/community-directory/submission-requirements-for-plugins) | 満たす（135 字） |
-| `minAppVersion` を動作する最小の版にする | 同上 | `1.13.0`。動作を確かめた最も古い版は 1.13.7 で（[アーキテクチャ](architecture.md)）、1.13.0 から 1.13.6 では確かめていない。受け入れ試験は 1.15.1 で動かす。1.13.7 に上げるかは所有者が決める |
+| `minAppVersion` を動作する最小の版にする | 同上 | `1.13.7`。動作を確かめた最も古い版にそろえている（[アーキテクチャ](architecture.md)）。受け入れ試験は 1.15.1 で動かす |
 | Node.js を使うなら `isDesktopOnly` を `true` にする | 同上 | 満たす（`node:https`、`node:http`、`node:tls`、`node:fs/promises` などを使う） |
 | 寄付を受けないなら `fundingUrl` を置かない | 同上 | 満たす（置いていない） |
 | コマンド ID にプラグイン ID を含めない。見本のコードを残さない | 同上 | 満たす。`verify` の `obsidian-review` で検査する |
@@ -163,7 +163,7 @@ Book Props は、Obsidian や各書店が提供・承認したものではあり
 
 ```text
 This extension works with the Book Props plugin for desktop Obsidian on the same computer.
-1. Install Obsidian 1.13 or later. Download book-props-<version>.zip from https://github.com/YukiIto1999/book-props/releases/latest and put obsidian/main.js and obsidian/manifest.json into <vault>/.obsidian/plugins/book-props/. Enable the plugin under Settings > Community plugins.
+1. Install Obsidian 1.13.7 or later. Download book-props-<version>.zip from https://github.com/YukiIto1999/book-props/releases/latest and put obsidian/main.js and obsidian/manifest.json into <vault>/.obsidian/plugins/book-props/. Enable the plugin under Settings > Community plugins.
 2. Create a folder such as "Books" in the vault. In Settings > Book Props, enter "Books" in 書籍フォルダ and press 適用, then press 接続を始める.
 3. When the extension is installed, its settings page (接続設定) opens with a disclosure of the data it reads, where it sends it, and why. Press 同意して使い始める. Until then the extension reads no pages, does not connect to Obsidian, and its popup only points to this disclosure. The same page offers 同意を取り消す to withdraw consent.
 4. On the same settings page (also reachable from 接続設定・対応サイト in the popup), press 接続用フォルダを選ぶ, choose the folder shown in Obsidian (<home>/Book Props/<vault name>), and allow editing.

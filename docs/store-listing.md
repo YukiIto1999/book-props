@@ -165,7 +165,7 @@ Book Props は、Obsidian や各書店が提供・承認したものではあり
 This extension works with the Book Props plugin for desktop Obsidian on the same computer.
 1. Install Obsidian 1.13.7 or later. Download book-props-<version>.zip from https://github.com/YukiIto1999/book-props/releases/latest and put obsidian/main.js and obsidian/manifest.json into <vault>/.obsidian/plugins/book-props/. Enable the plugin under Settings > Community plugins.
 2. Create a folder such as "Books" in the vault. In Settings > Book Props, enter "Books" in 書籍フォルダ and press 適用, then press 接続を始める.
-3. When the extension is installed, its settings page (接続設定) opens with a disclosure of the data it reads, where it sends it, and why. Press 同意して使い始める. Until then the extension reads no pages, does not connect to Obsidian, and its popup only points to this disclosure. The same page offers 同意を取り消す to withdraw consent.
+3. When the extension is installed, its settings page (接続設定) opens with a disclosure of the data it reads, where it sends it (including the two identifiers sent with a purchase), and why. Press 同意して使い始める. Until then the extension reads no pages, does not connect to Obsidian, and its popup only points to this disclosure. The same page offers 同意を取り消す to withdraw consent.
 4. On the same settings page (also reachable from 接続設定・対応サイト in the popup), press 接続用フォルダを選ぶ, choose the folder shown in Obsidian (<home>/Book Props/<vault name>), and allow editing.
 5. Open https://books.rakuten.co.jp/rb/11753651/. The popup shows 未所有. Press 欲しい本に追加; after reloading, the page shows 欲しいに登録済み.
 If the extension later says that the folder permission has expired (接続用フォルダの許可が切れています), press 今後も自動で接続する in its settings and allow access.

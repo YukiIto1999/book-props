@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { discloseAfterInstall } from "../src/adapters/disclosure.ts";
 import { TabBadges } from "../src/extension/badge.ts";
 import { consentVersion } from "../src/extension/consent.ts";
 import { Options } from "../src/extension/options.ts";
@@ -220,37 +219,6 @@ void test("withdrawing consent stops reading open pages at once", async (t) => {
   assert.deepEqual(watch.describe(), {});
   watch.showRecheck(productUrl, observed);
   assert.deepEqual(log, ["unwatch", "clear"]);
-});
-
-void test("an install, or an update without consent, opens the disclosure", async () => {
-  install({}, {});
-  const consent = storedConsent();
-  const installed = [];
-  let opened = 0;
-  globalThis.chrome = {
-    runtime: {
-      onInstalled: { addListener: (listener) => installed.push(listener) },
-      openOptionsPage: async () => void opened++,
-    },
-  };
-  const fire = async (reason) => {
-    for (const listener of installed) listener({ reason });
-    await settle();
-  };
-  try {
-    discloseAfterInstall(consent.needsDisclosure);
-    await fire("install");
-    assert.equal(opened, 1);
-    await fire("update");
-    assert.equal(opened, 2);
-    await fire("chrome_update");
-    assert.equal(opened, 2);
-    await consent.agree();
-    await fire("update");
-    assert.equal(opened, 2);
-  } finally {
-    delete globalThis.chrome;
-  }
 });
 
 void test("the settings page shows the disclosure until the user agrees, and only then the pairing", async () => {

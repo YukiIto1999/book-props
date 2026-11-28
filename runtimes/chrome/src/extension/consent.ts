@@ -1,5 +1,9 @@
-/** The data practices the disclosure describes; raising it asks every user to agree again. */
-export const consentVersion = 1;
+/**
+ * The version of the disclosure on the settings page; raise it whenever the data practices or
+ * their description change, which asks every user to agree again.
+ * 2: the disclosure names the identifiers sent with a purchase.
+ */
+export const consentVersion = 2;
 /** The user's agreement to the disclosure of `version`, given at `at` (epoch milliseconds). */
 export type ConsentRecord = { version: number; at: number };
 /** Keeps the agreement on this browser profile. */

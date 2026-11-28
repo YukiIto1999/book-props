@@ -257,7 +257,7 @@ URL入力は、商品情報を得る入口として扱い、サイトURLや商�
 
 対応サイトの一覧は拡張の設定画面から開ける。一覧は固定で、各サイトへのリンクを表示する。
 
-ISBNと書名の検索には[国立国会図書館サーチのOpenSearch](https://ndlsearch.ndl.go.jp/help/api)のうち、[国立国会図書館の所蔵資料（`iss-ndl-opac`）](https://ndlsearch.ndl.go.jp/help/api/provider#opac)だけを使う。明示した検索語だけを送り、候補を選ぶまでは書き込まない。書店の商品URLは、ChromeとObsidianで同じサイト別の抽出規則を使う。取得先を対応するHTTPSの商品詳細に限り、リダイレクトは追わない。
+ISBNと書名の検索には[国立国会図書館サーチのOpenSearch](https://ndlsearch.ndl.go.jp/help/api)のうち、[国立国会図書館の所蔵資料（`iss-ndl-opac`）](https://ndlsearch.ndl.go.jp/help/api/provider#opac)だけを使う。明示した検索語だけを送り、候補を選ぶまでは書き込まない。書店の商品URLは、ChromeとObsidianで同じサイト別の抽出規則を使う。取得先を対応するHTTPSの商品詳細に限り、リダイレクトは追わない。Obsidianでの応答はgzip・deflate・Brotliの圧縮を展開して読み、展開した後で5 MiBを超えれば読むのをやめる。Amazonは圧縮を求めない問い合わせにもgzipで応えるためである。展開した本文はレンダラーの大域の`TextDecoder`(Chromium)で文字列にする。Nodeの`Buffer`から作った約1 MB以上の文字列を`DOMParser`に渡すと、Obsidian 1.15.1(Electron 43.8.9)のレンダラーが異常終了し、Obsidian全体が応答しなくなったためである。
 
 ## 端末とライフサイクル
 

@@ -83,7 +83,7 @@ const builtins = new Map([
   ],
   ["adapters/connection/connection.ts", /^node:(?:crypto|http|stream|tls)$/],
   ["adapters/connection/tls-identity.ts", /^node:(?:crypto|tls)$/],
-  ["adapters/bibliography-sources.ts", /^node:https$/],
+  ["adapters/bibliography-sources.ts", /^node:(?:http|https|stream|zlib)$/],
 ]);
 
 function manifest(path) {

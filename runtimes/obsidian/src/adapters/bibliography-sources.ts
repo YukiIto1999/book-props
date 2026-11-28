@@ -1,4 +1,7 @@
+import type { IncomingMessage } from "node:http";
 import { get } from "node:https";
+import { pipeline, type Readable, type Transform } from "node:stream";
+import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib";
 import { extractProduct, siteOf } from "@book-props/book-products";
 import { product, type Product } from "@book-props/vault-contract";
 import type { BibliographyLookup } from "../catalog/ports.ts";
@@ -32,13 +35,52 @@ const background: Purpose = {
   agent: "Book Props/0.1 (bibliographic lookup by ISBN after registration)",
 };
 
+/** 応答の圧縮のうち、読める方式。問い合わせではこれだけを受け付けると伝える。 */
+const decoders: Readonly<Record<string, (() => Transform) | undefined>> = {
+  identity: undefined,
+  gzip: createGunzip,
+  "x-gzip": createGunzip,
+  deflate: createInflate,
+  br: createBrotliDecompress,
+};
+const acceptEncoding = "gzip, deflate, br";
+/** 展開した後の応答本文の上限。圧縮された小さな応答が大きく膨らんでも、ここで読むのをやめる。 */
+const bodyLimit = 5 * 1024 * 1024;
+
+/**
+ * 応答本文を`Content-Encoding`に従って展開し、UTF-8の文字列にする。
+ * Amazonは`Accept-Encoding`のない問い合わせにもgzipで応えるので、圧縮を外さずに読むと商品ページにならない。
+ *
+ * 文字列には`Buffer#toString`ではなく大域の`TextDecoder`を使う。Nodeが`Buffer`から作る約1 MB以上の文字列は
+ * V8の外部文字列になり、Obsidian 1.15.1(Electron 43)のレンダラーはそれを`DOMParser`に渡すと異常終了する。
+ * レンダラーの大域の`TextDecoder`はChromiumのもので、V8の通常の文字列を返す。
+ */
+export async function responseText(response: IncomingMessage): Promise<string> {
+  const encoding = (response.headers["content-encoding"] ?? "identity").trim().toLowerCase();
+  if (!Object.hasOwn(decoders, encoding)) {
+    response.destroy();
+    throw new Error("書誌の応答を読めませんでした。");
+  }
+  const decoder = decoders[encoding];
+  const body: Readable = decoder ? pipeline(response, decoder(), () => undefined) : response;
+  const chunks: Buffer[] = [];
+  let length = 0;
+  for await (const chunk of body) {
+    if (!Buffer.isBuffer(chunk)) throw new Error("書誌の応答を読めませんでした。");
+    length += chunk.length;
+    if (length > bodyLimit) throw new Error("書誌の応答が大きすぎます。");
+    chunks.push(chunk);
+  }
+  return new TextDecoder().decode(Buffer.concat(chunks, length));
+}
+
 function publicText(url: URL, accept: string, signal: AbortSignal, purpose: Purpose) {
   const { promise, resolve, reject } = Promise.withResolvers<string>();
   const request = get(
     url,
     {
       signal: AbortSignal.any([signal, AbortSignal.timeout(purpose.timeout)]),
-      headers: { Accept: accept, "User-Agent": purpose.agent },
+      headers: { Accept: accept, "Accept-Encoding": acceptEncoding, "User-Agent": purpose.agent },
     },
     (response) => {
       if (response.statusCode !== 200) {
@@ -51,15 +93,7 @@ function publicText(url: URL, accept: string, signal: AbortSignal, purpose: Purp
         );
         return;
       }
-      const chunks: Buffer[] = [];
-      let length = 0;
-      response.on("data", (chunk: Buffer) => {
-        length += chunk.length;
-        if (length <= 5 * 1024 * 1024) chunks.push(chunk);
-        else response.destroy(new Error("書誌の応答が大きすぎます。"));
-      });
-      response.once("error", reject);
-      response.once("end", () => resolve(Buffer.concat(chunks, length).toString("utf8")));
+      responseText(response).then(resolve, reject);
     },
   );
   request.once("error", reject);

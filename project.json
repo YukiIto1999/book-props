@@ -56,6 +56,7 @@
     },
     "test-chrome": {
       "command": "pnpm --filter @book-props/chrome test",
+      "dependsOn": ["prepare-browser-wasm"],
       "inputs": [
         "default",
         "{workspaceRoot}/runtimes/chrome/**/*",

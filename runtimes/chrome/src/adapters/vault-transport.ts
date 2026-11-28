@@ -11,6 +11,7 @@ import initialize, { VaultTrust } from "../../dist/tls/vault_tls.js";
 
 const encoder = new TextEncoder();
 const maxCarrierFrame = 64 * 1024;
+const replyTimeoutMs = 12_000;
 let wasm: ReturnType<typeof initialize> | undefined;
 let trust: (VaultPeer & { client: VaultTrust }) | undefined;
 
@@ -87,7 +88,7 @@ function requestOverTls(
   socket.addEventListener("close", unavailable, { once: true, signal });
   cancelled?.addEventListener("abort", unavailable, { signal });
   socket.addEventListener("error", unavailable, { once: true, signal });
-  const timeout = setTimeout(unavailable, 12_000);
+  const timeout = setTimeout(unavailable, replyTimeoutMs);
   return pending.promise.finally(() => clearTimeout(timeout));
 }
 
@@ -103,6 +104,16 @@ export const exchange: Exchange = async (peer, request, token, signal) => {
   let channel: ReturnType<VaultTrust["connect"]> | undefined;
   try {
     if (plaintext.byteLength > maxRequestBytes) return { kind: "invalidRequest" };
+    // Chrome lists every WebSocket that cannot connect among the extension's errors, though not a fetch that
+    // cannot. Asking whether anything listens first keeps a closed Obsidian from adding an error for every page
+    // checked meanwhile; the request carries nothing, and the plugin answers it with 404.
+    const listening = await fetch(`http://${host}${endpoint}`, {
+      mode: "no-cors",
+      cache: "no-store",
+      credentials: "omit",
+      signal: AbortSignal.any([AbortSignal.timeout(replyTimeoutMs), ...(signal ? [signal] : [])]),
+    }).catch(() => undefined);
+    if (!listening) return undefined;
     channel = trustPeer(peer, hostname).connect();
     socket = new WebSocket(`ws://${host}${endpoint}`);
     socket.binaryType = "arraybuffer";

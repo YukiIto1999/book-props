@@ -173,3 +173,18 @@ await test("only the extension that proved the folder can save a purchase throug
   assert.deepEqual(await readdir(folder), notes);
   assert.equal(await readFile(join(folder, notes[0]), "utf8"), markdown);
 });
+
+// The extension asks whether anything listens with a plain request before it opens a WebSocket.
+await test("a plain request is answered with an empty 404 while listening, and refused once stopped", async (context) => {
+  const profile = await mkdtemp(join(tmpdir(), "book-props-profile-"));
+  context.after(async () => await rm(profile, { recursive: true, force: true }));
+  const grant = await ConnectionGrant.create("Reading Vault", profile);
+  const dispatch = async () => assert.fail("a plain request must not reach the Vault");
+  const connection = await Connection.start(createHost(), 0, "0".repeat(64), grant, dispatch);
+  const address = `http://127.0.0.1:${connection.listeningPort}/book-props/v1`;
+  const answer = await fetch(address);
+  assert.equal(answer.status, 404);
+  assert.equal(await answer.text(), "");
+  connection.stop();
+  await assert.rejects(fetch(address));
+});

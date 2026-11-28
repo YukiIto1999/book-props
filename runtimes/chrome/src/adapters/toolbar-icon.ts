@@ -18,6 +18,24 @@ async function plainPixels(size: number): Promise<ImageData> {
   return context.getImageData(0, 0, size, size);
 }
 
+/**
+ * Sets a tab's icon. chrome.action.setIcon's promise neither rejects nor carries the failure: Chrome only logs it
+ * as an unchecked runtime.lastError. Its callback is the one place the failure can be read, and reading it there
+ * keeps it off the extension's error list.
+ */
+function setIcon(details: chrome.action.TabIconDetails): Promise<void> {
+  const { promise, resolve, reject } = Promise.withResolvers<void>();
+  chrome.action.setIcon(details, () => {
+    const failure = chrome.runtime.lastError;
+    if (failure) reject(new Error(failure.message));
+    else resolve();
+  });
+  return promise;
+}
+
+// How chrome.action refuses a tab that closed, or was replaced by a prerendered one, before it was drawn.
+const closedTab = /^No tab with id: \d+\.$/;
+
 /** Marks a tab's toolbar icon with a dot through chrome.action, drawing each tone's icon once per worker start. */
 export function toolbarIcon(paint: MarkPainter): ToolbarIcon {
   const drawn = new Map<BadgeTone, Promise<Record<number, ImageData>>>();
@@ -35,12 +53,17 @@ export function toolbarIcon(paint: MarkPainter): ToolbarIcon {
     drawn.set(tone, drawing);
     return drawing;
   };
-  // The tooltip changes only once the icon has, so that the two never disagree.
+  // The tooltip changes only once the icon has, so that the two never disagree. A tab that closed meanwhile has
+  // no icon left to draw; any other failure is the caller's.
   const show: ToolbarIcon["show"] = async (tabId, badge) => {
-    await (badge
-      ? chrome.action.setIcon({ tabId, imageData: await marked(badge.tone) })
-      : chrome.action.setIcon({ tabId, path: plainPaths }));
-    await chrome.action.setTitle({ tabId, title: badge?.title ?? plainTitle });
+    try {
+      await (badge
+        ? setIcon({ tabId, imageData: await marked(badge.tone) })
+        : setIcon({ tabId, path: plainPaths }));
+      await chrome.action.setTitle({ tabId, title: badge?.title ?? plainTitle });
+    } catch (error) {
+      if (!(error instanceof Error && closedTab.test(error.message))) throw error;
+    }
   };
   return {
     show,

@@ -16,6 +16,7 @@ import { answerExtension, type ExtensionHost } from "./views/extension-requests.
 import { LibraryTools } from "./views/library-tools.ts";
 import { addNoteTemplates } from "./views/note-templates.ts";
 import { NoteNameReview } from "./views/note-name-review.ts";
+import { addReadingCommand } from "./views/reading.ts";
 import type { LocalAction } from "./views/registration-messages.ts";
 import { Registration } from "./views/registration.ts";
 import { Settings } from "./views/settings.ts";
@@ -112,6 +113,7 @@ export default class BookProps extends Plugin {
         else new Shelf(this.app, this.catalog).open();
       },
     });
+    addReadingCommand(this, () => this.catalog && { catalog: this.catalog, folder: this.folder });
     this.addCommand({
       id: "manage-books",
       name: "本・版を管理",
@@ -127,7 +129,7 @@ export default class BookProps extends Plugin {
       name: "ファイル名を書名に合わせる",
       callback: () => {
         if (!this.catalog) new Notice("Book Propsの設定で書籍フォルダを指定してください。");
-        else new NoteNameReview(this.app, this.catalog).open();
+        else new NoteNameReview(this.app, this.catalog.noteNames).open();
       },
     });
     this.addCommand({

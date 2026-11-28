@@ -2,10 +2,11 @@
 
 use crate::model::{
     Book, BookOptions, BookStep, CustomField, Edition, EditionOptions, ManagementCommand,
-    ManagementPlan, ManagementRequest, MoveCopy, MoveStage, OptionsRequest, RestoreRequest,
-    RestoreTargets, StepRequest,
+    ManagementPlan, ManagementRequest, MoveCopy, MoveStage, OptionsRequest, Reading,
+    RestoreRequest, RestoreTargets, StepRequest,
 };
 use crate::moving;
+use crate::text::calendar_date;
 
 /// Decides what a management command leads to, from the books read with it.
 ///
@@ -57,6 +58,9 @@ fn step(
                 value: value.clone(),
             }
         }),
+        ManagementCommand::SetReading {
+            baseline, value, ..
+        } => set_reading(source, baseline, value),
         ManagementCommand::Archive { edition_id, .. } => {
             archive(source, edition_id.as_deref(), Some(&request.stamp))
         }
@@ -113,6 +117,18 @@ fn edit_edition(
     (!refused).then(|| BookStep::EditEdition {
         baseline: Box::new(baseline.clone()),
         edition: Box::new(value.clone()),
+    })
+}
+
+/// A reading change needs an unarchived book. A finish day it writes must be a real date written
+/// as `YYYY-MM-DD`; a day it leaves as read may be anything the user wrote by hand.
+fn set_reading(source: &Book, baseline: &Reading, value: &Reading) -> Option<BookStep> {
+    let day = value.finished_on.as_deref();
+    let malformed = value.finished_on != baseline.finished_on
+        && day.is_some_and(|day| calendar_date(day).as_deref() != Some(day));
+    (source.archived_at.is_none() && !malformed).then(|| BookStep::SetReading {
+        baseline: baseline.clone(),
+        value: value.clone(),
     })
 }
 
@@ -233,6 +249,9 @@ pub fn allows_step(request: &StepRequest) -> bool {
         BookStep::UpdateCustomField { baseline, value } => {
             open(book) && fields_unchanged(&book.custom_fields, baseline.as_ref(), value.as_ref())
         }
+        BookStep::SetReading { baseline, value } => {
+            open(book) && reading_unchanged(book, baseline, value)
+        }
         BookStep::RestoreEdition { edition } => open(book) && !clashes(book, edition),
         BookStep::MarkMove => open(book),
         BookStep::CopyEdition { edition } => open(book) && !collides(book, edition),
@@ -269,4 +288,12 @@ fn fields_unchanged(
             .any(|(at, field)| Some(at) != index && field.name() == new.name())
     });
     unchanged && unique
+}
+
+/// Each part the change writes is still as read, so a status or finish day the user set since
+/// is never overwritten. A part the change leaves alone may have changed.
+fn reading_unchanged(book: &Book, baseline: &Reading, value: &Reading) -> bool {
+    let status = value.status == baseline.status || book.reading_status == baseline.status;
+    let day = value.finished_on == baseline.finished_on || book.finished_on == baseline.finished_on;
+    status && day
 }

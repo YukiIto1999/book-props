@@ -74,6 +74,8 @@ export type {
   PortableProblem,
   PresentNote,
   RangeKind,
+  Reading,
+  ReadingStatus,
   ReceiptExpiry,
   ReceiptWrite,
   ReconcileRequest,

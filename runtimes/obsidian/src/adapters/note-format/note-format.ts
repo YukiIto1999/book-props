@@ -1,5 +1,5 @@
 import { isMap, parseDocument, stringify } from "yaml";
-import type { BibliographyRevision } from "../../core/catalog-core.ts";
+import type { BibliographyRevision, Reading } from "../../core/catalog-core.ts";
 import type {
   AppliedPurchase,
   BookRecord,
@@ -21,6 +21,7 @@ import {
 import { classificationEdits, classificationKey, namesOf } from "./classification.ts";
 import { BookNoteError, unreadable } from "./error.ts";
 import { map, parseNote, readEditionBackup, type NoteRules, type ParsedNote } from "./parse.ts";
+import { confirmsReading, finishedOnKey, readingEdits, readingStatusKey } from "./reading.ts";
 import { confirmsRevision, revisionEdits } from "./revise.ts";
 import { confirmsUpdate, updateEdits } from "./update.ts";
 import { customFieldEdits, decodeCustomField, plainMap } from "./values.ts";
@@ -68,8 +69,8 @@ export class NoteFormat {
         "book-title": book.title,
         "book-authors": book.authors.length ? book.authors : undefined,
         "book-wanted": book.wanted,
-        "book-reading-status": book.readingStatus,
-        "book-finished-on": book.finishedOn,
+        [readingStatusKey]: book.readingStatus,
+        [finishedOnKey]: book.finishedOn,
         [classificationKey]: book.classification,
         ...namesOf(book.classification, this.rules),
         tags: book.tags?.length ? book.tags : undefined,
@@ -269,6 +270,19 @@ export class NoteFormat {
     const actual = this.parse(saved).book.editions[index];
     if (!actual || JSON.stringify(storeEdition(actual)) !== JSON.stringify(storeEdition(input))) {
       return unreadable("版の変更を確定できません。");
+    }
+    return saved;
+  }
+
+  /**
+   * 読書状態と読了日のうち、`baseline`から変わる部分だけを書き、空にする部分は取り除く。
+   * 他の行と本文は一文字も変えない。変えてよいかはcoreが本ページの最新の内容で決める。
+   */
+  setReading(raw: string, baseline: Reading, value: Reading): string {
+    const note = this.parse(raw);
+    const saved = spliceNote(raw, note.header, readingEdits(note, baseline, value));
+    if (!confirmsReading(this.parse(saved).book, baseline, value)) {
+      return unreadable("読書状態を保存できません。");
     }
     return saved;
   }

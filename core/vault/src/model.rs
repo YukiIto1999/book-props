@@ -14,8 +14,8 @@ pub use bibliography::{
 pub use management::{
     BookOptions, BookStep, BooksRequest, CopiesRequest, CopyPlace, CustomField, EditionOptions,
     ManagementCommand, ManagementPlan, ManagementRequest, MissingCopies, MoveBackup, MoveCopy,
-    MoveMarker, MovePlan, MoveRequest, MoveSource, MoveStage, OptionsRequest, RestoreRequest,
-    RestoreTargets, SettledShelf, ShelfBook, StepRequest,
+    MoveMarker, MovePlan, MoveRequest, MoveSource, MoveStage, OptionsRequest, Reading,
+    RestoreRequest, RestoreTargets, SettledShelf, ShelfBook, StepRequest,
 };
 pub use portable::{
     ImportPlan, ImportRequest, NoteFacts, PortableEnvelope, PortableExport, PortableNote,
@@ -117,6 +117,14 @@ pub struct Book {
     #[serde(default)]
     #[tsify(optional)]
     pub(crate) classification: Option<String>,
+    /// How far the user has read the book; absent until the user sets it.
+    #[serde(default)]
+    #[tsify(optional)]
+    pub(crate) reading_status: Option<ReadingStatus>,
+    /// The day the user finished the book, as stored; the user may have written it by hand.
+    #[serde(default)]
+    #[tsify(optional)]
+    pub(crate) finished_on: Option<String>,
 }
 
 impl Book {
@@ -138,6 +146,19 @@ impl Book {
     pub(crate) const fn moving(&self) -> bool {
         self.pending_move.is_some()
     }
+}
+
+/// How far the user has read a book. Any status may follow any other, and purchases never set
+/// one.
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub enum ReadingStatus {
+    Unread,
+    Reading,
+    Rereading,
+    Finished,
+    /// A book the user consults, like a dictionary, rather than reads through.
+    Reference,
 }
 
 /// An edition of a stored book.

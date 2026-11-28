@@ -7,6 +7,8 @@ import { assertUnchanged, CatalogChanged, Refuse } from "./purchase.ts";
 
 /** 書籍の保存範囲の本ページと、それを読む本ページの書式。 */
 type NoteSource = Readonly<{ files: Pick<BookFiles, "versions" | "read">; notes: NoteFormat }>;
+/** 一覧が読み取りの間に変わらなかった試行の値と、その一覧の更新情報。 */
+export type StableRead<T> = Readonly<{ value: T; versions: ReadonlyMap<string, string> }>;
 
 class UnreadableNote extends Error {
   readonly path: string;
@@ -62,7 +64,7 @@ export async function readEntries(
 export async function readStable<T>(
   files: Pick<BookFiles, "versions">,
   read: (versions: ReadonlyMap<string, string>) => Promise<T>,
-): Promise<{ value: T; versions: ReadonlyMap<string, string> }> {
+): Promise<StableRead<T>> {
   const attempt = async () => {
     const versions = files.versions();
     let value: T;

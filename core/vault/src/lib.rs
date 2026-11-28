@@ -29,11 +29,11 @@ pub use model::{
     ManagementRequest, MissingCopies, MoveBackup, MoveCopy, MoveMarker, MovePlan, MoveRequest,
     MoveSource, MoveStage, NewBook, NoteFacts, OptionsRequest, Outcome, Ownership, OwnershipFilter,
     Person, PortableEnvelope, PortableExport, PortableNote, PortableNotes, PortableProblem,
-    PortableVerdict, PresentNote, Product, PurchaseKey, RangeKind, Receipt, ReceiptExpiry,
-    ReceiptWrite, ReconcileRequest, Reconciliation, RestoreRequest, RestoreTargets, Selection,
-    SeriesEntry, SettledShelf, ShelfBook, ShelfBound, ShelfField, ShelfOverview, ShelfQuery,
-    ShelfRange, ShelfRecord, ShelfRequest, ShelfSelection, ShelfTag, ShelfValue, ShelfView,
-    StatedNdc, StepRequest, WishFilter, WritePlan,
+    PortableVerdict, PresentNote, Product, PurchaseKey, RangeKind, Reading, ReadingStatus, Receipt,
+    ReceiptExpiry, ReceiptWrite, ReconcileRequest, Reconciliation, RestoreRequest, RestoreTargets,
+    Selection, SeriesEntry, SettledShelf, ShelfBook, ShelfBound, ShelfField, ShelfOverview,
+    ShelfQuery, ShelfRange, ShelfRecord, ShelfRequest, ShelfSelection, ShelfTag, ShelfValue,
+    ShelfView, StatedNdc, StepRequest, WishFilter, WritePlan,
 };
 pub use moving::{missing_move_copies, plan_move, settle_shelf};
 pub use portable::{

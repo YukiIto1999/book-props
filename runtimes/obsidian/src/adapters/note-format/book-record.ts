@@ -1,3 +1,4 @@
+import type { ReadingStatus } from "../../core/catalog-core.ts";
 import type { PlainMap } from "./edit.ts";
 
 /** 情報源が版のISBNごとに示すシリーズやレーベル。 */
@@ -55,7 +56,7 @@ export type BookRecord = Readonly<{
   authorRoles?: readonly AuthorRole[];
   tags?: readonly string[];
   wanted: boolean;
-  readingStatus?: string;
+  readingStatus?: ReadingStatus;
   finishedOn?: string;
   archivedAt?: string;
   pendingMove?: PendingMove;

@@ -8,13 +8,7 @@ import type { BookContext } from "./book-change.ts";
 import { missingMoveCopies, settledShelf, type MissingCopy } from "./edition-recovery.ts";
 import { importNotes, maintainBooks, type ImportResult } from "./maintenance.ts";
 import { manageBooks, type Management, type ManagementResult } from "./management.ts";
-import {
-  applyNoteRenames,
-  noteNaming,
-  proposeNoteRenames,
-  type NoteRename,
-  type RenameResult,
-} from "./note-name.ts";
+import { noteNaming, NoteNames } from "./note-name.ts";
 import type { BibliographyLookup, BookFiles } from "./ports.ts";
 import { PortableLibrary } from "./portable-library.ts";
 import {
@@ -28,6 +22,7 @@ import {
   type WriteProgress,
 } from "./purchase.ts";
 import { readCatalog, readEntries, readEntry, readFailure, readStable } from "./read.ts";
+import { ReadingRecords } from "./reading-records.ts";
 import { bookUpdate, CatalogRules, newBookRecord, type Commit, type Stamp } from "./rules.ts";
 import { ShelfQuery } from "./shelf-query.ts";
 
@@ -76,6 +71,10 @@ export class Catalog {
   private readonly portable: PortableLibrary;
   /** 国立国会図書館サーチでの照会と、表記をそろえる案と、手で書き換えた分類の番号への名前の追従。 */
   readonly bibliography: LibraryLookups;
+  /** 本ページの名前を、いまの書名と本IDから決まる名前に合わせる操作。 */
+  readonly noteNames: NoteNames;
+  /** 本の読書状態と読了日の記録。 */
+  readonly reading: ReadingRecords;
 
   constructor(files: BookFiles, core: CatalogCore, notes: NoteFormat, library: BibliographyLookup) {
     this.core = core;
@@ -83,6 +82,8 @@ export class Catalog {
     this.context = { files, notes, rules, active: () => this.accepting };
     this.portable = new PortableLibrary(core, notes);
     this.bibliography = new LibraryLookups(this.context, library, (work) => this.serial(work));
+    this.noteNames = new NoteNames(this.context, (work) => this.serial(work));
+    this.reading = new ReadingRecords(this.context, (work) => this.serial(work));
   }
 
   private get files(): BookFiles {
@@ -182,16 +183,6 @@ export class Catalog {
   importLibrary(json: string): Promise<ImportResult> {
     const desired = this.portable.decode(json);
     return this.serial(() => importNotes(this.context, desired));
-  }
-
-  /** 名前がいまの書名と本IDから決まる名前でない本ページと、それぞれの新しい名前。 */
-  proposeNoteNames(): Promise<NoteRename[]> {
-    return this.serial(() => proposeNoteRenames(this.context));
-  }
-
-  /** 選んだ本ページの名前を、一覧を作った後に変わっていなければ変える。 */
-  renameNotes(chosen: readonly NoteRename[]): Promise<RenameResult> {
-    return this.serial(() => applyNoteRenames(this.context, chosen));
   }
 
   maintain(): Promise<void> {

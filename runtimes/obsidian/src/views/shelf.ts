@@ -1,9 +1,15 @@
 import { Modal, type App } from "obsidian";
 import type { Catalog, StoredBook } from "../catalog/catalog.ts";
-import { emptyFilter, type ShelfFilter, type ShelfQuery } from "../catalog/shelf-query.ts";
+import {
+  emptyFilter,
+  type ShelfFilter,
+  type ShelfQuery,
+  type ShelfRow,
+} from "../catalog/shelf-query.ts";
 import type { FieldKey } from "../core/catalog-core.ts";
 import { markSelectedTags, mountFilterControls, mountTagBar } from "./shelf-controls.ts";
 import { defaultColumns, shelfFields } from "./shelf-fields.ts";
+import { ShelfReading } from "./shelf-reading.ts";
 import { drawFacet, drawRow, drawShops } from "./shelf-rows.ts";
 import { shopSearches } from "./shop-searches.ts";
 
@@ -13,6 +19,8 @@ export class Shelf extends Modal {
   /** 絞り込みのタグそれぞれのキー。最後の絞り込みでcoreが示したもの。 */
   private selectedKeys: readonly string[] = [];
   private query: ShelfQuery<StoredBook> | undefined;
+  /** いま並べている本。 */
+  private rows: readonly ShelfRow<StoredBook>[] = [];
 
   constructor(app: App, catalog: Catalog) {
     super(app);
@@ -51,6 +59,28 @@ export class Shelf extends Modal {
       : [...this.filter.tags, tag];
   }
 
+  /** 書き込んだ後の本ページで本棚を開き直す。開き直せないか、本棚を閉じていれば偽。 */
+  private async reload(): Promise<boolean> {
+    const opened = await this.catalog.openShelf().catch(() => undefined);
+    if (!opened) return false;
+    if (!this.query) {
+      opened.query.close();
+      return false;
+    }
+    this.query.close();
+    this.query = opened.query;
+    return true;
+  }
+
+  /** 読書状態を変えた行の位置にいま並ぶ本の、読書状態の欄に移る。続けて次の本を選べるようにする。 */
+  private focusReading(list: HTMLElement, index: number): void {
+    const rows = list.children;
+    rows
+      .item(Math.min(index, rows.length - 1))
+      ?.querySelector("select")
+      ?.focus();
+  }
+
   private mount(shelf: ShelfQuery<StoredBook>): void {
     const { contentEl } = this;
     const columns = new Set<FieldKey>(defaultColumns);
@@ -70,6 +100,16 @@ export class Shelf extends Modal {
     const tagButtons = mountTagBar(contentEl, shelf.tags, toggleTag);
     const facets = contentEl.createDiv();
     const count = contentEl.createEl("p", { attr: { role: "status" } });
+    const reading = new ShelfReading(this.app, this.catalog, contentEl, {
+      rows: () => this.rows,
+      redraw: () => render(),
+      refresh: async () => {
+        const reloaded = await this.reload();
+        render();
+        return reloaded;
+      },
+      focusRow: (index) => this.focusReading(list, index),
+    });
     const list = contentEl.createEl("ul");
     const shops = contentEl.createDiv();
     const focusFacet = (): void => {
@@ -77,6 +117,7 @@ export class Shelf extends Modal {
     };
     const rowActions = {
       columns,
+      ...reading.rowActions,
       openBook: (path: string): void => {
         void this.app.workspace.openLinkText(path, "", false);
         this.close();
@@ -96,7 +137,11 @@ export class Shelf extends Modal {
     };
     const render = (): void => {
       const filter = this.filter;
-      const { rows, tags } = shelf.select(filter);
+      const selection = this.query?.select(filter);
+      if (!selection) return;
+      const { rows, tags } = selection;
+      this.rows = rows;
+      reading.shown(rows);
       this.selectedKeys = tags;
       const selectedTags = new Set(tags);
       markSelectedTags(tagButtons, selectedTags);

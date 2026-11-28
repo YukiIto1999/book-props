@@ -1,44 +1,78 @@
 import type { BookRecord, EditionRecord } from "../adapters/note-format/book-record.ts";
 import { customValue, type ShelfEntry, type ShelfRow } from "../catalog/shelf-query.ts";
-import type { FieldKey, ShelfTag } from "../core/catalog-core.ts";
-import { isOptionKey } from "./option-keys.ts";
-import { readingLabels } from "./shelf-fields.ts";
+import type { FieldKey, ReadingStatus, ShelfTag } from "../core/catalog-core.ts";
+import { chosenStatus } from "./reading-draft.ts";
+import { readingChoices } from "./shelf-fields.ts";
 import type { ShopSearch } from "./shop-searches.ts";
 
 type RowActions = Readonly<{
   columns: ReadonlySet<FieldKey>;
   selectedTags: ReadonlySet<string>;
+  /** まとめて読書状態を変えるために選んだ本のID。 */
+  chosenBooks: ReadonlySet<string>;
   openBook: (path: string) => void;
   showAuthor: (name: string) => void;
   showPublisher: (publisher: string) => void;
   toggleTag: (tag: string, key: string) => void;
+  chooseBook: (bookId: string, chosen: boolean) => void;
+  setReading: (entry: ShelfEntry, status: ReadingStatus | undefined) => void;
+  editReading: (entry: ShelfEntry) => void;
 }>;
 
-function readingLabel(status: string | undefined): string | undefined {
-  if (!status) return undefined;
-  return isOptionKey(readingLabels, status) ? readingLabels[status] : status;
-}
-
-function drawHeading(
+/**
+ * 所有と購入希望の状態に続けて、本の読書状態を選ぶ欄と、読了なのに読了日がない本の読了日を入れる
+ * 操作を一行に置く。読書状態はその場で保存し、読了日は変えない。
+ */
+function drawStates(
   row: HTMLElement,
-  { path, book }: ShelfEntry,
+  entry: ShelfEntry,
   editions: readonly EditionRecord[],
   actions: RowActions,
 ): void {
-  const heading = row.createDiv();
-  heading
+  const { book } = entry;
+  const line = row.createDiv();
+  const owned = editions.filter((edition) => edition.owned).length;
+  const states = [owned ? `所有 ${owned}版` : "所有なし", book.wanted ? "欲しい本" : undefined];
+  line.appendText(`${states.filter(Boolean).join("／")} `);
+  const select = line.createEl("select", {
+    cls: "dropdown",
+    attr: { "aria-label": `「${book.title}」の読書状態` },
+  });
+  for (const [key, label] of Object.entries(readingChoices)) {
+    select.createEl("option", { text: label, value: key });
+  }
+  select.value = book.readingStatus ?? "unset";
+  select.addEventListener("change", () => actions.setReading(entry, chosenStatus(select.value)));
+  if (book.readingStatus !== "finished" || book.finishedOn) return;
+  line.appendText(" ");
+  line
     .createEl("button", {
+      text: "読了日を入れる",
+      attr: { "aria-label": `「${book.title}」の読了日を入れる` },
+    })
+    .addEventListener("click", () => actions.editReading(entry));
+}
+
+/** 選ぶ欄と、本ページを開く書名の行。長い書名はモーダルの幅で折り返す。 */
+function drawTitle(row: HTMLElement, { path, book }: ShelfEntry, actions: RowActions): void {
+  const heading = row.createDiv();
+  const choose = heading.createEl("input", {
+    type: "checkbox",
+    attr: { "aria-label": `「${book.title}」を選ぶ` },
+  });
+  choose.checked = actions.chosenBooks.has(book.id);
+  choose.addEventListener("change", () => actions.chooseBook(book.id, choose.checked));
+  heading.appendText(" ");
+  heading
+    .createEl("a", {
       text: book.title,
+      href: "#",
       attr: { "aria-label": `「${book.title}」の本ページを開く` },
     })
-    .addEventListener("click", () => actions.openBook(path));
-  const owned = editions.filter((edition) => edition.owned).length;
-  const states = [
-    owned ? `所有 ${owned}版` : "所有なし",
-    book.wanted ? "欲しい本" : undefined,
-    readingLabel(book.readingStatus),
-  ];
-  heading.appendText(` ${states.filter(Boolean).join("／")}`);
+    .addEventListener("click", (event) => {
+      event.preventDefault();
+      actions.openBook(path);
+    });
 }
 
 function drawCustomColumns(
@@ -137,7 +171,8 @@ export function drawRow(
 ): void {
   const { book } = entry;
   const row = list.createEl("li");
-  drawHeading(row, entry, editions, actions);
+  drawTitle(row, entry, actions);
+  drawStates(row, entry, editions, actions);
   if (actions.columns.has("finishedOn") && book.finishedOn)
     row.createDiv({ text: `読了日: ${book.finishedOn}` });
   drawCustomColumns(row, book, actions.columns);

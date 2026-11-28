@@ -1,8 +1,7 @@
 import { Modal, Notice, Setting, type App } from "obsidian";
-import type { Catalog } from "../catalog/catalog.ts";
-import type { NoteRename, RenameResult } from "../catalog/note-name.ts";
+import type { NoteNames, NoteRename, RenameResult } from "../catalog/note-name.ts";
 
-type Renames = Pick<Catalog, "proposeNoteNames" | "renameNotes">;
+type Renames = Pick<NoteNames, "propose" | "rename">;
 
 /**
  * Obsidianの「内部リンクを自動更新」の設定。公開されたAPIにない設定なので、
@@ -49,7 +48,7 @@ export class NoteNameReview extends Modal {
       text: "本ページを確かめています…",
       attr: { role: "status" },
     });
-    this.renames.proposeNoteNames().then(
+    this.renames.propose().then(
       (renames) => this.renderRenames(renames),
       () => status.setText("書籍フォルダを確認できません。"),
     );
@@ -96,7 +95,7 @@ export class NoteNameReview extends Modal {
 
   private async rename(chosen: readonly NoteRename[], status: HTMLElement): Promise<void> {
     try {
-      const text = resultText(await this.renames.renameNotes(chosen));
+      const text = resultText(await this.renames.rename(chosen));
       status.setText(text);
       new Notice(text);
     } catch {

@@ -2,11 +2,11 @@ import { Setting } from "obsidian";
 import type { Bounds, ShelfFilter } from "../catalog/shelf-query.ts";
 import type { FieldKey, ShelfTag } from "../core/catalog-core.ts";
 import { isOptionKey } from "./option-keys.ts";
-import { readingLabels, type ShelfFields } from "./shelf-fields.ts";
+import { readingChoices, type ShelfFields } from "./shelf-fields.ts";
 
 const ownershipLabels = { any: "すべて", owned: "所有あり", unowned: "所有なし" } as const;
 const wishLabels = { any: "すべて", wanted: "欲しい本", unwanted: "購入希望なし" } as const;
-const readingFilterLabels = { any: "すべて", unset: "未設定", ...readingLabels } as const;
+const readingFilterLabels = { any: "すべて", ...readingChoices } as const;
 const directionLabels = { asc: "昇順", desc: "降順" } as const;
 const boundParts = [
   ["from", "最小"],

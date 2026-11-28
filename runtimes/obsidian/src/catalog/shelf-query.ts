@@ -7,6 +7,7 @@ import type {
   CatalogCore,
   FieldKey,
   OpenShelf,
+  ReadingStatus,
   ShelfBound,
   ShelfField,
   ShelfQuery as Query,
@@ -19,8 +20,6 @@ import { optionalField } from "../shared/optional-field.ts";
 import { catalogEdition, catalogField } from "./rules.ts";
 
 export type ShelfEntry = Readonly<{ path: string; book: BookRecord }>;
-/** 本ページに書ける読書状態。 */
-export type ReadingStatus = "unread" | "reading" | "rereading" | "finished" | "reference";
 export type Bounds = { key: FieldKey; from: string; through: string };
 /** 著者・出版社・範囲の絞り込みは、変更で`undefined`を書いて解除する。 */
 export type ShelfFilter = Readonly<{

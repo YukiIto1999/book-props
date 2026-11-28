@@ -1,17 +1,20 @@
 import type { CustomField, EditionRecord } from "../adapters/note-format/book-record.ts";
 import { BookNoteError } from "../adapters/note-format/error.ts";
+import { confirmsReading } from "../adapters/note-format/reading.ts";
 import { decodeCustomField } from "../adapters/note-format/values.ts";
-import type { BookStep } from "../core/catalog-core.ts";
+import type { BookStep, Reading } from "../core/catalog-core.ts";
 import { change, Stop, type BookContext, type Scope } from "./book-change.ts";
+import type { StoredBook } from "./catalog.ts";
 import { runMove } from "./edition-move.ts";
 import { restoreMoveCopy } from "./edition-recovery.ts";
-import { readCatalog } from "./read.ts";
+import { readCatalog, type StableRead } from "./read.ts";
 import { recordEdition } from "./rules.ts";
 
 export type Management =
   | { action: "editEdition"; bookId: string; baseline: EditionRecord; value: EditionRecord }
   | { action: "addEdition"; bookId: string; value: EditionRecord }
   | { action: "updateCustomField"; bookId: string; baseline?: CustomField; value?: CustomField }
+  | { action: "setReading"; bookId: string; baseline: Reading; value: Reading }
   | { action: "archive" | "restore"; bookId: string; editionId?: string }
   | { action: "move"; bookId: string; editionId: string; destinationId: string }
   | { action: "restoreMoveCopy"; bookId: string; editionId: string }
@@ -50,6 +53,18 @@ async function changeCustomField({ context, source }: Scope, step: Step<"updateC
   return JSON.stringify(field) === JSON.stringify(expected) ? "saved" : "pending";
 }
 
+/** 読書状態と読了日のうち、見たときから変える部分だけを書く。購入希望、版、本文は変えない。 */
+async function setReading({ context, source }: Scope, step: Step<"setReading">) {
+  const { baseline, value } = step;
+  const path = await change(context, source, step, (raw) =>
+    context.notes.setReading(raw, baseline, value),
+  );
+  const saved = context.notes.readScoped(await context.files.read(path));
+  return saved?.id === source.book.id && confirmsReading(saved, baseline, value)
+    ? "saved"
+    : "pending";
+}
+
 /** 本または版をアーカイブ、または元に戻す。記録は消さず、アーカイブした時刻だけを書き換える。 */
 async function setArchive({ context, source }: Scope, step: Step<"setArchivedAt">) {
   const { editionId, archivedAt } = step;
@@ -75,6 +90,8 @@ async function write(scope: Scope, step: BookStep): Promise<ManagementResult> {
       return reviseEdition(scope, step);
     case "updateCustomField":
       return changeCustomField(scope, step);
+    case "setReading":
+      return setReading(scope, step);
     case "setArchivedAt":
       return setArchive(scope, step);
     default:
@@ -101,18 +118,38 @@ function failureOf(error: unknown): ManagementResult {
   return error instanceof BookNoteError && error.code === "conflict" ? "conflict" : "unavailable";
 }
 
-export async function manageBooks(
+/** 書籍の保存範囲の本を読む。操作を受け付けていないか読めなければ、その結果を返す。 */
+export async function readBooks(
   context: BookContext,
+): Promise<StableRead<StoredBook[]> | ManagementResult> {
+  if (!context.active()) return "unavailable";
+  try {
+    return await readCatalog(context);
+  } catch (error: unknown) {
+    return failureOf(error);
+  }
+}
+
+/** 読んだ本で、一つの操作をcoreに判定させて書く。 */
+export async function manageRead(
+  context: BookContext,
+  { value: entries, versions }: StableRead<StoredBook[]>,
   command: Management,
 ): Promise<ManagementResult> {
   const progress = { moveStarted: false };
   try {
-    if (!context.active()) return "unavailable";
-    const { value: entries, versions } = await readCatalog(context);
     const source = entries.find(({ book }) => book.id === command.bookId);
     if (!source) return "conflict";
     return await dispatch({ context, source, entries, versions, progress }, command);
   } catch (error: unknown) {
     return progress.moveStarted ? "pending" : failureOf(error);
   }
+}
+
+export async function manageBooks(
+  context: BookContext,
+  command: Management,
+): Promise<ManagementResult> {
+  const books = await readBooks(context);
+  return typeof books === "string" ? books : manageRead(context, books, command);
 }

@@ -118,6 +118,8 @@ function catalogBook(book: BookRecord, notes: NoteFormat): Book {
     ...optionalField("pendingMove", book.pendingMove && catalogMarker(book.pendingMove, notes)),
     ...optionalField("pendingLookup", book.pendingLookup),
     ...optionalField("classification", book.classification),
+    ...optionalField("readingStatus", book.readingStatus),
+    ...optionalField("finishedOn", book.finishedOn),
     customFields: (book.customFields ?? []).map(catalogField),
   };
 }

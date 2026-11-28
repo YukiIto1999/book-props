@@ -12,6 +12,8 @@ export type BookContext = Readonly<{
   rules: CatalogRules;
   active: () => boolean;
 }>;
+/** 目録の操作を一つずつ順に行う手段。 */
+export type Serial = <T>(work: () => Promise<T>) => Promise<T>;
 /** 一つの管理操作で読んだ本とその版。版の移動を書き始めた後の失敗は、保留として返す。 */
 export type Scope = Readonly<{
   context: BookContext;

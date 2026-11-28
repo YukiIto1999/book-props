@@ -213,6 +213,85 @@ fn a_custom_field_changes_only_as_read_and_keeps_names_unique() {
     assert!(!allows(&source, &stale));
 }
 
+fn set_reading(books: &[Value], baseline: Value, value: Value) -> Value {
+    plan(
+        json!({"action": "setReading", "bookId": "source", "baseline": baseline, "value": value}),
+        books,
+    )
+}
+
+#[test]
+fn a_reading_change_moves_between_any_statuses_and_back_to_none() {
+    let mut source = shelf()[0].clone();
+    source["readingStatus"] = json!("finished");
+    source["finishedOn"] = json!("2024-05-01");
+    let read = json!({"status": "finished", "finishedOn": "2024-05-01"});
+    for status in ["unread", "reading", "rereading", "reference"] {
+        let value = json!({"status": status, "finishedOn": "2024-05-01"});
+        let planned = set_reading(std::slice::from_ref(&source), read.clone(), value.clone());
+        assert_eq!(
+            planned,
+            json!({"kind": "write", "step": {"kind": "setReading", "baseline": read, "value": value}})
+        );
+        assert!(allows(&source, &planned["step"]));
+    }
+    let cleared = set_reading(
+        std::slice::from_ref(&source),
+        read.clone(),
+        json!({"finishedOn": "2024-05-01"}),
+    );
+    assert!(allows(&source, &cleared["step"]));
+    let mut archived = source;
+    archived["archivedAt"] = json!(STAMP);
+    let refused = set_reading(&[archived], read, json!({"status": "reading"}));
+    assert_eq!(refused, conflict());
+}
+
+#[test]
+fn a_finish_day_is_written_only_as_a_real_date_and_only_over_the_day_read() {
+    let mut source = shelf()[0].clone();
+    source["finishedOn"] = json!("2024/5/1");
+    let books = [source.clone()];
+    let read = json!({"finishedOn": "2024/5/1"});
+    let keep = set_reading(
+        &books,
+        read.clone(),
+        json!({"status": "finished", "finishedOn": "2024/5/1"}),
+    );
+    assert!(allows(&source, &keep["step"]));
+    let typed = json!({"status": "finished", "finishedOn": "2024/5/2"});
+    assert_eq!(set_reading(&books, read.clone(), typed), conflict());
+    let impossible = json!({"status": "finished", "finishedOn": "2024-02-30"});
+    assert_eq!(set_reading(&books, read.clone(), impossible), conflict());
+    let today = json!({"status": "finished", "finishedOn": "2026-11-28"});
+    let dated = set_reading(&books, read, today);
+    assert!(allows(&source, &dated["step"]));
+    let mut hand_set = source.clone();
+    hand_set["finishedOn"] = json!("2024-04-30");
+    assert!(!allows(&hand_set, &dated["step"]));
+    assert!(allows(&hand_set, &keep["step"]));
+}
+
+#[test]
+fn a_reading_change_stops_only_when_a_part_it_writes_has_changed() {
+    let source = shelf()[0].clone();
+    let reading = json!({"status": "reading"});
+    let step = set_reading(std::slice::from_ref(&source), json!({}), reading)["step"].clone();
+    let mut dated = source.clone();
+    dated["finishedOn"] = json!("2024-05-01");
+    assert!(allows(&dated, &step));
+    let mut finished = source.clone();
+    finished["readingStatus"] = json!("finished");
+    assert!(!allows(&finished, &step));
+    let mut moving_source = source;
+    moving_source["pendingMove"] = marker(None);
+    assert!(!allows(&moving_source, &step));
+    let unknown = json!({"action": "setReading", "bookId": "source", "baseline": {},
+        "value": {"status": "tsundoku"}});
+    let request = json!({"command": unknown, "books": shelf(), "stamp": STAMP});
+    assert!(serde_json::from_value::<ManagementRequest>(request).is_err());
+}
+
 #[test]
 fn a_move_needs_two_open_books_and_an_edition_no_third_book_holds() {
     let books = shelf();

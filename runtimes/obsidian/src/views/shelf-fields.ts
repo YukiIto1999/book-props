@@ -1,5 +1,4 @@
-import type { ReadingStatus } from "../catalog/shelf-query.ts";
-import type { FieldKey, RangeKind, ShelfField } from "../core/catalog-core.ts";
+import type { FieldKey, RangeKind, ReadingStatus, ShelfField } from "../core/catalog-core.ts";
 
 type StandardKey = Exclude<FieldKey, `custom:${string}`>;
 export type ShelfFields = Readonly<{
@@ -13,6 +12,11 @@ export const readingLabels: Record<ReadingStatus, string> = {
   rereading: "再読中",
   finished: "読了",
   reference: "参照用",
+};
+/** 読書状態を付ける選択肢。`unset`は読書状態を外して未設定に戻す。 */
+export const readingChoices: Readonly<Record<ReadingStatus | "unset", string>> = {
+  unset: "未設定",
+  ...readingLabels,
 };
 
 const standardLabels: Record<StandardKey, string> = {

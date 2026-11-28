@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use super::{Book, Edition};
+use super::{Book, Edition, ReadingStatus};
 
 /// A field the user added to a book: its name, kind, and value.
 #[derive(Clone, PartialEq, Serialize, Deserialize, Tsify)]
@@ -67,6 +67,18 @@ pub struct MoveBackup {
     pub(crate) edition: Edition,
 }
 
+/// A book's reading status and the day the user finished it, as its note keeps them.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[serde(rename_all = "camelCase")]
+pub struct Reading {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub(crate) status: Option<ReadingStatus>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub(crate) finished_on: Option<String>,
+}
+
 /// A management command the user gave for one book.
 #[derive(Deserialize, Tsify)]
 #[serde(
@@ -90,6 +102,12 @@ pub enum ManagementCommand {
         baseline: Option<CustomField>,
         #[tsify(optional)]
         value: Option<CustomField>,
+    },
+    /// Change the reading status and the finish day from the values the user saw.
+    SetReading {
+        book_id: String,
+        baseline: Reading,
+        value: Reading,
     },
     Archive {
         book_id: String,
@@ -124,6 +142,7 @@ impl ManagementCommand {
             Self::EditEdition { book_id, .. }
             | Self::AddEdition { book_id, .. }
             | Self::UpdateCustomField { book_id, .. }
+            | Self::SetReading { book_id, .. }
             | Self::Archive { book_id, .. }
             | Self::Restore { book_id, .. }
             | Self::Move { book_id, .. }
@@ -214,6 +233,11 @@ pub enum BookStep {
         #[serde(skip_serializing_if = "Option::is_none")]
         #[tsify(optional)]
         value: Option<CustomField>,
+    },
+    /// Write the parts of the reading that differ from the baseline.
+    SetReading {
+        baseline: Reading,
+        value: Reading,
     },
     /// Put back an edition saved outside the Vault.
     RestoreEdition {

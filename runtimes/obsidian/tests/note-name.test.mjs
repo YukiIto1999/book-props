@@ -198,12 +198,12 @@ void test("the command lists only book notes whose name is not the rule's name, 
   notes.set(memo, "# 本ではないメモ\n");
   notes.set(correct, book(bookId, "Effective Java"));
   notes.set("Books/broken.md", original.replace("schema: 1", "schema: 999"));
-  const renames = await catalog.proposeNoteNames();
+  const renames = await catalog.noteNames.propose();
   assert.deepEqual(targets(renames), [
     [`${otherId}.md`, "Effective Java (3f2a9c10).md"],
     ["example.md", "設計入門 (4fa20a45).md"],
   ]);
-  assert.deepEqual(await catalog.renameNotes(renames.slice(0, 1)), {
+  assert.deepEqual(await catalog.noteNames.rename(renames.slice(0, 1)), {
     renamed: 1,
     skipped: 0,
     failed: 0,
@@ -212,7 +212,7 @@ void test("the command lists only book notes whose name is not the rule's name, 
     [...notes.keys()].sort(),
     [row, memo, correct, "Books/broken.md", "Books/Archive/Effective Java (3f2a9c10).md"].sort(),
   );
-  assert.deepEqual(targets(await catalog.proposeNoteNames()), [
+  assert.deepEqual(targets(await catalog.noteNames.propose()), [
     ["example.md", "設計入門 (4fa20a45).md"],
   ]);
 });
@@ -226,7 +226,7 @@ void test("a note changed, renamed or taken over after the list is skipped, and 
     "8c43856e-f6a9-4bfe-bcbf-bdf427098541",
   ];
   for (const [index, id] of ids.entries()) notes.set(`Books/${id}.md`, book(id, `本${index}`));
-  const renames = await catalog.proposeNoteNames();
+  const renames = await catalog.noteNames.propose();
   assert.equal(renames.length, 4);
   notes.set(`Books/${ids[0]}.md`, book(ids[0], "書名を直した本"));
   notes.set("Books/moved.md", notes.get(`Books/${ids[1]}.md`));
@@ -237,5 +237,9 @@ void test("a note changed, renamed or taken over after the list is skipped, and 
     if (path.includes(ids[3])) throw new Error("locked");
     return rename(path, fileName);
   };
-  assert.deepEqual(await catalog.renameNotes(renames), { renamed: 0, skipped: 3, failed: 1 });
+  assert.deepEqual(await catalog.noteNames.rename(renames), {
+    renamed: 0,
+    skipped: 3,
+    failed: 1,
+  });
 });

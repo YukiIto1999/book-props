@@ -1,14 +1,11 @@
 import type { BookRecord } from "../adapters/note-format/book-record.ts";
 import type { BibliographyRevision, LookupAnswer } from "../core/catalog-core.ts";
 import { optionalField } from "../shared/optional-field.ts";
-import type { BookContext } from "./book-change.ts";
+import type { BookContext, Serial } from "./book-change.ts";
 import type { StoredBook } from "./catalog.ts";
 import type { BibliographyLookup } from "./ports.ts";
 import { Refuse } from "./purchase.ts";
 import { readCatalog, readEntry } from "./read.ts";
-
-/** 目録の操作を一つずつ順に行う手段。 */
-type Serial = <T>(work: () => Promise<T>) => Promise<T>;
 
 /** 表記をそろえる案の一冊分。`raw`は案を作ったときの本ページの全文。 */
 export type Proposal = Readonly<{

@@ -4,7 +4,7 @@
  * 本はYAMLの本IDで識別するので、ファイル名は読みやすさのためにあり、利用者が変えてもよい。
  */
 import { sha256Hex } from "../shared/sha256.ts";
-import type { BookContext } from "./book-change.ts";
+import type { BookContext, Serial } from "./book-change.ts";
 import type { NoteFileName } from "./ports.ts";
 import { Refuse } from "./purchase.ts";
 
@@ -156,7 +156,7 @@ export function renameCandidates(
 }
 
 /** 書籍の保存範囲の本ページを読み、名前を変える本ページを選ぶ。本でないページと読めない本ページは扱わない。 */
-export async function proposeNoteRenames({ files, notes }: BookContext): Promise<NoteRename[]> {
+async function proposeNoteRenames({ files, notes }: BookContext): Promise<NoteRename[]> {
   const named: NamedNote[] = [];
   for (const path of files.versions().keys()) {
     let book;
@@ -188,7 +188,7 @@ async function renameOne({ files, notes }: BookContext, rename: NoteRename): Pro
 }
 
 /** 選んだ本ページの名前を順に変える。一覧を作った後に変わった本ページと、新しい名前が埋まった本ページは飛ばす。 */
-export async function applyNoteRenames(
+async function applyNoteRenames(
   context: BookContext,
   chosen: readonly NoteRename[],
 ): Promise<RenameResult> {
@@ -206,4 +206,25 @@ export async function applyNoteRenames(
     }
   }
   return { renamed, skipped, failed };
+}
+
+/** 本ページの名前を、いまの書名と本IDから決まる名前に合わせる操作。目録のほかの操作と一列に並べる。 */
+export class NoteNames {
+  private readonly context: BookContext;
+  private readonly serial: Serial;
+
+  constructor(context: BookContext, serial: Serial) {
+    this.context = context;
+    this.serial = serial;
+  }
+
+  /** 名前がいまの書名と本IDから決まる名前でない本ページと、それぞれの新しい名前。 */
+  propose(): Promise<NoteRename[]> {
+    return this.serial(() => proposeNoteRenames(this.context));
+  }
+
+  /** 選んだ本ページの名前を、一覧を作った後に変わっていなければ変える。 */
+  rename(chosen: readonly NoteRename[]): Promise<RenameResult> {
+    return this.serial(() => applyNoteRenames(this.context, chosen));
+  }
 }

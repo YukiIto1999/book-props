@@ -1,5 +1,5 @@
 import { isMap, isNode, isScalar, isSeq, parseDocument, type YAMLMap, type YAMLSeq } from "yaml";
-import type { CatalogCore } from "../../core/catalog-core.ts";
+import type { CatalogCore, ReadingStatus } from "../../core/catalog-core.ts";
 import { isJsonObject } from "../../shared/json-object.ts";
 import { optionalField } from "../../shared/optional-field.ts";
 import type {
@@ -13,6 +13,7 @@ import type {
   SeriesEntry,
 } from "./book-record.ts";
 import { classificationKey } from "./classification.ts";
+import { finishedOnKey, readingStatusKey } from "./reading.ts";
 import type { Frontmatter } from "./edit.ts";
 import { BookNoteError, unreadable } from "./error.ts";
 import { decodeCustomFields, plainMap, text } from "./values.ts";
@@ -33,7 +34,7 @@ export type ParsedNote = Readonly<{
   book: BookRecord;
 }>;
 
-const readingStates: Readonly<Record<string, true>> = {
+const readingStates: Readonly<Record<ReadingStatus, true>> = {
   unread: true,
   reading: true,
   rereading: true,
@@ -230,12 +231,14 @@ function readPurchases(purchases: YAMLSeq, bookId: string): AppliedPurchase[] {
   return records;
 }
 
-function readReadingStatus(root: YAMLMap): string | undefined {
-  const status = optionalText(root, "book-reading-status");
-  if (status !== undefined && !Object.hasOwn(readingStates, status)) {
-    return unreadable("読書状態を読み取れません。");
-  }
-  return status;
+function isReadingStatus(value: string): value is ReadingStatus {
+  return Object.hasOwn(readingStates, value);
+}
+
+function readReadingStatus(root: YAMLMap): ReadingStatus | undefined {
+  const status = optionalText(root, readingStatusKey);
+  if (status === undefined) return undefined;
+  return isReadingStatus(status) ? status : unreadable("読書状態を読み取れません。");
 }
 
 function readTags(root: YAMLMap): string[] {
@@ -287,7 +290,7 @@ function readBook(
     tags,
     wanted: flag(root.get("book-wanted", true), "購入希望"),
     ...optionalField("readingStatus", readingStatus),
-    ...optionalField("finishedOn", optionalText(root, "book-finished-on")),
+    ...optionalField("finishedOn", optionalText(root, finishedOnKey)),
     ...optionalField("archivedAt", optionalText(managed, "archived-at")),
     editions: ownedEditions,
     appliedPurchases,

@@ -1,5 +1,5 @@
 import { Setting, type ButtonComponent } from "obsidian";
-import type { BibliographySources } from "../adapters/bibliography-sources.ts";
+import type { BibliographySources, SearchProgress } from "../adapters/bibliography-sources.ts";
 import type { Catalog, Product } from "../catalog/catalog.ts";
 import { mountNdlCredit } from "./ndl-credit.ts";
 import { isOptionKey } from "./option-keys.ts";
@@ -22,7 +22,16 @@ type LookupContext = Readonly<{
 }>;
 type LookupOutcome =
   | Readonly<{ kind: "found"; candidates: Product[] }>
+  | Readonly<{ kind: "busy" }>
   | Readonly<{ kind: "invalidIsbn" }>;
+
+/** 国立国会図書館サーチの検索で、問い合わせの順番を待つ間と、送った後と、混み合って問い直すまでの表示。 */
+const waiting = "国立国会図書館サーチに問い合わせる順番を待っています…";
+const progressText: Readonly<Record<SearchProgress, string>> = {
+  asking:
+    "国立国会図書館サーチに問い合わせています… 初めて調べる本は、答えが届くまで1分近くかかることがあります。",
+  busy: "国立国会図書館サーチが混み合っているため、少し待ってから問い直します…",
+};
 
 /** Accepts only credential-free HTTPS product pages; throws when the input is not a URL at all. */
 function productUrl(needle: string): URL | undefined {
@@ -35,19 +44,19 @@ async function findCandidates(
   needle: string,
   url: URL | undefined,
   { catalog, sources, signal }: LookupContext,
+  progress: (state: SearchProgress) => void,
 ): Promise<LookupOutcome> {
   if (method === "url") {
     const candidate = url ? await sources.productPage(url, signal) : undefined;
     return { kind: "found", candidates: candidate ? [candidate] : [] };
   }
-  if (method === "title")
-    return { kind: "found", candidates: await sources.search("title", needle, signal) };
+  if (method === "title") return sources.search("title", needle, signal, progress);
   const normalized = catalog.normalizeIsbns([needle]);
   if (normalized.kind === "invalid") return { kind: "invalidIsbn" };
   // 一つの入力は正規化した一つのISBNになるので、ない場合は確認数字の誤りと同じく扱う。
   const [isbn] = normalized.values;
   if (isbn === undefined) return { kind: "invalidIsbn" };
-  return { kind: "found", candidates: await sources.search("isbn", isbn, signal) };
+  return sources.search("isbn", isbn, signal, progress);
 }
 
 function lookupFailed({ status, results }: LookupView, url?: URL): void {
@@ -112,13 +121,20 @@ async function runLookup(
   // An answer counts only for the lookup still current: not after the modal closed or the method or query changed, even back to the same text.
   const isCurrent = (): boolean => !signal.aborted && form.generation === generation;
   button.setDisabled(true);
-  view.status.setText("書誌を取得しています…");
+  view.status.setText(method === "url" ? "書誌を取得しています…" : waiting);
+  const progress = (state: SearchProgress): void => {
+    if (isCurrent()) view.status.setText(progressText[state]);
+  };
   let url: URL | undefined;
   try {
     url = method === "url" ? productUrl(needle) : undefined;
-    const outcome = await findCandidates(method, needle, url, { ...context, signal });
+    const outcome = await findCandidates(method, needle, url, { ...context, signal }, progress);
     if (!isCurrent()) return;
     if (outcome.kind === "invalidIsbn") view.status.setText("ISBNの確認数字を確認してください。");
+    else if (outcome.kind === "busy")
+      view.status.setText(
+        "国立国会図書館サーチが混み合っています。少し待ってから、もう一度取得してください。手入力でも登録できます。",
+      );
     else if (outcome.candidates.length) showCandidates(view, outcome.candidates, context.choose);
     else lookupFailed(view, url);
   } catch {

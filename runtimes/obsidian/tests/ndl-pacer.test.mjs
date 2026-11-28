@@ -97,3 +97,71 @@ void test("待っている間に中止すると、問い直さずに中止の理
   const next = replies(clock, 0, "later");
   assert.equal(await pacer.ask(next.ask, new AbortController().signal), "later");
 });
+
+/** 呼ばれた時刻を記録し、`answer`を呼ぶまで答えない問い合わせ。 */
+function held(clock) {
+  const calls = [];
+  let answer;
+  const ask = () => {
+    calls.push(clock.time);
+    const { promise, resolve } = Promise.withResolvers();
+    answer = (value) => {
+      clock.time += 700;
+      resolve(value);
+    };
+    return promise;
+  };
+  return { calls, ask, answer: (value) => answer(value) };
+}
+
+void test("画面からの検索は、送っている問い合わせの次に、待っている照会より先に送る", async () => {
+  const clock = fakeClock();
+  const pacer = new Pacer(clock, 2000);
+  const signal = new AbortController().signal;
+  const sending = held(clock);
+  const queued = replies(clock, 300, "queued");
+  const search = replies(clock, 300, "search");
+  const first = pacer.ask(sending.ask, signal);
+  const later = pacer.ask(queued.ask, signal);
+  const asked = pacer.ask(search.ask, signal, { priority: "interactive" });
+  await new Promise((resolve) => setImmediate(resolve));
+  // 送っている問い合わせが答えるまでは、画面からの検索も送らない。
+  assert.deepEqual(search.calls, []);
+  sending.answer("first");
+  assert.deepEqual(await Promise.all([first, asked, later]), ["first", "search", "queued"]);
+  assert.deepEqual(sending.calls, [0]);
+  assert.deepEqual(search.calls, [2700]);
+  assert.deepEqual(queued.calls, [5000]);
+});
+
+void test("順番を待っている画面の検索をやめると、送らずにすぐ終わり、後の照会は続ける", async () => {
+  const clock = fakeClock();
+  const pacer = new Pacer(clock, 2000);
+  const signal = new AbortController().signal;
+  const sending = held(clock);
+  const queued = replies(clock, 0, "queued");
+  const search = replies(clock, 0, "never");
+  const closing = new AbortController();
+  const first = pacer.ask(sending.ask, signal);
+  const asked = pacer.ask(search.ask, closing.signal, { priority: "interactive" });
+  const later = pacer.ask(queued.ask, signal);
+  closing.abort(new Error("closed"));
+  await assert.rejects(asked, /closed/);
+  sending.answer("first");
+  assert.deepEqual(await Promise.all([first, later]), ["first", "queued"]);
+  assert.deepEqual(search.calls, []);
+  assert.deepEqual(queued.calls, [2700]);
+});
+
+void test("画面からの検索は混み合っていれば一度だけ問い直し、断られた後の待ちは次の問い合わせにも及ぶ", async () => {
+  const clock = fakeClock();
+  const pacer = new Pacer(clock, 2000);
+  const signal = new AbortController().signal;
+  const search = replies(clock, 0, new Busy(), new Busy(), "never");
+  await assert.rejects(pacer.ask(search.ask, signal, { priority: "interactive" }), Busy);
+  assert.deepEqual(search.calls, [0, 5000]);
+  const next = replies(clock, 0, "record");
+  assert.equal(await pacer.ask(next.ask, signal), "record");
+  assert.deepEqual(next.calls, [20_000]);
+  assert.deepEqual(clock.sleeps, [5000, 15_000]);
+});

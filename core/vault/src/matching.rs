@@ -158,7 +158,9 @@ fn insufficient_evidence(books: &[Book], action: Action) -> Decision {
     }
 }
 
-/// The outcome when no stored book is the product.
+/// The outcome when no stored book is the product. A wish records the product as an unowned
+/// edition when it has an ISBN, so the book stays identifiable by that ISBN after its title and
+/// authors change.
 fn unknown_book(request: &CatalogRequest, product: &Product, isbns: Vec<String>) -> Outcome {
     let action = request.action;
     let decision = match action {
@@ -166,7 +168,7 @@ fn unknown_book(request: &CatalogRequest, product: &Product, isbns: Vec<String>)
         _ if product.title.trim().is_empty() => insufficient_evidence(&request.books, action),
         Action::SetWish => Decision::CreateBook {
             wanted: true,
-            record_edition: false,
+            record_edition: !isbns.is_empty(),
         },
         _ => Decision::CreateBook {
             wanted: false,
@@ -297,15 +299,7 @@ impl<'a> Evidence<'a> {
 
     fn undetermined(&self, wish_action: bool) -> Outcome {
         let plan = if wish_action {
-            decision(
-                self.request,
-                self.product,
-                self.book,
-                None,
-                &[],
-                None,
-                &self.isbns,
-            )
+            wish_change(self.book, self.request.action == Action::SetWish)
         } else {
             Decision::ConflictingEvidence
         };
@@ -361,14 +355,17 @@ fn decision(
         Action::SetWish => true,
         Action::RecordOwnership | Action::CancelOwnership => book.wanted,
     };
-    if matches!(action, Action::SetWish | Action::ClearWish) {
-        return Decision::Update {
+    // A wish names no edition, but its ISBN is what identifies the book once the library rewrites
+    // its title and authors: a book without an active edition keeps the product as an unowned one.
+    // Where the book holds editions, telling which one the product is would need the user.
+    if action == Action::SetWish && edition.is_none() && editions.is_empty() && !isbns.is_empty() {
+        return Decision::AddEdition {
             wanted_before: book.wanted,
-            wanted_after: after,
-            owned_before: None,
-            owned_after: None,
-            edition_patch: None,
+            wanted_after: true,
         };
+    }
+    if matches!(action, Action::SetWish | Action::ClearWish) {
+        return wish_change(book, after);
     }
     if let Some(edition) = edition {
         return Decision::Update {
@@ -392,6 +389,17 @@ fn decision(
     Decision::ChooseEdition {
         edition_ids: editions.iter().map(|edition| edition.id.clone()).collect(),
         new_edition: creates_edition(action),
+    }
+}
+
+/// A change of the book's wish alone.
+const fn wish_change(book: &Book, wanted_after: bool) -> Decision {
+    Decision::Update {
+        wanted_before: book.wanted,
+        wanted_after,
+        owned_before: None,
+        owned_after: None,
+        edition_patch: None,
     }
 }
 

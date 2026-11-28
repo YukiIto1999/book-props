@@ -66,6 +66,18 @@ void test("an action on the book the popup shows still runs", async () => {
   assert.deepEqual(worker.sent.slice(0, 1), ["open"]);
 });
 
+void test("a wish the Vault already holds is shown as wanted, not as saved", async () => {
+  const worker = stubWorker({
+    reply: observed("unowned", false),
+    changed: observed("unowned", true),
+  });
+  const { popup, shown } = popupOver(worker);
+  await popup.refresh();
+  await popup.toggleWish();
+  assert.equal(worker.saves.length, 1);
+  assert.equal(shown.said.at(-1), "欲しいに登録済み");
+});
+
 void test("another active tab, or a page name that is missing or malformed, counts as a changed page", async () => {
   const worker = stubWorker({ reply: observed("unowned", false) });
   const shownKey = await worker.key();

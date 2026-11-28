@@ -172,6 +172,39 @@ fn edition_ambiguity_does_not_block_a_wish_for_one_known_book() {
 }
 
 #[test]
+fn a_wish_records_its_isbn_only_on_a_book_without_an_active_edition() {
+    let wished = json!([{"id": "wished", "title": "夜廻三", "authors": ["黒 史郎"], "wanted": true,
+        "editions": []}]);
+    let named = json!({"title": "夜廻三", "authors": ["黒史郎"], "isbns": ["9784569857152"]});
+    assert_eq!(
+        request("setWish", named.clone(), wished.clone())["decision"],
+        json!({"kind": "addEdition", "wantedBefore": true, "wantedAfter": true})
+    );
+    let unnumbered = json!({"title": "夜廻三", "authors": ["黒史郎"]});
+    assert_eq!(
+        request("setWish", unnumbered.clone(), wished.clone())["decision"],
+        json!({"kind": "update", "wantedBefore": true, "wantedAfter": true})
+    );
+    assert_eq!(request("inspect", unnumbered, wished)["wanted"], true);
+
+    let revised = request(
+        "setWish",
+        json!({"isbns": ["9780262033848"], "title": "設計入門",
+        "authors": ["山田 太郎"]}),
+        catalog(),
+    );
+    assert_eq!(
+        revised["decision"],
+        json!({"kind": "update", "wantedBefore": true, "wantedAfter": true})
+    );
+    let both = json!({ "isbns": ["9780306406157", "9780201633610"] });
+    assert_eq!(
+        request("setWish", both, catalog())["decision"],
+        json!({"kind": "update", "wantedBefore": true, "wantedAfter": true})
+    );
+}
+
+#[test]
 fn an_archived_book_does_not_report_ownership_or_wish_but_still_blocks_duplicate_purchase() {
     let mut books = catalog();
     books[0]["archivedAt"] = json!("2025-01-01T00:00:00Z");

@@ -1,5 +1,5 @@
 import type { Result } from "../catalog/catalog.ts";
-import type { Action } from "../core/catalog-core.ts";
+import type { Action, Outcome } from "../core/catalog-core.ts";
 
 /** 登録画面から選べる操作。照合だけの操作は、拡張から届くときにしか使わない。 */
 export type LocalAction = Exclude<Action, "inspect">;
@@ -40,9 +40,18 @@ const operationMessages = {
   observed: "変更対象がありません。",
 };
 
-export function resultMessage(catalogResult: Result): string {
+/** 保存しても本が変わらなかった時の文。購入希望の追加と解除では、本がすでにその状態だと伝える。 */
+function unchangedMessage(action: LocalAction, { bookId, wanted }: Outcome): string {
+  if (bookId && action === "setWish" && wanted) return "この本はすでに欲しい本に入っています。";
+  if (bookId && action === "clearWish" && !wanted) return "この本は欲しい本に入っていません。";
+  return operationMessages.observed;
+}
+
+/** 照合や保存の結果を、選んだ操作に合わせた一文にする。 */
+export function resultMessage(catalogResult: Result, action: LocalAction): string {
   if (catalogResult.kind === "unreadable")
     return `「${catalogResult.path}」を読み取れません。${catalogResult.reason} 記録を確認してください。`;
+  if (catalogResult.kind === "observed") return unchangedMessage(action, catalogResult.outcome);
   if (catalogResult.kind !== "needsInput") return operationMessages[catalogResult.kind];
   const decision = catalogResult.outcome.decision;
   if (decision.kind === "invalidIsbn") return `ISBNを確認してください: ${decision.input}`;

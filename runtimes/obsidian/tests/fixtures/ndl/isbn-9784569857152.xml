@@ -1,0 +1,46 @@
+<rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:openSearch="http://a9.com/-/spec/opensearchrss/1.0/" xmlns:dcndl="http://ndl.go.jp/dcndl/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" version="2.0">
+  <channel>
+    <title>9784569857152 - 国立国会図書館サーチ OpenSearch</title>
+    <link>https://ios-v2-prod-eks-alb.ndlsearch.ndl.go.jp/api/opensearch?isbn=9784569857152</link>
+    <description>Search results for isbn=9784569857152</description>
+    <language>ja</language>
+    <openSearch:totalResults>1</openSearch:totalResults>
+    <openSearch:startIndex>1</openSearch:startIndex>
+    <openSearch:itemsPerPage>200</openSearch:itemsPerPage>
+    <item>
+      <title>夜廻三</title>
+      <link>https://ndlsearch.ndl.go.jp/books/R100000002-I033597098</link>
+      <description><![CDATA[<p>PHP研究所,2024,978-4-569-85715-2<p><ul><li>タイトル：夜廻三</li><li>タイトル（読み）：ヨマワリ サン</li><li>責任表示：日本一ソフトウェア 原作,黒史郎 著</li><li>NDC(10)：913.6</li></ul>]]></description>
+      <author>日本一ソフトウェア,黒, 史郎,日本一ソフトウェア 原作,黒史郎 著</author>
+      <category>図書</category>
+      <category>紙</category>
+      <guid isPermaLink="true">https://ndlsearch.ndl.go.jp/books/R100000002-I033597098</guid>
+      <pubDate>Thu, 8 Aug 2024 06:22:09 +0900</pubDate>
+      <dc:title>夜廻三</dc:title>
+      <dcndl:titleTranscription>ヨマワリ サン</dcndl:titleTranscription>
+      <dc:creator>日本一ソフトウェア</dc:creator>
+      <dc:creator>黒, 史郎</dc:creator>
+      <dcndl:creatorTranscription>ニホンイチ ソフトウェア</dcndl:creatorTranscription>
+      <dcndl:creatorTranscription>クロ, シロウ</dcndl:creatorTranscription>
+      <dc:publisher>PHP研究所</dc:publisher>
+      <dcndl:publicationPlace>JP</dcndl:publicationPlace>
+      <dc:date xsi:type="dcterms:W3CDTF">2024</dc:date>
+      <dcterms:issued>2024.8</dcterms:issued>
+      <dcndl:price>1800円</dcndl:price>
+      <dc:extent>431p</dc:extent>
+      <dc:identifier xsi:type="dcndl:ISBN">978-4-569-85715-2</dc:identifier>
+      <dc:identifier xsi:type="dcndl:NDLBibID">033597098</dc:identifier>
+      <dc:identifier xsi:type="dcndl:JPNO">24006839</dc:identifier>
+      <dc:identifier xsi:type="dcndl:TOHANMARCNO">34631795</dc:identifier>
+      <dc:subject xsi:type="dcndl:NDLC">KH971</dc:subject>
+      <dc:subject xsi:type="dcndl:NDC10">913.6</dc:subject>
+      <dc:description>出版</dc:description>
+      <rdfs:seeAlso rdf:resource="https://www.lib.city.saitama.jp/bookdetail?num=3401134&amp;ctg=1"/>
+      <rdfs:seeAlso rdf:resource="https://www.oml.city.osaka.lg.jp/licsxp-opac/WOpacMsgNewListToTifTilDetailAction.do?tilcod=1000015560885"/>
+      <rdfs:seeAlso rdf:resource="https://ndlsearch.ndl.go.jp/books/R100000002-I033597098"/>
+      <rdfs:seeAlso rdf:resource="https://cir.nii.ac.jp/crid/1970308699379621504"/>
+      <rdfs:seeAlso rdf:resource="https://www.books.or.jp/book-details/9784569857152"/>
+      <dc:description> 2024</dc:description>
+    </item>
+  </channel>
+</rss>

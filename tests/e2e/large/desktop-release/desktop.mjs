@@ -193,7 +193,12 @@ try {
   const file = join(books, names[0]);
   const wished = await readFile(file, "utf8");
   assert.match(wished, /^book-wanted: true$/m);
-  assert.match(wished, /^  editions: \[\]$/m);
+  // A wish keeps the page's ISBN as an unowned edition; the legacy plugin kept none.
+  if (migration) assert.match(wished, /^  editions: \[\]$/m);
+  else {
+    assert.match(wished, /^\s+owned: false$/m);
+    assert(wished.includes(isbn));
+  }
   await wish.close();
   await page.reload();
   const purchase = await popup(page);

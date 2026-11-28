@@ -68,7 +68,26 @@ fn first_read(request: &ChangeRequest, product: &Product, outcome: Outcome) -> C
     if !writes(&outcome.decision) {
         return ChangePlan::NeedsInput { outcome };
     }
-    write_plan(request, product, &outcome)
+    match write_plan(request, product, &outcome) {
+        ChangePlan::Write(plan) if leaves_unchanged(&plan, &request.catalog.books) => {
+            ChangePlan::Observed { outcome }
+        }
+        plan => plan,
+    }
+}
+
+/// Whether the write would leave its book as stored: it writes only the wish, and the book already
+/// holds that wish, as when a book already wanted is wished again.
+fn leaves_unchanged(plan: &WritePlan, books: &[Book]) -> bool {
+    let change = &plan.change;
+    plan.new_book.is_none()
+        && plan.pending_lookup.is_none()
+        && change.edition.is_none()
+        && change.receipt.is_none()
+        && change.classification.is_none()
+        && books
+            .iter()
+            .any(|book| book.id == plan.book_id && book.wanted == change.wanted)
 }
 
 const fn writes(decision: &Decision) -> bool {
@@ -130,7 +149,13 @@ fn write_plan(request: &ChangeRequest, product: &Product, outcome: &Outcome) -> 
         .book_id
         .as_deref()
         .and_then(|id| request.catalog.books.iter().find(|book| book.id == id));
-    let added = || new_edition(product, &outcome.isbns, &request.new_edition_id);
+    let added = || {
+        let owned = matches!(
+            request.catalog.action,
+            Action::Purchase | Action::RecordOwnership
+        );
+        new_edition(product, &outcome.isbns, &request.new_edition_id, owned)
+    };
     let (wanted, edition, stored) = match &outcome.decision {
         Decision::CreateBook {
             wanted,
@@ -219,10 +244,11 @@ fn receipt(
     })
 }
 
-/// An owned edition with the product's ISBNs, its non-empty edition facts, and the series it
-/// states for those ISBNs.
-fn new_edition(product: &Product, isbns: &[String], id: &str) -> EditionWrite {
+/// An edition with the product's ISBNs, its non-empty edition facts, and the series it states for
+/// those ISBNs. Only an owned edition takes the purchase date and shop: a wish records no purchase.
+fn new_edition(product: &Product, isbns: &[String], id: &str, owned: bool) -> EditionWrite {
     let value = |value: Option<&String>| value.filter(|value| !value.is_empty()).cloned();
+    let purchase = |field: Option<&String>| value(field.filter(|_| owned));
     let details = &product.details;
     let series = product.series.as_ref().map_or_else(Vec::new, |name| {
         isbns
@@ -235,14 +261,14 @@ fn new_edition(product: &Product, isbns: &[String], id: &str) -> EditionWrite {
     });
     EditionWrite {
         id: id.to_owned(),
-        owned: true,
+        owned,
         isbns: isbns.to_vec(),
         label: value(product.label.as_ref()),
         publisher: value(details.publisher.as_ref()),
         published_on: value(details.published_on.as_ref()),
         cover: value(details.cover.as_ref()),
-        purchased_on: value(details.purchased_on.as_ref()),
-        purchased_from: value(details.purchased_from.as_ref()),
+        purchased_on: purchase(details.purchased_on.as_ref()),
+        purchased_from: purchase(details.purchased_from.as_ref()),
         series,
     }
 }

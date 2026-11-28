@@ -224,6 +224,56 @@ fn a_new_purchase_creates_a_book_with_its_edition_and_receipt() {
 }
 
 #[test]
+fn a_wish_keeps_the_isbn_of_its_page_as_an_unowned_edition_without_a_purchase() {
+    let product = json!({"title": "欲しい本", "authors": ["誰か"], "isbns": ["978-0-262-03384-8"],
+        "details": {"publisher": "出版社", "purchasedOn": "2025-11-25", "purchasedFrom": "書店"}});
+    let wish = change("setWish", product.clone(), json!([]), None, None);
+    let edition = json!({"id": "new-edition", "owned": false, "isbns": ["9780262033848"],
+        "publisher": "出版社"});
+    assert_eq!(wish["editionId"], "new-edition");
+    assert_eq!(wish["change"], json!({"wanted": true, "edition": edition}));
+    assert_eq!(wish["newBook"]["editions"], json!([edition]));
+
+    let stored = json!([{"id": "book", "title": "別の書名", "authors": ["別の名"], "wanted": true,
+        "editions": [{"id": "new-edition", "owned": false, "isbns": ["9780262033848"]}],
+        "appliedPurchases": []}]);
+    let again = change("setWish", product.clone(), stored.clone(), None, None);
+    assert_eq!(again["kind"], "observed");
+    assert_eq!(again["outcome"]["bookId"], "book");
+    assert_eq!(again["outcome"]["wanted"], true);
+    let bought = purchase(product, stored, None);
+    assert_eq!(bought["bookId"], "book");
+    assert_eq!(bought["change"]["wanted"], false);
+    assert_eq!(bought["change"]["edition"]["owned"], true);
+    assert_eq!(bought["change"]["edition"]["purchasedOn"], "2025-11-25");
+}
+
+#[test]
+fn a_wish_change_that_leaves_the_book_as_stored_writes_nothing() {
+    let wanted = json!([book(json!([]), false)]);
+    let named = json!({"title": "設計入門", "authors": ["山田 太郎"]});
+    let again = change("setWish", named.clone(), wanted.clone(), None, None);
+    assert_eq!(again["kind"], "observed");
+    assert_eq!(again["outcome"]["wanted"], true);
+
+    let mut unwanted = wanted.clone();
+    unwanted[0]["wanted"] = json!(false);
+    let cleared = change("clearWish", named.clone(), unwanted.clone(), None, None);
+    assert_eq!(cleared["kind"], "observed");
+    assert_eq!(cleared["outcome"]["wanted"], false);
+    assert_eq!(
+        change("setWish", named.clone(), unwanted, None, None)["change"],
+        json!({"wanted": true})
+    );
+
+    let mut classified = named;
+    classified["classification"] = json!("007.64");
+    let filled = change("setWish", classified, wanted, None, None);
+    assert_eq!(filled["kind"], "write");
+    assert_eq!(filled["change"]["classification"], "007.64");
+}
+
+#[test]
 fn buying_a_stored_edition_fills_only_blank_values_and_records_the_receipt() {
     let product = json!({"isbns": ["9780201633610", "9780131103627"], "label": "改訂新版",
         "details": {"publisher": "別の社", "purchasedOn": "2025-11-25"}});

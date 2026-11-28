@@ -221,9 +221,12 @@ class RegistrationForm {
     this.status.setText("照合しています…");
     const observation = await this.context.catalog.preview(this.operation());
     if (!current()) return;
-    if (observation.kind !== "observed") this.status.setText(resultMessage(observation));
+    if (observation.kind !== "observed")
+      this.status.setText(resultMessage(observation, this.action));
     else if (choiceDecisions.includes(observation.outcome.decision.kind)) {
-      this.status.setText(resultMessage({ kind: "needsInput", outcome: observation.outcome }));
+      this.status.setText(
+        resultMessage({ kind: "needsInput", outcome: observation.outcome }, this.action),
+      );
       await this.showChoices(observation.outcome, current);
     } else {
       const { ownership, wanted } = observation.outcome;
@@ -243,7 +246,7 @@ class RegistrationForm {
     const current = this.claim();
     button.setDisabled(true);
     const execution = await catalog.save(this.operation(), clientId, signal);
-    const message = resultMessage(execution);
+    const message = resultMessage(execution, this.action);
     if (execution.kind === "saved" || execution.kind === "replayed") {
       new Notice(message);
       this.context.close();

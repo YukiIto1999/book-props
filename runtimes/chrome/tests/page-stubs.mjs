@@ -27,10 +27,14 @@ function toolbar() {
 
 /**
  * The worker over a Vault whose answers and saves the test releases one by one, or, with `reply`, answers every
- * check with it and saves every change. Consent is set by the test, and so is the active tab, through
+ * check with it and every change with `changed`. Consent is set by the test, and so is the active tab, through
  * `tab.active`. `sent` lists the Vault actions asked for, and `key` names the page the popup would show now.
  */
-export function stubWorker({ active = { tabId: 1, url: productUrl, product: book }, reply } = {}) {
+export function stubWorker({
+  active = { tabId: 1, url: productUrl, product: book },
+  reply,
+  changed = { kind: "saved" },
+} = {}) {
   const icon = toolbar();
   const answers = [];
   const saves = [];
@@ -49,7 +53,7 @@ export function stubWorker({ active = { tabId: 1, url: productUrl, product: book
     changeBook: () => {
       const save = Promise.withResolvers();
       saves.push(save);
-      if (reply) save.resolve({ kind: "saved" });
+      if (reply) save.resolve(changed);
       return save.promise;
     },
   };

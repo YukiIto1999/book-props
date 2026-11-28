@@ -87,7 +87,7 @@ fn a_product_is_written_in_the_stored_spelling() {
 fn a_stored_book_matches_other_spellings_of_its_authors() {
     let books = json!([{
         "id": "book", "title": "リーダブルコード", "authors": ["トレバ-・フォシェ", "角征典"],
-        "wanted": true, "editions": [], "appliedPurchases": []
+        "wanted": false, "editions": [], "appliedPurchases": []
     }]);
     let product =
         json!({"title": "リーダブルコード", "authors": ["角 征典（翻訳）", "トレバー・フォシェ"]});

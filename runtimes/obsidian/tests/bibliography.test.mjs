@@ -90,7 +90,7 @@ void test("拡張からの購入は表記をそろえて先に保存し、後か
   assert.equal(book.classification, "007.64");
   assert.match(
     onlyBook(notes).raw,
-    /^book-ndc: "007\.64"\nbook-ndc-section: "007 情報科学"\nbook-props:/m,
+    /^book-ndc: "007\.64"\nbook-ndc-section: "007 情報科学"\nbook-ndc-subsection: "007\.6 情報科学--データ処理．情報処理"\nbook-props:/m,
   );
   assert.equal(book.appliedPurchases[0].inputHash, await inputHash(operation));
   assert.equal((await catalog.execute(operation)).kind, "replayed");

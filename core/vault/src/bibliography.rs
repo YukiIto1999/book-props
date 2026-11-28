@@ -11,7 +11,7 @@ mod series;
 mod text;
 
 pub(crate) use classification::ndc_number;
-pub use classification::{ndc_classes, ndc_section};
+pub use classification::{ndc_classes, ndc_section, ndc_subsection};
 pub use lookup::plan_enrichment;
 pub(crate) use lookup::{WrittenEdition, pending_lookup};
 pub(crate) use names::{author_key, author_keys, name_key};

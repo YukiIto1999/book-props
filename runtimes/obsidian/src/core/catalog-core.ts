@@ -15,6 +15,7 @@ import {
   missingMoveCopies,
   ndcClasses,
   ndcSection,
+  ndcSubsection,
   normalizeIsbns,
   openShelf,
   planChange,
@@ -118,6 +119,7 @@ export type CatalogCore = Readonly<{
   planEnrichment: typeof planEnrichment;
   planReview: typeof planReview;
   ndcSection: typeof ndcSection;
+  ndcSubsection: typeof ndcSubsection;
   ndcClasses: typeof ndcClasses;
 }>;
 
@@ -149,6 +151,7 @@ export function startCatalogCore(): CatalogCore {
     planEnrichment,
     planReview,
     ndcSection,
+    ndcSubsection,
     ndcClasses,
   };
 }

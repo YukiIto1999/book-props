@@ -64,9 +64,10 @@ const enrichedBook = (classification) =>
     ...(classification === undefined ? {} : { classification }),
   }) + "\n本文\n";
 
-/** 登録やNDLの書誌で足した、分類の番号と要目の名前の行。`book-props`の前に入る。 */
+/** 登録やNDLの書誌で足した、分類の番号と要目・細目の名前の行。`book-props`の前に入る。 */
 const addedClassification =
-  /^book-ndc: "007\.64"\nbook-ndc-section: "007 情報科学"\n(?=book-props:)/m;
+  /^book-ndc: "007\.64"\nbook-ndc-section: "007 情報科学"\nbook-ndc-subsection: "007\.6 情報科学--データ処理．情報処理"\n(?=book-props:)/m;
+
 void test("表記をそろえる案は、NDLで確かめると分類の番号のない本にだけ番号と要目の名前を入れる", async () => {
   const lookup = library(new Map([[readable, readableRecord]]));
   const { notes, catalog } = scope(undefined, undefined, lookup);
@@ -90,11 +91,14 @@ void test("表記をそろえる案は、NDLで確かめると分類の番号の
   assert.equal(noteFormat.read(raw).book.classification, "007.64");
 });
 
-void test("手で書き換えた分類の番号に要目の名前を合わせ、合っている本ページは書き換えない", async () => {
+void test("手で書き換えた分類の番号に要目と細目の名前を合わせ、合っている本ページは書き換えない", async () => {
   const { notes, catalog } = scope();
   const path = "Books/enriched.md";
   const original = enrichedBook("007.64");
-  assert.match(original, /^book-ndc: "007\.64"\nbook-ndc-section: 007 情報科学\n/m);
+  assert.match(
+    original,
+    /^book-ndc: "007\.64"\nbook-ndc-section: 007 情報科学\nbook-ndc-subsection: 007\.6 情報科学--データ処理．情報処理\n/m,
+  );
   notes.set(path, original);
   await catalog.bibliography.followClassification(path);
   assert.equal(notes.get(path), original);
@@ -103,24 +107,38 @@ void test("手で書き換えた分類の番号に要目の名前を合わせ、
   await catalog.bibliography.followClassification(path);
   assert.match(
     notes.get(path),
-    /^book-ndc: 913\.6\nbook-ndc-section: "913 日本文学--小説．物語"\n/m,
+    /^book-ndc: 913\.6\nbook-ndc-section: "913 日本文学--小説．物語"\nbook-ndc-subsection: "913\.6 日本文学--小説．物語--近代：明治以後"\n/m,
+  );
+
+  // NDC9に細目のないNDC10の798.4(ロールプレイングゲーム)は、細目に要目の名前を置く。
+  notes.set(path, notes.get(path).replace("book-ndc: 913.6", 'book-ndc: "798.4"'));
+  await catalog.bibliography.followClassification(path);
+  assert.match(
+    notes.get(path),
+    /^book-ndc: "798\.4"\nbook-ndc-section: "798 室内娯楽"\nbook-ndc-subsection: "798 室内娯楽"\n/m,
   );
 
   // Obsidianが数値として書いた番号も、3桁の番号として読む。
-  notes.set(path, notes.get(path).replace("book-ndc: 913.6", "book-ndc: 7.64"));
+  notes.set(path, notes.get(path).replace('book-ndc: "798.4"', "book-ndc: 7.64"));
   await catalog.maintain();
-  assert.match(notes.get(path), /^book-ndc: 7\.64\nbook-ndc-section: "007 情報科学"\n/m);
+  assert.match(
+    notes.get(path),
+    /^book-ndc: 7\.64\nbook-ndc-section: "007 情報科学"\nbook-ndc-subsection: "007\.6 情報科学--データ処理．情報処理"\n/m,
+  );
 
   notes.set(path, original.replace('book-ndc: "007.64"\n', ""));
   await catalog.maintain();
-  assert.equal(notes.get(path), original.replace(/book-ndc: .*\nbook-ndc-section: .*\n/, ""));
+  assert.equal(
+    notes.get(path),
+    original.replace(/book-ndc: .*\nbook-ndc-section: .*\nbook-ndc-subsection: .*\n/, ""),
+  );
   assert.equal(noteFormat.read(notes.get(path)).book.classification, undefined);
 
   notes.set(path, original.replace('book-ndc: "007.64"', "book-ndc: 分類なし"));
   await catalog.maintain();
   const unreadable = noteFormat.read(notes.get(path)).book;
   assert.equal(unreadable.classification, "分類なし");
-  assert.doesNotMatch(notes.get(path), /book-ndc-section/);
+  assert.doesNotMatch(notes.get(path), /book-ndc-section|book-ndc-subsection/);
 });
 
 void test("登録で番号のない本にだけ分類の番号を書き、手で書いた番号は変えない", () => {

@@ -27,8 +27,8 @@ const readingFormula = Object.entries(readingLabels).reduceRight(
   '"未設定"',
 );
 
-/** 本ページの要目の名前。分類の番号のない本は「分類なし」にまとめる。 */
-const sectionFormula = `if(${section}, ${section}, "分類なし")`;
+/** 本ページの要目や細目の名前。分類の番号のない本は「分類なし」にまとめる。 */
+const named = (property: string): string => `if(${property}, ${property}, "分類なし")`;
 
 /**
  * 要目の名前の先頭の数字を、類の名前にする。要目の名前は番号の3桁から始まるので、番号そのものより
@@ -47,20 +47,24 @@ function classFormula(classes: readonly string[]): string {
 /** YAMLの単一引用符の文字列にする。式の先頭の`!`や`"`をYAMLの記号として読ませない。 */
 const quoted = (expression: string): string => `'${expression.replaceAll("'", "''")}'`;
 
+/** 表の分類の列と並べ順。分類の列はまとめ方より細かいものにして、同じ組の中の違いを見せる。 */
+type Columns = Readonly<{ classification?: string; byNumber?: boolean }>;
+
 /**
- * 表の列と並べ順。`byNumber`なら分類の番号の列を加え、番号の順(同じなら書名の順)に並べる。
- * 図書館の棚と同じ順になる。
+ * 表の列と並べ順。`classification`は分類の列(なければ置かない)。`byNumber`なら分類の番号の列を
+ * 加え、番号の順(同じなら書名の順)に並べる。図書館の棚と同じ順になる。
  */
-function table(byNumber = false): string {
-  const number = byNumber ? "\n      - book-ndc" : "";
+function table({ classification, byNumber = false }: Columns): string {
+  const columns = [classification, byNumber ? "book-ndc" : undefined].flatMap((column) =>
+    column === undefined ? [] : [`\n      - ${column}`],
+  );
   const sort = [...(byNumber ? ["book-ndc"] : []), "book-title"]
     .map((property) => `      - property: ${property}\n        direction: ASC`)
     .join("\n");
   return `    order:
       - formula.title
       - book-authors
-      - formula.publishers
-      - formula.ndc_section${number}
+      - formula.publishers${columns.join("")}
       - formula.reading
       - book-finished-on
       - formula.owned
@@ -72,8 +76,11 @@ ${sort}
       formula.title: 320
       note.book-authors: 240
       formula.publishers: 180
-      formula.ndc_section: 200`;
+      formula.ndc_section: 200
+      formula.ndc_subsection: 240`;
 }
+
+const bySection: Columns = { classification: "formula.ndc_section" };
 
 /** 一覧の表示。書籍フォルダに依らないので、本文の末尾にそのまま置く。 */
 const views = `views:
@@ -92,57 +99,64 @@ const views = `views:
     imageAspectRatio: 1.45
   - type: table
     name: すべての本
-${table()}
+${table(bySection)}
   - type: table
     name: 分類別
     groupBy:
       property: formula.ndc_section
       direction: ASC
-${table(true)}
+${table({ classification: "formula.ndc_subsection", byNumber: true })}
+  - type: table
+    name: 細目別
+    groupBy:
+      property: formula.ndc_subsection
+      direction: ASC
+${table({ byNumber: true })}
   - type: table
     name: 類別
     groupBy:
       property: formula.ndc_class
       direction: ASC
-${table(true)}
+${table({ ...bySection, byNumber: true })}
   - type: table
     name: 出版社別
     groupBy:
       property: formula.publishers
       direction: ASC
-${table()}
+${table(bySection)}
   - type: table
     name: 著者別
     groupBy:
       property: formula.first_author
       direction: ASC
-${table()}
+${table(bySection)}
   - type: table
     name: 欲しい本
     filters:
       and:
         - note["book-wanted"]
         - ${quoted("!formula.owned")}
-${table()}
+${table(bySection)}
   - type: table
     name: 読書状態別
     groupBy:
       property: formula.reading
       direction: ASC
-${table()}
+${table(bySection)}
   - type: table
     name: 同じ著者の本
     filters:
       and:
         - this["book-authors"].filter(note["book-authors"].contains(value)).length > 0
-${table()}
+${table(bySection)}
 `;
 
 /**
  * 書籍フォルダの本ページの一覧を定義する`.base`の本文。
  * 項目のキーは本ページの書式が書くものだけを使い、アーカイブした本と版は数えない。
  * Basesはリストの項目でまとめると組み合わせごとの組にするため、著者は筆頭著者で、出版社は版の出版社をつないだ名前でまとめる。
- * 分類は、本ページの要目の名前(`007 情報科学`)でまとめ、類はその先頭の数字から名前にする。どちらも番号の順に並ぶ。
+ * 分類は、本ページの要目の名前(`007 情報科学`)でまとめ、細目は細目の名前(`007.6 情報科学--データ処理．情報処理`)で、
+ * 類は要目の名前の先頭の数字から名前にしてまとめる。どれも番号の順に並ぶ。要目でまとめた表には細目の列を置く。
  * 「同じ著者の本」は、本ページに埋め込むか右サイドバーで開くと、そのページの本と著者が重なる本を並べる。
  * @param classes - 日本十進分類法の0から9の順の類の名前(`0 総記`など)
  */
@@ -160,7 +174,8 @@ formulas:
   first_author: if(note["book-authors"], note["book-authors"][0], "著者なし")
   owned: ${editions}.filter(value.owned && ${current}).length > 0
   reading: ${readingFormula}
-  ndc_section: ${quoted(sectionFormula)}
+  ndc_section: ${quoted(named(section))}
+  ndc_subsection: ${quoted(named('note["book-ndc-subsection"]'))}
   ndc_class: ${quoted(classFormula(classes))}
 properties:
   formula.title:
@@ -173,6 +188,8 @@ properties:
     displayName: 筆頭著者
   formula.ndc_section:
     displayName: 分類
+  formula.ndc_subsection:
+    displayName: 細目
   formula.ndc_class:
     displayName: 類
   note.book-ndc:

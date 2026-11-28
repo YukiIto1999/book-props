@@ -14,7 +14,9 @@ mod receipt;
 mod shelf;
 mod text;
 
-pub use bibliography::{describe_record, ndc_classes, ndc_section, plan_enrichment, plan_review};
+pub use bibliography::{
+    describe_record, ndc_classes, ndc_section, ndc_subsection, plan_enrichment, plan_review,
+};
 pub use change::plan_change;
 pub use management::{allows_step, book_options, plan_management, restore_targets};
 pub use matching::inspect;
@@ -249,6 +251,15 @@ pub fn calendar_date_value(value: &str) -> Option<String> {
 #[must_use]
 pub fn ndc_section_value(value: &str) -> Option<String> {
     ndc_section(value)
+}
+
+/// The four-digit NDC class a book's number falls in, as its digits and name in context
+/// (`007.6 情報科学--データ処理．情報処理`), its section when NDC9 names no such class, or
+/// nothing when the text is no NDC number.
+#[wasm_bindgen(js_name = ndcSubsection)]
+#[must_use]
+pub fn ndc_subsection_value(value: &str) -> Option<String> {
+    ndc_subsection(value)
 }
 
 /// The ten NDC main classes in order, as digit and name (`0 総記`).

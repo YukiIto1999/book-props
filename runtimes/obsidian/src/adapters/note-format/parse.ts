@@ -19,9 +19,9 @@ import { decodeCustomFields, plainMap, text } from "./values.ts";
 
 /**
  * 本ページの書式が使うcoreの規則。保存済みのISBNが正規のISBN-13かを決め、日本十進分類法の番号から
- * 要目の名前を作る。
+ * 要目と細目の名前を作る。
  */
-export type NoteRules = Pick<CatalogCore, "isCanonicalIsbnList" | "ndcSection">;
+export type NoteRules = Pick<CatalogCore, "isCanonicalIsbnList" | "ndcSection" | "ndcSubsection">;
 
 /** 読み取った本と、書き換えに使うYAMLのノード。 */
 export type ParsedNote = Readonly<{

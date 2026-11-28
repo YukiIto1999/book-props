@@ -18,7 +18,7 @@ import {
   storePurchase,
   type Plain,
 } from "./edit.ts";
-import { classificationEdits, classificationKey, sectionKey, sectionOf } from "./classification.ts";
+import { classificationEdits, classificationKey, namesOf } from "./classification.ts";
 import { BookNoteError, unreadable } from "./error.ts";
 import { map, parseNote, readEditionBackup, type NoteRules, type ParsedNote } from "./parse.ts";
 import { confirmsRevision, revisionEdits } from "./revise.ts";
@@ -71,7 +71,7 @@ export class NoteFormat {
         "book-reading-status": book.readingStatus,
         "book-finished-on": book.finishedOn,
         [classificationKey]: book.classification,
-        [sectionKey]: sectionOf(book.classification, this.rules),
+        ...namesOf(book.classification, this.rules),
         tags: book.tags?.length ? book.tags : undefined,
         "book-props": {
           schema: 1,
@@ -146,7 +146,7 @@ export class NoteFormat {
   }
 
   /**
-   * 要目の名前を、日本十進分類法の番号に合わせる。番号を手で書き換えた本ページのためにある。
+   * 要目と細目の名前を、日本十進分類法の番号に合わせる。番号を手で書き換えた本ページのためにある。
    * 名前が番号と合っていれば、渡した全文をそのまま返す。他の行と本文は一文字も変えない。
    */
   followClassification(raw: string): string {

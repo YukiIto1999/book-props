@@ -77,6 +77,7 @@ void test("一覧のファイルはYAMLとして読め、書籍フォルダの�
       "cards:表紙",
       "table:すべての本",
       "table:分類別",
+      "table:細目別",
       "table:類別",
       "table:出版社別",
       "table:著者別",
@@ -129,10 +130,18 @@ void test("読書状態は本棚と同じ表示名に変え、未設定は「未
   assert.ok(reading.endsWith('"未設定")))))'));
 });
 
-void test("分類は要目の名前でまとめ、類はその先頭の数字から日本十進分類法の類の名前にする", () => {
+void test("分類は要目の名前で、細目は細目の名前でまとめ、類はその先頭の数字から日本十進分類法の類の名前にする", () => {
   const parsed = parse(baseText("本"));
-  const { ndc_section: section, ndc_class: mainClass } = parsed.formulas;
+  const {
+    ndc_section: section,
+    ndc_subsection: subsection,
+    ndc_class: mainClass,
+  } = parsed.formulas;
   assert.equal(section, 'if(note["book-ndc-section"], note["book-ndc-section"], "分類なし")');
+  assert.equal(
+    subsection,
+    'if(note["book-ndc-subsection"], note["book-ndc-subsection"], "分類なし")',
+  );
   assert.deepEqual(classes, [
     "0 総記",
     "1 哲学",
@@ -156,13 +165,29 @@ void test("分類は要目の名前でまとめ、類はその先頭の数字か
   const grouped = Object.fromEntries(
     parsed.views
       .filter(({ groupBy }) => groupBy)
-      .map(({ name, groupBy, sort }) => [
+      .map(({ name, groupBy, sort, order }) => [
         name,
-        [groupBy.property, sort.map(({ property }) => property)],
+        [
+          groupBy.property,
+          sort.map(({ property }) => property),
+          order.filter((column) => /ndc/.test(column)),
+        ],
       ]),
   );
-  assert.deepEqual(grouped["分類別"], ["formula.ndc_section", ["book-ndc", "book-title"]]);
-  assert.deepEqual(grouped["類別"], ["formula.ndc_class", ["book-ndc", "book-title"]]);
+  const byNumber = ["book-ndc", "book-title"];
+  // 要目でまとめた表には細目の列を置き、細目でまとめた表には番号の列だけを置く。
+  assert.deepEqual(grouped["分類別"], [
+    "formula.ndc_section",
+    byNumber,
+    ["formula.ndc_subsection", "book-ndc"],
+  ]);
+  assert.deepEqual(grouped["細目別"], ["formula.ndc_subsection", byNumber, ["book-ndc"]]);
+  assert.deepEqual(grouped["類別"], [
+    "formula.ndc_class",
+    byNumber,
+    ["formula.ndc_section", "book-ndc"],
+  ]);
+  assert.deepEqual(grouped["出版社別"][2], ["formula.ndc_section"]);
 });
 
 void test("値のない項目の否定は、Basesで真にならないので isTruthy() を通す", () => {

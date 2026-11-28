@@ -1,7 +1,7 @@
 {
   "id": "book-props",
   "name": "Book Props",
-  "version": "0.14.0",
+  "version": "0.14.1",
   "minAppVersion": "1.13.7",
   "description": "Keep one note per book with editions, ownership, and wishes, and check them on bookstore pages through the companion browser extension.",
   "author": "YukiIto1999",

@@ -1,9 +1,9 @@
 import { Setting, type ButtonComponent } from "obsidian";
 import type { BibliographySources } from "../adapters/bibliography-sources.ts";
 import type { Catalog, Product } from "../catalog/catalog.ts";
+import { mountNdlCredit } from "./ndl-credit.ts";
 import { isOptionKey } from "./option-keys.ts";
 
-const ndlCatalogue = "https://ndlsearch.ndl.go.jp/help/api/provider#opac";
 const lookupModes = { isbn: "ISBN", title: "書名", url: "商品URL" } as const;
 type LookupMode = keyof typeof lookupModes;
 /** The entered method and query; `generation` counts their changes so an older lookup cannot fill the view. */
@@ -129,25 +129,6 @@ async function runLookup(
   }
 }
 
-function mountCredit(parent: HTMLElement): void {
-  const credit = parent.createEl("p");
-  credit.createSpan({ text: "書誌検索: " });
-  credit.createEl("a", {
-    text: "国立国会図書館サーチAPI／国立国会図書館蔵書",
-    attr: { href: ndlCatalogue, target: "_blank", rel: "noopener noreferrer" },
-  });
-  credit.createSpan({ text: "（" });
-  credit.createEl("a", {
-    text: "CC BY 4.0",
-    attr: {
-      href: "https://creativecommons.org/licenses/by/4.0/deed.ja",
-      target: "_blank",
-      rel: "noopener noreferrer",
-    },
-  });
-  credit.createSpan({ text: "）" });
-}
-
 export function mountBibliography(parent: HTMLElement, context: LookupContext): void {
   const form: LookupForm = { mode: "isbn", query: "", generation: 0, pending: undefined };
   const view: LookupView = {
@@ -179,5 +160,5 @@ export function mountBibliography(parent: HTMLElement, context: LookupContext): 
   setting.addButton((button) =>
     button.setButtonText("書誌を取得").onClick(() => runLookup(button, form, view, context)),
   );
-  mountCredit(parent);
+  mountNdlCredit(parent);
 }

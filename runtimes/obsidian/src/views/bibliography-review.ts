@@ -3,6 +3,7 @@ import type { AuthorRole, BookRecord } from "../adapters/note-format/book-record
 import type { Proposal } from "../catalog/bibliography.ts";
 import type { Catalog } from "../catalog/catalog.ts";
 import type { BibliographyRevision } from "../core/catalog-core.ts";
+import { mountNdlCredit } from "./ndl-credit.ts";
 
 type Review = Pick<Catalog["bibliography"], "propose" | "apply">;
 
@@ -83,6 +84,7 @@ export class BibliographyReview extends Modal {
           library = value;
         }),
       );
+    mountNdlCredit(content);
     const status = content.createEl("p", { attr: { role: "status" } });
     new Setting(content).addButton((button) =>
       button
@@ -108,7 +110,7 @@ export class BibliographyReview extends Modal {
         controller.signal,
         (done, total) => status.setText(`${total}件中${done}件を確かめました。`),
       );
-      this.renderProposals(proposals, failedLookups);
+      this.renderProposals(proposals, failedLookups, library);
     } catch {
       if (controller.signal.aborted) this.renderStart();
       else status.setText("書籍フォルダを確認できません。");
@@ -117,7 +119,11 @@ export class BibliographyReview extends Modal {
     }
   }
 
-  private renderProposals(proposals: readonly Proposal[], failedLookups: number): void {
+  private renderProposals(
+    proposals: readonly Proposal[],
+    failedLookups: number,
+    library: boolean,
+  ): void {
     const content = this.contentEl;
     content.empty();
     const failed = failedLookups
@@ -130,6 +136,7 @@ export class BibliographyReview extends Modal {
     content.createEl("p", {
       text: `${proposals.length}冊に書き換えの案があります。書き換える本を選んでください。${failed}`,
     });
+    if (library) mountNdlCredit(content);
     const chosen = new Set(proposals);
     for (const proposal of proposals) {
       const row = new Setting(content).setName(`${proposal.book.title}（${proposal.path}）`);
